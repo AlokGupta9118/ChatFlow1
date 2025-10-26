@@ -7,7 +7,7 @@ import { getToken } from "@/utils/getToken";
 import { io } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 
-const socket = io("http://localhost:3000");
+const socket = io(import.meta.env.VITE_API_URL);
 
 const ChatList = ({ onSelectFriend, selectedFriend }) => {
   const [friends, setFriends] = useState([]);
@@ -22,7 +22,7 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
     const token = getToken();
     if (!token) return;
     try {
-      const res = await axios.get("http://localhost:3000/api/friends", {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/friends", {
         headers: { Authorization: `Bearer ${token}` },
       });
       setFriends(res.data.friends || []);
@@ -36,7 +36,7 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
     const token = getToken();
     if (!token) return;
     try {
-      const res = await axios.get("http://localhost:3000/chatroom/mygroups", {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/chatroom/mygroups", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const safeGroups = (res.data.groups || []).filter(

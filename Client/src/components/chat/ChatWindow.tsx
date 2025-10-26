@@ -9,7 +9,7 @@ import { io } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 import GroupChatAdminPanel from "@/components/chat/GroupChatAdminPanel";
 
-const socket = io("http://localhost:3000");
+const socket = io(import.meta.env.VITE_API_URL);
 const nameColors = ["#F87171", "#60A5FA", "#34D399", "#FBBF24", "#A78BFA", "#F472B6"];
 
 const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {

@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
-const socket = io("http://localhost:3000", {
+const socket = io(import.meta.env.VITE_API_URL, {
   transports: ['websocket', 'polling'],
   timeout: 10000
 });
