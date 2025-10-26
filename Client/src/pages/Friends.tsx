@@ -38,7 +38,7 @@ const AddFriends: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/users", axiosConfig);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/users`, axiosConfig);
       const allUsers = res.data.users || res.data || [];
       setUsers(allUsers.filter((u: IUser) => u._id !== currentUserId));
     } catch (err) {
@@ -48,7 +48,7 @@ const AddFriends: React.FC = () => {
 
   const fetchFriends = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/friends", axiosConfig);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/friends`, axiosConfig);
       const data = res.data || {};
       setFriendsData({
         friends: (data.friends || []).filter((f: IUser) => f._id !== currentUserId),
