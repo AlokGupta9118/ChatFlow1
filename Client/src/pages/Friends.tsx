@@ -75,7 +75,7 @@ const AddFriends: React.FC = () => {
   const handleSendRequest = async (userId: string) => {
     try {
       await axios.post(
-        `http://localhost:3000/api/friends/request/${userId}`,
+        `${import.meta.env.VITE_API_URL}/api/friends/request/${userId}`,
         {},
         axiosConfig
       );
@@ -88,7 +88,7 @@ const AddFriends: React.FC = () => {
   const handleAcceptRequest = async (userId: string) => {
     try {
       await axios.put(
-        `http://localhost:3000/api/friends/accept/${userId}`,
+        `${import.meta.env.VITE_API_URL}/api/friends/accept/${userId}`,
         {},
         axiosConfig
       );
@@ -101,7 +101,7 @@ const AddFriends: React.FC = () => {
   const handleDeclineRequest = async (userId: string) => {
     try {
       await axios.put(
-        `http://localhost:3000/api/friends/decline/${userId}`,
+        `${import.meta.env.VITE_API_URL}/api/friends/decline/${userId}`,
         {},
         axiosConfig
       );

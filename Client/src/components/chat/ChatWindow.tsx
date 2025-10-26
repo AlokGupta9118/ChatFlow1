@@ -40,7 +40,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
     setProfileLoading(true);
     try {
       const res = await axios.get(
-        `http://localhost:3000/api/profile/${userId}`,
+        `${import.meta.env.VITE_API_URL}/api/profile/${userId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setViewedProfile(res.data.user);
@@ -79,7 +79,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
 
       try {
         const res = await axios.get(
-          `http://localhost:3000/chatroom/${selectedChat._id}/members`,
+          `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/members`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
 
@@ -110,8 +110,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
 
       try {
         const endpoint = isGroup
-          ? `http://localhost:3000/chatroom/${selectedChat._id}/getGroupmessages`
-          : `http://localhost:3000/chatroom/messages/${selectedChat._id}`;
+          ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/getGroupmessages`
+          : `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}`;
 
         const res = await axios.get(endpoint, {
           headers: { Authorization: `Bearer ${token}` },
@@ -164,8 +164,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
         : { receiverId: selectedChat._id, content: newMessage, messageType: "text" };
 
       const endpoint = isGroup
-        ? `http://localhost:3000/chatroom/${selectedChat._id}/sendGroupmessages`
-        : "http://localhost:3000/chatroom/messages/send";
+        ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/sendGroupmessages`
+        : "${import.meta.env.VITE_API_URL}/chatroom/messages/send";
 
       const res = await axios.post(endpoint, msgData, {
         headers: { Authorization: `Bearer ${token}` },

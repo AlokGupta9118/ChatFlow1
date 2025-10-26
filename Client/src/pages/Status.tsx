@@ -5,7 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Plus, X } from "lucide-react";
 import clsx from "clsx";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "${import.meta.env.VITE_API_URL}";
 
 interface Story {
   _id: string;

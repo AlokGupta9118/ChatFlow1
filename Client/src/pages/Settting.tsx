@@ -49,7 +49,7 @@ const SettingsPanel = ({ currentUser }) => {
     const fetchSettings = async () => {
       try {
         const res = await axios.get(
-          "http://localhost:3000/api/user/get-settings",
+          "${import.meta.env.VITE_API_URL}/api/user/get-settings",
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -60,13 +60,13 @@ const SettingsPanel = ({ currentUser }) => {
         const profileUrl = data.profilePicture
           ? data.profilePicture.startsWith("http")
             ? data.profilePicture
-            : `http://localhost:3000${data.profilePicture.startsWith("/") ? "" : "/"}${data.profilePicture}`
+            : `${import.meta.env.VITE_API_URL}${data.profilePicture.startsWith("/") ? "" : "/"}${data.profilePicture}`
           : "/default-avatar.png";
 
         const coverUrl = data.coverPhoto
           ? data.coverPhoto.startsWith("http")
             ? data.coverPhoto
-            : `http://localhost:3000${data.coverPhoto.startsWith("/") ? "" : "/"}${data.coverPhoto}`
+            : `${import.meta.env.VITE_API_URL}${data.coverPhoto.startsWith("/") ? "" : "/"}${data.coverPhoto}`
           : "/default-cover.jpg";
 
         // Update settings and preview
@@ -112,7 +112,7 @@ const SettingsPanel = ({ currentUser }) => {
     setSaving(true);
     try {
       await axios.put(
-        "http://localhost:3000/api/user/update-settings",
+        "${import.meta.env.VITE_API_URL}/api/user/update-settings",
         settings,
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -137,7 +137,7 @@ const SettingsPanel = ({ currentUser }) => {
 
     try {
       const res = await axios.post(
-        `http://localhost:3000/api/user/upload-${type}`,
+        `${import.meta.env.VITE_API_URL}/api/user/upload-${type}`,
         formData,
         {
           headers: {
@@ -149,7 +149,7 @@ const SettingsPanel = ({ currentUser }) => {
 
       const url = res.data.url.startsWith("http")
         ? res.data.url
-        : `http://localhost:3000${res.data.url.startsWith("/") ? "" : "/"}${res.data.url}`;
+        : `${import.meta.env.VITE_API_URL}${res.data.url.startsWith("/") ? "" : "/"}${res.data.url}`;
 
       // Update preview AND settings state
       setPreview((prev) => ({ ...prev, [type]: url }));

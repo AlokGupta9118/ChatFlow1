@@ -27,7 +27,7 @@ const Signup = () => {
     setLoading(true);
     try {
       const res = await axios.post(
-        `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/register`,
+        `${import.meta.env.VITE_API_URL || "${import.meta.env.VITE_API_URL}"}/api/register`,
         { name, email, password },
         { headers: { "Content-Type": "application/json" } }
       );

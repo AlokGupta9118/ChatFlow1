@@ -40,7 +40,7 @@ const Profile = () => {
       if (data.profilePicture) {
         profileUrl = data.profilePicture.startsWith("http")
           ? data.profilePicture
-          : `http://localhost:3000${data.profilePicture.startsWith("/") ? "" : "/"}${data.profilePicture}`;
+          : `${import.meta.env.VITE_API_URL}${data.profilePicture.startsWith("/") ? "" : "/"}${data.profilePicture}`;
       }
 
       setUser(data);
@@ -75,7 +75,7 @@ const Profile = () => {
     setSaving(true);
     try {
       const res = await axios.put(
-        "http://localhost:3000/api/profile",
+        "${import.meta.env.VITE_API_URL}/api/profile",
         form,
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -88,7 +88,7 @@ const Profile = () => {
       if (updatedUser.profilePicture) {
         profileUrl = updatedUser.profilePicture.startsWith("http")
           ? updatedUser.profilePicture
-          : `http://localhost:3000${updatedUser.profilePicture.startsWith("/") ? "" : "/"}${updatedUser.profilePicture}`;
+          : `${import.meta.env.VITE_API_URL}${updatedUser.profilePicture.startsWith("/") ? "" : "/"}${updatedUser.profilePicture}`;
       }
 
       setUser(updatedUser);
@@ -125,7 +125,7 @@ const Profile = () => {
 
     try {
       const res = await axios.post(
-        "http://localhost:3000/api/user/upload-profile", // Using same endpoint as Settings
+        "${import.meta.env.VITE_API_URL}/api/user/upload-profile", // Using same endpoint as Settings
         formData,
         {
           headers: {
@@ -147,7 +147,7 @@ const Profile = () => {
       if (imageUrl.startsWith("http")) {
         finalUrl = imageUrl;
       } else {
-        finalUrl = `http://localhost:3000${imageUrl.startsWith("/") ? "" : "/"}${imageUrl}`;
+        finalUrl = `${import.meta.env.VITE_API_URL}${imageUrl.startsWith("/") ? "" : "/"}${imageUrl}`;
       }
 
       // Update both preview and form state
@@ -376,7 +376,7 @@ const Profile = () => {
                         src={
                           story.mediaUrl && story.mediaUrl.startsWith("http")
                             ? story.mediaUrl
-                            : `http://localhost:3000${story.mediaUrl?.startsWith("/") ? "" : "/"}${story.mediaUrl || ''}`
+                            : `${import.meta.env.VITE_API_URL}${story.mediaUrl?.startsWith("/") ? "" : "/"}${story.mediaUrl || ''}`
                         }
                         alt="story"
                         className="w-full h-full object-cover"

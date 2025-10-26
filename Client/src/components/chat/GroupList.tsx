@@ -44,7 +44,7 @@ const GroupList = ({ currentUser, onEnterGroup }) => {
   const sendJoinRequest = async (groupId: string) => {
     try {
       const res = await axios.post(
-        `http://localhost:3000/chatroom/groups/${groupId}/join-request`,
+        `${import.meta.env.VITE_API_URL}/chatroom/groups/${groupId}/join-request`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -60,7 +60,7 @@ const GroupList = ({ currentUser, onEnterGroup }) => {
   const fetchPendingRequests = async (groupId: string) => {
     try {
       const res = await axios.get(
-        `http://localhost:3000/chatroom/groups/${groupId}/pending-requests`,
+        `${import.meta.env.VITE_API_URL}/chatroom/groups/${groupId}/pending-requests`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setPendingRequests(res.data.requests);
@@ -74,7 +74,7 @@ const GroupList = ({ currentUser, onEnterGroup }) => {
   const handleApprove = async (requestId: string) => {
     try {
       await axios.post(
-        `http://localhost:3000/chatroom/groups/join-request/${requestId}/approve`,
+        `${import.meta.env.VITE_API_URL}/chatroom/groups/join-request/${requestId}/approve`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -90,7 +90,7 @@ const GroupList = ({ currentUser, onEnterGroup }) => {
   const handleReject = async (requestId: string) => {
     try {
       await axios.post(
-        `http://localhost:3000/chatroom/groups/join-request/${requestId}/reject`,
+        `${import.meta.env.VITE_API_URL}/chatroom/groups/join-request/${requestId}/reject`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );

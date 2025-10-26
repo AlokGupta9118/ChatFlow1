@@ -23,11 +23,11 @@ const GroupChatAdminPanel = ({ group, currentUser, refreshGroup }) => {
       setLoading(true);
 
       const [membersRes, pendingRes] = await Promise.all([
-        axios.get(`http://localhost:3000/chatroom/${group._id}/members`, {
+        axios.get(`${import.meta.env.VITE_API_URL}/chatroom/${group._id}/members`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
         axios.get(
-          `http://localhost:3000/chatroom/${group._id}/pending-requests`,
+          `${import.meta.env.VITE_API_URL}/chatroom/${group._id}/pending-requests`,
           { headers: { Authorization: `Bearer ${token}` } }
         ),
       ]);
@@ -61,7 +61,7 @@ const GroupChatAdminPanel = ({ group, currentUser, refreshGroup }) => {
     if (!isAdmin) return;
     try {
       await axios.post(
-        `http://localhost:3000/chatroom/${group._id}/join-request/approve`,
+        `${import.meta.env.VITE_API_URL}/chatroom/${group._id}/join-request/approve`,
         { userId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -80,7 +80,7 @@ const GroupChatAdminPanel = ({ group, currentUser, refreshGroup }) => {
     if (!isAdmin) return;
     try {
       await axios.post(
-        `http://localhost:3000/chatroom/${group._id}/join-request/reject`,
+        `${import.meta.env.VITE_API_URL}/chatroom/${group._id}/join-request/reject`,
         { userId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -100,7 +100,7 @@ const GroupChatAdminPanel = ({ group, currentUser, refreshGroup }) => {
     setActionLoading(true);
     try {
       await axios.post(
-        `http://localhost:3000/chatroom/${group._id}/remove-member`,
+        `${import.meta.env.VITE_API_URL}/chatroom/${group._id}/remove-member`,
         { userId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
