@@ -3,7 +3,7 @@ import axios from "axios";
 import { getToken } from "@/utils/getToken";
 import { motion, AnimatePresence } from "framer-motion";
 import { Users, UserCheck, UserX, Crown, Shield, MoreVertical, LogOut, AlertTriangle } from "lucide-react";
-import { toast } from "react-hot-toast";
+import  toast  from "react-hot-toast";
 
 const GroupChatAdminPanel = ({ group, currentUser, refreshGroup }) => {
   const [members, setMembers] = useState([]);
