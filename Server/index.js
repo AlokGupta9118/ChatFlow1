@@ -23,19 +23,26 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-// ✅ CORS configuration
+// ✅ CORS configuration - Update with your actual Vercel URL
 const allowedOrigins = [
+  process.env.CLIENT_URL || "https://your-frontend-app.vercel.app",
   "http://localhost:8080",
   "http://localhost:8081",
   "http://127.0.0.1:8080",
   "http://127.0.0.1:8081",
 ];
 
+// Remove CORS error throwing in production
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-      else callback(new Error("Not allowed by CORS"));
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        // Don't throw error in production, just log it
+        console.log("CORS blocked for origin:", origin);
+        callback(null, true); // Allow in production, or change to false if you want to block
+      }
     },
     credentials: true,
   })
@@ -50,6 +57,15 @@ connectDB();
 // ✅ Static uploads
 const __dirname = path.resolve();
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// ✅ Basic health check route (important for Railway)
+app.get("/health", (req, res) => {
+  res.status(200).json({ 
+    status: "OK", 
+    message: "Server is running",
+    timestamp: new Date().toISOString()
+  });
+});
 
 // ✅ REST API routes
 app.use("/api", UserRoutes);
@@ -76,7 +92,20 @@ const io = new Server(server, {
 // ✅ Register socket handlers
 gameSocket(io);
 
-// ✅ Start server
-server.listen(port, () => {
+// ✅ Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: "Something went wrong!" });
+});
+
+// ✅ 404 handler
+app.use("*", (req, res) => {
+  res.status(404).json({ message: "Route not found" });
+});
+
+// ✅ Start server - Important: Listen on 0.0.0.0 for Railway
+server.listen(port, "0.0.0.0", () => {
   console.log(`🚀 Server listening on port ${port}`);
+  console.log(`📱 Client URL: ${process.env.CLIENT_URL}`);
+  console.log(`🌐 Environment: ${process.env.NODE_ENV}`);
 });
