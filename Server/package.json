@@ -1,6 +1,7 @@
 {
   "name": "chatflow-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Backend for ChatFlow application",
   "main": "index.js",
   "scripts": {
