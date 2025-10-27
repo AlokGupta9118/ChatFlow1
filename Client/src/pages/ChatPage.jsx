@@ -12,7 +12,6 @@ const ChatPage = ({ currentUser }) => {
   const [isGroupSelected, setIsGroupSelected] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-  const hamburgerRef = useRef(null);
 
   const handleSelectChat = (chat, isGroup = false) => {
     console.log("Selected chat:", { chat, isGroup });
@@ -27,7 +26,6 @@ const ChatPage = ({ currentUser }) => {
     setIsGroupSelected(false);
   };
 
-  // Proper mobile touch handler
   const toggleMobileSidebar = (e) => {
     if (e) {
       e.preventDefault();
@@ -39,7 +37,9 @@ const ChatPage = ({ currentUser }) => {
   // Close sidebar when clicking outside on mobile
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (showMobileSidebar && !event.target.closest('.sidebar-container') && !event.target.closest('.hamburger-button')) {
+      if (showMobileSidebar && 
+          !event.target.closest('.mobile-sidebar') && 
+          !event.target.closest('.hamburger-button')) {
         setShowMobileSidebar(false);
       }
     };
@@ -53,60 +53,51 @@ const ChatPage = ({ currentUser }) => {
     };
   }, [showMobileSidebar]);
 
-  // Prevent zoom on double tap
-  useEffect(() => {
-    const preventDoubleTapZoom = (e) => {
-      if (e.touches.length > 1) {
-        e.preventDefault();
-      }
-    };
-
-    document.addEventListener('touchstart', preventDoubleTapZoom, { passive: false });
-    
-    return () => {
-      document.removeEventListener('touchstart', preventDoubleTapZoom);
-    };
-  }, []);
-
   return (
     <div className="h-screen w-full flex overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-black text-gray-900 dark:text-gray-200">
-      {/* Sidebar - Mobile overlay */}
+      {/* Mobile Sidebar Overlay */}
       <div className={`
-        sidebar-container
+        mobile-sidebar
+        lg:hidden
+        fixed inset-0 z-40
+        transition-all duration-300 ease-in-out
         ${showMobileSidebar 
-          ? 'fixed inset-0 z-30 transform translate-x-0' 
-          : 'fixed inset-0 z-30 transform -translate-x-full'
-        } 
-        lg:relative lg:translate-x-0 lg:flex lg:z-0
-        transition-transform duration-300 ease-in-out
+          ? 'opacity-100 pointer-events-auto' 
+          : 'opacity-0 pointer-events-none'
+        }
       `}>
-        <div className="w-80 h-full bg-white dark:bg-gray-900 shadow-xl lg:shadow-none">
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowMobileSidebar(false)}
+        />
+        
+        {/* Sidebar Content */}
+        <div className={`
+          absolute left-0 top-0 h-full w-80 max-w-[85vw]
+          bg-white dark:bg-gray-900 shadow-2xl
+          transform transition-transform duration-300 ease-in-out
+          ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full'}
+        `}>
           <ChatSidebar />
         </div>
-        
-        {/* Mobile close area */}
-        {showMobileSidebar && (
-          <div 
-            className="lg:hidden flex-1 bg-black/30"
-            onClick={() => setShowMobileSidebar(false)}
-          />
-        )}
+      </div>
+
+      {/* Desktop Sidebar - Always visible */}
+      <div className="hidden lg:flex">
+        <ChatSidebar />
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative z-10">
         {/* Header with hamburger menu */}
         <header className="flex-shrink-0 bg-white/20 dark:bg-gray-900/40 backdrop-blur-2xl border-b border-gray-200/10 dark:border-gray-800/40 shadow-sm flex items-center justify-between px-4 py-3">
           {/* Hamburger menu for mobile */}
           <button
-            ref={hamburgerRef}
             onClick={toggleMobileSidebar}
-            onTouchStart={toggleMobileSidebar}
-            className="hamburger-button lg:hidden w-10 h-10 rounded-full flex items-center justify-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition active:scale-95 active:bg-indigo-100 dark:active:bg-indigo-900/30"
+            className="hamburger-button lg:hidden w-10 h-10 rounded-full flex items-center justify-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition active:scale-95"
             style={{ 
               WebkitTapHighlightColor: 'transparent',
-              WebkitUserSelect: 'none',
-              WebkitTouchCallout: 'none',
             }}
           >
             <Menu className="w-5 h-5 text-gray-700 dark:text-gray-300" />
@@ -122,7 +113,7 @@ const ChatPage = ({ currentUser }) => {
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden bg-transparent">
           {!selectedChat ? (
             <>
               {/* Tabs */}
@@ -136,7 +127,6 @@ const ChatPage = ({ currentUser }) => {
                   }`}
                   style={{ 
                     WebkitTapHighlightColor: 'transparent',
-                    WebkitUserSelect: 'none'
                   }}
                 >
                   Chats
@@ -150,7 +140,6 @@ const ChatPage = ({ currentUser }) => {
                   }`}
                   style={{ 
                     WebkitTapHighlightColor: 'transparent',
-                    WebkitUserSelect: 'none'
                   }}
                 >
                   Groups
@@ -182,7 +171,6 @@ const ChatPage = ({ currentUser }) => {
                   className="w-9 h-9 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition active:scale-95"
                   style={{ 
                     WebkitTapHighlightColor: 'transparent',
-                    WebkitUserSelect: 'none'
                   }}
                 >
                   <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />
@@ -194,12 +182,9 @@ const ChatPage = ({ currentUser }) => {
                 {/* Mobile hamburger in chat view */}
                 <button
                   onClick={toggleMobileSidebar}
-                  onTouchStart={toggleMobileSidebar}
-                  className="hamburger-button lg:hidden w-9 h-9 rounded-full flex items-center justify-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition active:scale-95 active:bg-indigo-100 dark:active:bg-indigo-900/30"
+                  className="hamburger-button lg:hidden w-9 h-9 rounded-full flex items-center justify-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition active:scale-95"
                   style={{ 
                     WebkitTapHighlightColor: 'transparent',
-                    WebkitUserSelect: 'none',
-                    WebkitTouchCallout: 'none',
                   }}
                 >
                   <Menu className="w-5 h-5 text-gray-700 dark:text-gray-300" />
@@ -223,14 +208,14 @@ const ChatPage = ({ currentUser }) => {
                 <div
                   className={`absolute top-0 right-0 h-full w-80 lg:w-96 bg-white/95 dark:bg-gray-900/95 
                   backdrop-blur-xl shadow-2xl border-l border-gray-200/10 dark:border-gray-700/50 
-                  transform transition-all duration-500 ease-in-out z-20 
+                  transform transition-all duration-500 ease-in-out z-30 
                   ${
                     showGroupInfo
                       ? "translate-x-0 opacity-100"
                       : "translate-x-full opacity-0 pointer-events-none"
                   }`}
                 >
-                  <div className="absolute top-4 left-4 z-30">
+                  <div className="absolute top-4 left-4 z-40">
                     <button
                       onClick={() => setShowGroupInfo(false)}
                       className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center hover:scale-110 transition-transform shadow-md"

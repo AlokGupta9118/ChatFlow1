@@ -11,7 +11,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Volume2, VolumeX, Settings, Users, Crown, Sparkles, Timer, Trophy, 
-  Gamepad2, Camera, X, Ban, MessageCircle, Send, Smile, Paperclip, ArrowLeft
+  Gamepad2, Camera, X, Ban, MessageCircle, Send, Smile, Paperclip, ArrowLeft,
+  Loader2
 } from "lucide-react";
 
 const DEFAULT_SOCKET_URL = `${import.meta.env.VITE_API_URL}`;
@@ -59,13 +60,16 @@ export default function TruthOrDare({ currentUser }) {
   const [proofs, setProofs] = useState({});
   const [showProofModal, setShowProofModal] = useState(false);
   const [currentProof, setCurrentProof] = useState(null);
-  const [truthCompletionText, setTruthCompletionText] = useState(""); // NEW: For truth completion
+  const [truthCompletionText, setTruthCompletionText] = useState("");
 
-  // 🔥 NEW CHAT STATE
+  // 🔥 CHAT STATE
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
-  const [showChat, setShowChat] = useState(false); // Hidden by default on mobile
+  const [showChat, setShowChat] = useState(false);
   const [typingUsers, setTypingUsers] = useState(new Set());
+
+  // FIXED: New state for next round loading
+  const [nextRoundLoading, setNextRoundLoading] = useState(false);
 
   const promptsRef = useRef([]);
   const timerRef = useRef(null);
@@ -73,10 +77,18 @@ export default function TruthOrDare({ currentUser }) {
   const fileInputRef = useRef(null);
   const chatContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const mainContainerRef = useRef(null);
 
   promptsRef.current = prompts;
 
-  // Scroll chat to bottom when new messages arrive
+  // FIXED: Auto-scroll to top when game state changes
+  useEffect(() => {
+    if (mainContainerRef.current) {
+      mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [stage, selectedPlayer, chosenPrompt, showChat]);
+
+  // FIXED: Scroll chat to bottom when new messages arrive
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
@@ -198,7 +210,7 @@ export default function TruthOrDare({ currentUser }) {
       setTimeLeft(gameSettings.timerDuration);
       setProofImage(null);
       setProofUploaded(false);
-      setTruthCompletionText(""); // Reset truth completion text
+      setTruthCompletionText("");
       playSound("select");
       
       setPlayerStats(prev => ({
@@ -210,7 +222,7 @@ export default function TruthOrDare({ currentUser }) {
       }));
     });
 
-    // 🔥 NEW CHAT SOCKET HANDLERS
+    // 🔥 CHAT SOCKET HANDLERS
     sock.on("receive-chat-message", (message) => {
       setChatMessages(prev => [...prev, message]);
       if (message.sender !== localName) {
@@ -234,6 +246,25 @@ export default function TruthOrDare({ currentUser }) {
       setChatMessages(messages);
     });
 
+    // FIXED: New socket event for next round loading
+    sock.on("next-round-starting", () => {
+      setNextRoundLoading(true);
+      addToast("Next round starting...", 2000);
+    });
+
+    sock.on("next-round-started", () => {
+      setNextRoundLoading(false);
+      setSelectedPlayer(null);
+      setPrompts([]);
+      setChosenPrompt(null);
+      setTruthDareChoice(null);
+      setIsChoicePending(false);
+      setTimeLeft(null);
+      setProofImage(null);
+      setProofUploaded(false);
+      setTruthCompletionText("");
+    });
+
     // Existing game handlers...
     sock.on("choose-truth-dare", () => {
       setIsChoicePending(true);
@@ -253,8 +284,14 @@ export default function TruthOrDare({ currentUser }) {
       }
     });
 
-    sock.on("receive-prompt", ({ prompt, askedBy }) => {
-      setPrompts(prev => [...prev, { id: Date.now(), text: prompt, from: askedBy, type: promptType }]);
+    // FIXED: Correct prompt type handling
+    sock.on("receive-prompt", ({ prompt, askedBy, type }) => {
+      setPrompts(prev => [...prev, { 
+        id: Date.now(), 
+        text: prompt, 
+        from: askedBy, 
+        type: type // Use the type from server
+      }]);
       playSound("notification");
     });
 
@@ -337,7 +374,7 @@ export default function TruthOrDare({ currentUser }) {
     if (localName) localStorage.setItem("localName", localName);
   }, [localName]);
 
-  // 🔥 NEW CHAT FUNCTIONS
+  // 🔥 CHAT FUNCTIONS
   const sendChatMessage = () => {
     if (!chatInput.trim() || !socket) return;
 
@@ -460,7 +497,8 @@ export default function TruthOrDare({ currentUser }) {
     setProofImage(null);
     setProofUploaded(false);
     setProofs({});
-    setChatMessages([]); // Clear chat on leave
+    setChatMessages([]);
+    setNextRoundLoading(false);
 
     if (socket && roomId) socket.emit("leave-room", roomId);
     addToast("Left the room", 2000);
@@ -475,10 +513,15 @@ export default function TruthOrDare({ currentUser }) {
     socket.emit("spin-player", { roomId });
   };
 
-  // 🎭 Send prompt
+  // 🎭 Send prompt - FIXED: Send correct prompt type
   const sendPrompt = () => {
     if (!socket || !promptText.trim()) return;
-    socket.emit("send-prompt", { roomId, prompt: promptText, askedBy: localName, type: promptType });
+    socket.emit("send-prompt", { 
+      roomId, 
+      prompt: promptText, 
+      askedBy: localName, 
+      type: promptType // Send the actual selected type
+    });
     setPromptText("");
     addToast("Prompt sent!", 2000);
   };
@@ -603,26 +646,31 @@ export default function TruthOrDare({ currentUser }) {
     addToast(`Kicked ${playerName} from the room`, 3000, "warning");
   };
 
-  // 🔄 Reset round - FIXED: Now properly resets for all players
+  // 🔄 Reset round - FIXED: Now shows spinner for all players
   const resetRound = () => {
-    if (!isHost) return;
+    if (!isHost || !socket) return;
     
-    // Reset game state
-    setSelectedPlayer(null);
-    setPrompts([]);
-    setChosenPrompt(null);
-    setSpinning(false);
-    setTruthDareChoice(null);
-    setIsChoicePending(false);
-    setTimeLeft(null);
-    setProofImage(null);
-    setProofUploaded(false);
-    setTruthCompletionText(""); // Reset truth completion text
+    // Show loading for all players
+    setNextRoundLoading(true);
+    socket.emit("next-round-starting", { roomId });
     
-    if (socket) {
-      socket.emit("reset-round", { roomId });
-    }
-    addToast("Starting next round!", 2000);
+    // Reset game state after a short delay
+    setTimeout(() => {
+      setSelectedPlayer(null);
+      setPrompts([]);
+      setChosenPrompt(null);
+      setSpinning(false);
+      setTruthDareChoice(null);
+      setIsChoicePending(false);
+      setTimeLeft(null);
+      setProofImage(null);
+      setProofUploaded(false);
+      setTruthCompletionText("");
+      setNextRoundLoading(false);
+      
+      socket.emit("next-round-started", { roomId });
+      addToast("Next round started!", 2000);
+    }, 2000);
   };
 
   // 🧩 Toast management
@@ -645,7 +693,7 @@ export default function TruthOrDare({ currentUser }) {
   if (stage === "lobby") {
     return (
       <div className="h-screen w-full flex overflow-hidden bg-background">
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" ref={mainContainerRef}>
           <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4 md:p-6 flex items-center justify-center relative">
             {/* Animated background elements */}
             <div className="absolute inset-0 overflow-hidden">
@@ -750,7 +798,7 @@ export default function TruthOrDare({ currentUser }) {
   // 🧩 Game UI
   return (
     <div className="h-screen w-full flex overflow-hidden bg-background">
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={mainContainerRef}>
         <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-3 md:p-6 relative">
           {/* Animated background */}
           <div className="absolute inset-0 overflow-hidden">
@@ -769,6 +817,17 @@ export default function TruthOrDare({ currentUser }) {
           </div>
 
           <div className="max-w-7xl mx-auto relative z-10">
+            {/* FIXED: Next Round Loading Overlay */}
+            {nextRoundLoading && (
+              <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+                <Card className="p-6 md:p-8 bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0 text-center">
+                  <Loader2 className="w-12 h-12 md:w-16 md:h-16 text-purple-600 animate-spin mx-auto mb-4" />
+                  <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">Starting Next Round</h3>
+                  <p className="text-gray-600">Get ready for the next turn!</p>
+                </Card>
+              </div>
+            )}
+
             {/* Header - Mobile Responsive */}
             <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-0 mb-4 md:mb-6 p-3 md:p-4 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20">
               <div className="flex items-center space-x-3 md:space-x-4">
@@ -795,7 +854,7 @@ export default function TruthOrDare({ currentUser }) {
               </div>
 
               <div className="flex items-center justify-between md:justify-end space-x-2 md:space-x-3">
-                {/* 🔥 NEW CHAT TOGGLE BUTTON */}
+                {/* CHAT TOGGLE BUTTON */}
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -906,7 +965,7 @@ export default function TruthOrDare({ currentUser }) {
                     )}
                   </div>
 
-                  <div className="space-y-2 md:space-y-3 max-h-60 md:max-h-none overflow-y-auto">
+                  <div className="space-y-2 md:space-y-3 max-h-60 md:max-h-80 overflow-y-auto">
                     {players.map((player, index) => (
                       <div
                         key={player.name}
@@ -986,7 +1045,7 @@ export default function TruthOrDare({ currentUser }) {
                       </Button>
                     )}
                     
-                    {stage === "playing" && !selectedPlayer && (
+                    {stage === "playing" && !selectedPlayer && !nextRoundLoading && (
                       <Button 
                         onClick={startSpin} 
                         disabled={spinning || players.length === 0} 
@@ -1007,12 +1066,23 @@ export default function TruthOrDare({ currentUser }) {
                     )}
 
                     {/* FIXED: Next Round button shows when appropriate */}
-                    {isHost && selectedPlayer && (
+                    {isHost && selectedPlayer && (truthDareChoice?.choice === "Truth" || proofUploaded) && (
                       <Button 
                         onClick={resetRound} 
+                        disabled={nextRoundLoading}
                         className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg transition-all duration-300"
                       >
-                        Next Round
+                        {nextRoundLoading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-2 animate-spin" />
+                            Starting...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                            Next Round
+                          </>
+                        )}
                       </Button>
                     )}
                   </div>
@@ -1066,7 +1136,7 @@ export default function TruthOrDare({ currentUser }) {
               {/* Middle Column - Game Area */}
               <div className={`space-y-4 md:space-y-6 ${showChat ? 'lg:col-span-2' : 'lg:col-span-2'}`}>
                 {/* Spinner Wheel */}
-                {stage === "playing" && (
+                {stage === "playing" && !nextRoundLoading && (
                   <Card className="p-4 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0 text-center">
                     <SpinnerWheel 
                       players={players} 
@@ -1078,7 +1148,7 @@ export default function TruthOrDare({ currentUser }) {
                 )}
 
                 {/* Selected Player & Game Flow */}
-                {selectedPlayer && (
+                {selectedPlayer && !nextRoundLoading && (
                   <Card className="p-4 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
                     <div className="space-y-4 md:space-y-6">
                       {/* Selected Player Header */}
@@ -1181,21 +1251,23 @@ export default function TruthOrDare({ currentUser }) {
                                 <div className="text-green-600 font-semibold mb-3 md:mb-4 text-sm md:text-base">
                                   ✅ Proof uploaded successfully!
                                 </div>
-                                <div className="relative inline-block">
-                                  <img
-                                    src={proofImage}
-                                    alt="Proof"
-                                    className="max-w-full h-32 md:h-48 object-cover rounded-lg shadow-md border-2 border-green-300"
-                                  />
-                                  <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    onClick={removeProofImage}
-                                    className="absolute -top-2 -right-2 h-5 w-5 md:h-6 md:w-6 p-0 rounded-full"
-                                  >
-                                    <X className="w-2 h-2 md:w-3 md:h-3" />
-                                  </Button>
-                                </div>
+                                {proofImage && (
+                                  <div className="relative inline-block">
+                                    <img
+                                      src={proofImage}
+                                      alt="Proof"
+                                      className="max-w-full h-32 md:h-48 object-cover rounded-lg shadow-md border-2 border-green-300"
+                                    />
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={removeProofImage}
+                                      className="absolute -top-2 -right-2 h-5 w-5 md:h-6 md:w-6 p-0 rounded-full"
+                                    >
+                                      <X className="w-2 h-2 md:w-3 md:h-3" />
+                                    </Button>
+                                  </div>
+                                )}
                                 <p className="text-xs md:text-sm text-gray-600 mt-2">
                                   Waiting for host to start next round...
                                 </p>
@@ -1372,7 +1444,7 @@ export default function TruthOrDare({ currentUser }) {
                 )}
               </div>
 
-              {/* 🔥 NEW RIGHT COLUMN - CHAT */}
+              {/* RIGHT COLUMN - CHAT */}
               {showChat && (
                 <div className="space-y-4 md:space-y-6">
                   <Card className="h-[400px] md:h-[600px] flex flex-col bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
@@ -1424,7 +1496,7 @@ export default function TruthOrDare({ currentUser }) {
                                   {message.sender}
                                 </div>
                               )}
-                              <div className="text-xs md:text-sm">{message.content}</div>
+                              <div className="text-xs md:text-sm break-words">{message.content}</div>
                               <div className={`text-xs mt-1 ${
                                 message.sender === localName ? 'text-blue-100' : 'text-gray-500'
                               }`}>
@@ -1645,6 +1717,3 @@ function ToastContainer({ toasts }) {
           </div>
         </div>
       ))}
-    </div>
-  );
-}
