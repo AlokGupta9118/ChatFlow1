@@ -1694,6 +1694,9 @@ function SpinnerWheel({ players, selectedPlayer, spinning, soundEnabled }) {
 }
 
 // Enhanced Toast component - Mobile Responsive
+// Enhanced Toast component - Mobile Responsive
+
+// Enhanced Toast component - Mobile Responsive
 function ToastContainer({ toasts }) {
   return (
     <div className="fixed top-2 right-2 md:top-4 md:right-4 flex flex-col gap-2 md:gap-3 z-50 max-w-xs md:max-w-sm">
@@ -1717,3 +1720,7 @@ function ToastContainer({ toasts }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
