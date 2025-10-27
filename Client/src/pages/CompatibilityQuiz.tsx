@@ -13,7 +13,7 @@ import {
   Heart, Users, LinkIcon, Crown, Sparkles, Timer, Trophy, 
   Gamepad2, Volume2, VolumeX, CheckCircle, PartyPopper,
   MessageCircle, Loader2, Share2, Download, Copy, Check,
-  ArrowLeft
+  ArrowLeft, Clock, Brain
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
@@ -129,37 +129,22 @@ export default function EnhancedCompatibilityGame() {
     personalityTraits: [] as string[]
   });
 
-  // Mobile input states
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Screenshot sharing states
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [shareSuccess, setShareSuccess] = useState(false);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [showShareModal, setShowShareModal] = useState(false);
-
   // Refs
   const playerNameInputRef = useRef<HTMLInputElement>(null);
   const roomIdInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const submitTimeoutRef = useRef<NodeJS.Timeout>();
   const screenshotRef = useRef<HTMLDivElement>(null);
+  const mainContainerRef = useRef<HTMLDivElement>(null);
 
-  // Detect mobile device
+  // FIXED: Auto-scroll to top when game state changes
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => {
-      window.removeEventListener('resize', checkMobile);
-    };
-  }, []);
+    if (mainContainerRef.current) {
+      mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [gameStarted, showResults, currentQuestion, joined]);
 
-  // FIXED: Simple input handlers without complex state updates
+  // FIXED: Simple input handlers - REMOVED all complex logic
   const handlePlayerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPlayerName(e.target.value);
   };
@@ -675,6 +660,12 @@ export default function EnhancedCompatibilityGame() {
     return "from-purple-500 to-pink-500";
   };
 
+  // Screenshot sharing states
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+
   // FIXED: Additional Questions Component with proper input handling
   const AdditionalQuestions = () => (
     <Card className="p-4 md:p-6 bg-white/5 border-white/20 mb-6">
@@ -920,11 +911,14 @@ export default function EnhancedCompatibilityGame() {
     const { score, breakdown, insights, personalityAnalysis, additionalFactors } = compatibility;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 flex flex-col items-center justify-center p-4 md:p-6 text-white">
+      <div 
+        ref={mainContainerRef}
+        className="min-h-screen bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 flex flex-col items-center justify-center p-4 md:p-6 text-white overflow-y-auto"
+      >
         <ConnectionStatus />
         
         {/* Back Button */}
-        <div className="absolute top-4 left-4">
+        <div className="absolute top-4 left-4 z-10">
           <Button
             variant="outline"
             onClick={() => navigate('/Games')}
@@ -1072,11 +1066,14 @@ export default function EnhancedCompatibilityGame() {
 
   // Waiting Screen Component
   const WaitingScreen = () => (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6">
+    <div 
+      ref={mainContainerRef}
+      className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6 overflow-y-auto"
+    >
       <ConnectionStatus />
       
       {/* Back Button */}
-      <div className="absolute top-4 left-4">
+      <div className="absolute top-4 left-4 z-10">
         <Button
           variant="outline"
           onClick={() => window.location.reload()}
@@ -1177,11 +1174,14 @@ export default function EnhancedCompatibilityGame() {
     };
 
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6">
+      <div 
+        ref={mainContainerRef}
+        className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6 overflow-y-auto"
+      >
         <ConnectionStatus />
         
         {/* Back Button */}
-        <div className="absolute top-4 left-4">
+        <div className="absolute top-4 left-4 z-10">
           <Button
             variant="outline"
             onClick={() => window.location.reload()}
@@ -1379,7 +1379,10 @@ export default function EnhancedCompatibilityGame() {
   // FIXED: Join/Create Screen Component - SIMPLIFIED for mobile input
   const JoinCreateScreen = () => {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6">
+      <div 
+        ref={mainContainerRef}
+        className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6 overflow-y-auto"
+      >
         <ConnectionStatus />
         
         {/* Back Button */}

@@ -36,12 +36,13 @@ const IndexGames = () => {
     <div className="h-screen w-full flex overflow-hidden bg-background">
       {/* Main scrolling content area */}
       <div className="flex-1 overflow-y-auto">
-        <div className="min-h-full bg-gradient-to-br from-primary via-accent to-secondary relative">
+        {/* Remove min-h-full and make the gradient background fixed height */}
+        <div className="bg-gradient-to-br from-primary via-accent to-secondary relative">
           {/* Background overlay */}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.12),transparent_60%)] pointer-events-none" />
 
           {/* Content */}
-          <div className="relative z-10 p-4 md:p-6">
+          <div className="relative z-10 p-4 md:p-6 min-h-full">
             {/* Back Button */}
             <div className="relative mb-6 md:absolute md:top-4 md:left-4 z-20">
               <button
@@ -54,7 +55,7 @@ const IndexGames = () => {
             </div>
 
             {/* Main Content */}
-            <div className="max-w-6xl mx-auto pt-2 md:pt-8">
+            <div className="max-w-6xl mx-auto pt-2 md:pt-8 pb-8">
               {/* Header */}
               <div className="text-center mb-8 md:mb-12">
                 <div className="flex items-center justify-center mb-4 animate-bounce">
@@ -103,7 +104,7 @@ const IndexGames = () => {
               </div>
 
               {/* How to Play Section */}
-              <Card className="p-6 md:p-8 bg-card/95 backdrop-blur-lg border-0 shadow-xl text-center animate-fade-in mx-0 sm:mx-2 mb-4" style={{ animationDelay: '500ms' }}>
+              <Card className="p-6 md:p-8 bg-card/95 backdrop-blur-lg border-0 shadow-xl text-center animate-fade-in mx-0 sm:mx-2" style={{ animationDelay: '500ms' }}>
                 <h3 className="text-xl md:text-2xl font-bold mb-3 bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
                   How to Play
                 </h3>
