@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,7 +17,8 @@ import {
   MessageCircle, ThumbsUp, Flame, Medal, Users2, Brain,
   Smile, Frown, Meh, Laugh, HeartCrack, Loader2, Share2,
   Download, Image, Copy, Check, MapPin, Calendar, Music,
-  Coffee, Film, BookOpen, Utensils, Mountain, Palette
+  Coffee, Film, BookOpen, Utensils, Mountain, Palette,
+  ArrowLeft
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
@@ -103,6 +105,7 @@ const additionalCompatibilityFactors = {
 };
 
 export default function EnhancedCompatibilityGame() {
+  const navigate = useNavigate();
   const [roomId, setRoomId] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [isHost, setIsHost] = useState(false);
@@ -137,6 +140,10 @@ export default function EnhancedCompatibilityGame() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
+  // FIXED: Input refs to prevent re-renders
+  const playerNameInputRef = useRef<HTMLInputElement>(null);
+  const roomIdInputRef = useRef<HTMLInputElement>(null);
+  
   const audioRef = useRef<HTMLAudioElement>(null);
   const confettiRef = useRef<any>(null);
   const submitTimeoutRef = useRef<NodeJS.Timeout>();
@@ -223,17 +230,16 @@ export default function EnhancedCompatibilityGame() {
     setShareSuccess(false);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 500)); // Increased delay for stability
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       const canvas = await html2canvas(screenshotRef.current, {
-        backgroundColor: '#7c3aed', // Match your gradient
-        scale: 1.5, // Reduced scale for better performance
+        backgroundColor: '#7c3aed',
+        scale: 1.5,
         useCORS: true,
         logging: false,
         width: screenshotRef.current.scrollWidth,
         height: screenshotRef.current.scrollHeight,
         onclone: (clonedDoc) => {
-          // Ensure styles are preserved
           const element = clonedDoc.querySelector('[data-screenshot]');
           if (element) {
             (element as HTMLElement).style.transform = 'none';
@@ -413,7 +419,7 @@ export default function EnhancedCompatibilityGame() {
     };
   }, []);
 
-  // FIXED: Room creation with validation - COMPLETELY REWRITTEN
+  // FIXED: Room creation with validation
   const createRoom = () => {
     const trimmedName = playerName.trim();
     if (!trimmedName) {
@@ -426,7 +432,6 @@ export default function EnhancedCompatibilityGame() {
     }
     console.log("Creating room for:", trimmedName);
     
-    // Store the name in a variable to avoid state timing issues
     const currentPlayerName = trimmedName;
     socket.emit("create-room", { 
       player: { name: currentPlayerName },
@@ -434,7 +439,7 @@ export default function EnhancedCompatibilityGame() {
     });
   };
 
-  // FIXED: Room joining with validation - COMPLETELY REWRITTEN
+  // FIXED: Room joining with validation
   const joinRoom = () => {
     const trimmedName = playerName.trim();
     const trimmedRoomId = roomId.trim();
@@ -449,7 +454,6 @@ export default function EnhancedCompatibilityGame() {
     }
     console.log("Joining room:", trimmedRoomId, "as:", trimmedName);
     
-    // Store the name in a variable to avoid state timing issues
     const currentPlayerName = trimmedName;
     socket.emit("join-room", { 
       roomId: trimmedRoomId, 
@@ -467,7 +471,7 @@ export default function EnhancedCompatibilityGame() {
     socket.emit("start-game", { roomId });
   };
 
-  // FIXED: Submit answer with proper state management - COMPLETELY REWRITTEN
+  // FIXED: Submit answer with proper state management
   const submitAnswer = async () => {
     if (!currentAnswer || isSubmitting) {
       console.log("Cannot submit: no answer or already submitting");
@@ -493,7 +497,6 @@ export default function EnhancedCompatibilityGame() {
     const progress = Math.round(((currentQuestion + 1) / questions.length) * 100);
     socket.emit("player-progress", { roomId, progress });
 
-    // Use setTimeout to allow state to update
     if (submitTimeoutRef.current) {
       clearTimeout(submitTimeoutRef.current);
     }
@@ -510,9 +513,8 @@ export default function EnhancedCompatibilityGame() {
           roomId, 
           player: { name: playerName }, 
           answers: newAnswers,
-          additionalAnswers // Include new parameters
+          additionalAnswers
         });
-        // Don't set isSubmitting to false here - wait for results
       }
     }, 300);
   };
@@ -522,7 +524,6 @@ export default function EnhancedCompatibilityGame() {
   };
 
   const triggerConfetti = () => {
-    // Simple confetti implementation
     for (let i = 0; i < 50; i++) {
       setTimeout(() => {
         const confetti = document.createElement('div');
@@ -548,7 +549,7 @@ export default function EnhancedCompatibilityGame() {
     }
   };
 
-  // NEW: Enhanced compatibility calculation with additional factors
+  // Enhanced compatibility calculation
   const calculateCompatibility = () => {
     const allPlayers = Object.keys(bothAnswers);
     if (allPlayers.length < 2) return { score: 0, breakdown: {}, insights: [], personalityAnalysis: {} };
@@ -563,7 +564,6 @@ export default function EnhancedCompatibilityGame() {
     const insights: string[] = [];
     const personalityAnalysis: any = {};
 
-    // Calculate basic question compatibility
     for (let i = 0; i < questions.length; i++) {
       const question = questions[i];
       const weight = question.weight;
@@ -575,11 +575,9 @@ export default function EnhancedCompatibilityGame() {
       }
     }
 
-    // NEW: Calculate additional factors compatibility
     let additionalScore = 0;
     let maxAdditionalScore = 0;
 
-    // Communication style compatibility
     if (ans1.additionalAnswers?.communicationStyle && ans2.additionalAnswers?.communicationStyle) {
       maxAdditionalScore += 1;
       if (ans1.additionalAnswers.communicationStyle === ans2.additionalAnswers.communicationStyle) {
@@ -587,7 +585,6 @@ export default function EnhancedCompatibilityGame() {
       }
     }
 
-    // Love languages compatibility
     if (ans1.additionalAnswers?.loveLanguage && ans2.additionalAnswers?.loveLanguage) {
       maxAdditionalScore += 1;
       if (ans1.additionalAnswers.loveLanguage === ans2.additionalAnswers.loveLanguage) {
@@ -595,12 +592,10 @@ export default function EnhancedCompatibilityGame() {
       }
     }
 
-    // Combine scores (70% from questions, 30% from additional factors)
     const questionScore = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 70 : 0;
     const additionalFactorScore = maxAdditionalScore > 0 ? (additionalScore / maxAdditionalScore) * 30 : 0;
     const finalScore = Math.round(questionScore + additionalFactorScore);
 
-    // NEW: Generate enhanced insights
     if (finalScore >= 90) {
       insights.push("🔥 Soulmate Alert! You complete each other perfectly");
       insights.push("💫 Your communication styles and values are in perfect harmony");
@@ -621,7 +616,6 @@ export default function EnhancedCompatibilityGame() {
       insights.push("⚡ Your differences create exciting chemistry");
     }
 
-    // NEW: Personality analysis
     const commonTraits = new Set();
     const differentTraits = new Set();
 
@@ -668,27 +662,19 @@ export default function EnhancedCompatibilityGame() {
     return "from-purple-500 to-pink-500";
   };
 
-  // NEW: Additional Questions Component
+  // FIXED: Additional Questions Component with proper input handling
   const AdditionalQuestions = () => (
-    <Card className="p-6 bg-white/10 backdrop-blur-sm border-white/20 mb-6">
-      <h3 className="text-2xl font-bold text-white mb-4 text-center">
+    <Card className="p-4 md:p-6 bg-white/10 backdrop-blur-sm border-white/20 mb-6">
+      <h3 className="text-xl md:text-2xl font-bold text-white mb-4 text-center">
         Additional Compatibility Factors
       </h3>
       
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         <div>
           <Label className="text-white font-medium mb-2 block">
             Your Communication Style
           </Label>
-          <RadioGroup 
-            value={additionalAnswers.communicationStyle} 
-            onValueChange={(value) => {
-              console.log("Communication style selected:", value);
-              setAdditionalAnswers(prev => ({...prev, communicationStyle: value}));
-              playSound("select");
-            }}
-            className="grid grid-cols-2 gap-3"
-          >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {additionalCompatibilityFactors.communicationStyles.map((style) => (
               <div 
                 key={style} 
@@ -702,32 +688,28 @@ export default function EnhancedCompatibilityGame() {
                   playSound("select");
                 }}
               >
-                <RadioGroupItem 
-                  value={style} 
-                  id={`comm-${style}`}
-                  checked={additionalAnswers.communicationStyle === style}
-                />
-                <Label htmlFor={`comm-${style}`} className="flex-1 cursor-pointer text-white">
+                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                  additionalAnswers.communicationStyle === style 
+                    ? 'border-pink-400 bg-pink-400' 
+                    : 'border-white/50'
+                }`}>
+                  {additionalAnswers.communicationStyle === style && (
+                    <div className="w-2 h-2 rounded-full bg-white"></div>
+                  )}
+                </div>
+                <Label className="flex-1 cursor-pointer text-white text-sm md:text-base">
                   {style}
                 </Label>
               </div>
             ))}
-          </RadioGroup>
+          </div>
         </div>
 
         <div>
           <Label className="text-white font-medium mb-2 block">
             Your Primary Love Language
           </Label>
-          <RadioGroup 
-            value={additionalAnswers.loveLanguage} 
-            onValueChange={(value) => {
-              console.log("Love language selected:", value);
-              setAdditionalAnswers(prev => ({...prev, loveLanguage: value}));
-              playSound("select");
-            }}
-            className="grid grid-cols-2 gap-3"
-          >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {additionalCompatibilityFactors.loveLanguages.map((language) => (
               <div 
                 key={language} 
@@ -741,17 +723,21 @@ export default function EnhancedCompatibilityGame() {
                   playSound("select");
                 }}
               >
-                <RadioGroupItem 
-                  value={language} 
-                  id={`love-${language}`}
-                  checked={additionalAnswers.loveLanguage === language}
-                />
-                <Label htmlFor={`love-${language}`} className="flex-1 cursor-pointer text-white text-sm">
+                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                  additionalAnswers.loveLanguage === language 
+                    ? 'border-pink-400 bg-pink-400' 
+                    : 'border-white/50'
+                }`}>
+                  {additionalAnswers.loveLanguage === language && (
+                    <div className="w-2 h-2 rounded-full bg-white"></div>
+                  )}
+                </div>
+                <Label className="flex-1 cursor-pointer text-white text-sm">
                   {language}
                 </Label>
               </div>
             ))}
-          </RadioGroup>
+          </div>
         </div>
       </div>
     </Card>
@@ -759,29 +745,29 @@ export default function EnhancedCompatibilityGame() {
 
   // Enhanced Player Card Component
   const PlayerCard = ({ player, index }: { player: any, index: number }) => (
-    <div className="flex items-center justify-between p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
-      <div className="flex items-center space-x-3">
-        <Avatar className="w-10 h-10 border-2 border-white/30">
-          <AvatarFallback className="bg-gradient-to-br from-pink-500 to-rose-600 text-white">
+    <div className="flex items-center justify-between p-3 md:p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+      <div className="flex items-center space-x-2 md:space-x-3">
+        <Avatar className="w-8 h-8 md:w-10 md:h-10 border-2 border-white/30">
+          <AvatarFallback className="bg-gradient-to-br from-pink-500 to-rose-600 text-white text-xs md:text-sm">
             {player.name?.charAt(0).toUpperCase() || "?"}
           </AvatarFallback>
         </Avatar>
-        <div className="flex items-center space-x-2">
-          <span className="font-semibold text-white">{player.name || "Unknown"}</span>
-          {index === 0 && <Crown className="w-4 h-4 text-yellow-400" />}
+        <div className="flex items-center space-x-1 md:space-x-2">
+          <span className="font-semibold text-white text-sm md:text-base">{player.name || "Unknown"}</span>
+          {index === 0 && <Crown className="w-3 h-3 md:w-4 md:h-4 text-yellow-400" />}
         </div>
       </div>
       
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-1 md:space-x-2">
         {playerProgress[player.name] !== undefined && (
           <div className="text-right">
-            <div className="text-sm font-bold text-white">{playerProgress[player.name]}%</div>
-            <Progress value={playerProgress[player.name]} className="w-20 h-2 bg-white/20" />
+            <div className="text-xs md:text-sm font-bold text-white">{playerProgress[player.name]}%</div>
+            <Progress value={playerProgress[player.name]} className="w-16 md:w-20 h-2 bg-white/20" />
           </div>
         )}
         
         {playerReactions[player.name] && (
-          <div className="bg-white/20 px-3 py-1 rounded-full text-lg animate-bounce">
+          <div className="bg-white/20 px-2 py-1 md:px-3 md:py-1 rounded-full text-base md:text-lg animate-bounce">
             {playerReactions[player.name]}
           </div>
         )}
@@ -791,109 +777,12 @@ export default function EnhancedCompatibilityGame() {
 
   // Connection Status Indicator
   const ConnectionStatus = () => (
-    <div className={`fixed top-4 right-4 px-3 py-1 rounded-full text-xs font-semibold z-50 ${
+    <div className={`fixed top-2 right-2 md:top-4 md:right-4 px-2 py-1 md:px-3 md:py-1 rounded-full text-xs font-semibold z-50 ${
       connectionStatus === "connected" 
         ? "bg-green-500 text-white" 
         : "bg-red-500 text-white animate-pulse"
     }`}>
       {connectionStatus === "connected" ? "🟢 Connected" : "🔴 Disconnected"}
-    </div>
-  );
-
-  // Loading Spinner Component
-  const LoadingSpinner = () => (
-    <div className="flex items-center justify-center p-4">
-      <Loader2 className="w-6 h-6 animate-spin text-pink-400" />
-      <span className="ml-2 text-white">Submitting...</span>
-    </div>
-  );
-
-  // Share Modal Component
-  const ShareModal = () => (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <Card className="max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-2xl font-bold text-gray-900 flex items-center">
-              <Share2 className="w-6 h-6 mr-2 text-blue-600" />
-              Share Your Results
-            </h3>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                setShowShareModal(false);
-                setCapturedImage(null);
-              }}
-              className="h-8 w-8"
-            >
-              <span className="text-lg">✕</span>
-            </Button>
-          </div>
-          
-          <div className="space-y-4">
-            {capturedImage && (
-              <div className="text-center">
-                <div className="border-2 border-gray-200 rounded-lg overflow-hidden max-h-96 overflow-y-auto">
-                  <img
-                    src={capturedImage}
-                    alt="Compatibility Results"
-                    className="w-full h-auto"
-                  />
-                </div>
-                <p className="text-sm text-gray-600 mt-2">
-                  Screenshot captured! Choose how you'd like to share it.
-                </p>
-              </div>
-            )}
-            
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                onClick={() => capturedImage && downloadImage(capturedImage)}
-                className="py-4 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
-              >
-                <Download className="w-5 h-5 mr-2" />
-                Download
-              </Button>
-              
-              <Button
-                onClick={shareToSocialMedia}
-                className="py-4 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white"
-              >
-                <Share2 className="w-5 h-5 mr-2" />
-                Share
-              </Button>
-              
-              <Button
-                onClick={captureScreenshot}
-                disabled={isCapturing}
-                className="py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white col-span-2"
-              >
-                {isCapturing ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Capturing...
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-5 h-5 mr-2" />
-                    Capture Again
-                  </>
-                )}
-              </Button>
-            </div>
-            
-            {shareSuccess && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-                <div className="flex items-center justify-center text-green-600">
-                  <Check className="w-5 h-5 mr-2" />
-                  <span className="font-medium">Screenshot copied to clipboard!</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </Card>
     </div>
   );
 
@@ -905,14 +794,14 @@ export default function EnhancedCompatibilityGame() {
           <Button
             onClick={captureScreenshot}
             disabled={isCapturing}
-            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white h-8 w-8 md:h-10 md:w-10"
           >
             {isCapturing ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : shareSuccess ? (
-              <Check className="w-5 h-5" />
+              <Check className="w-4 h-4" />
             ) : (
-              <Share2 className="w-5 h-5" />
+              <Share2 className="w-4 h-4" />
             )}
           </Button>
         </TooltipTrigger>
@@ -923,63 +812,164 @@ export default function EnhancedCompatibilityGame() {
     </TooltipProvider>
   );
 
-  // Enhanced Results Screen with NEW Features
+  // Share Modal Component
+  const ShareModal = () => (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <Card className="max-w-md md:max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0">
+        <div className="p-4 md:p-6">
+          <div className="flex justify-between items-center mb-3 md:mb-4">
+            <h3 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center">
+              <Share2 className="w-5 h-5 md:w-6 md:h-6 mr-2 text-blue-600" />
+              Share Your Results
+            </h3>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setShowShareModal(false);
+                setCapturedImage(null);
+              }}
+              className="h-7 w-7 md:h-8 md:w-8"
+            >
+              <span className="text-lg">✕</span>
+            </Button>
+          </div>
+          
+          <div className="space-y-3 md:space-y-4">
+            {capturedImage && (
+              <div className="text-center">
+                <div className="border-2 border-gray-200 rounded-lg overflow-hidden max-h-64 md:max-h-96 overflow-y-auto">
+                  <img
+                    src={capturedImage}
+                    alt="Compatibility Results"
+                    className="w-full h-auto"
+                  />
+                </div>
+                <p className="text-xs md:text-sm text-gray-600 mt-2">
+                  Screenshot captured! Choose how you'd like to share it.
+                </p>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+              <Button
+                onClick={() => capturedImage && downloadImage(capturedImage)}
+                className="py-3 md:py-4 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm md:text-base"
+              >
+                <Download className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                Download
+              </Button>
+              
+              <Button
+                onClick={shareToSocialMedia}
+                className="py-3 md:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white text-sm md:text-base"
+              >
+                <Share2 className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                Share
+              </Button>
+              
+              <Button
+                onClick={captureScreenshot}
+                disabled={isCapturing}
+                className="py-3 md:py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-sm md:text-base col-span-1 md:col-span-2"
+              >
+                {isCapturing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-2 animate-spin" />
+                    Capturing...
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                    Capture Again
+                  </>
+                )}
+              </Button>
+            </div>
+            
+            {shareSuccess && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-2 md:p-3 text-center">
+                <div className="flex items-center justify-center text-green-600 text-sm md:text-base">
+                  <Check className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                  <span className="font-medium">Screenshot copied to clipboard!</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+
+  // Enhanced Results Screen
   const ResultsScreen = () => {
     const compatibility = calculateCompatibility();
     const { score, breakdown, insights, personalityAnalysis, additionalFactors } = compatibility;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 flex flex-col items-center justify-center p-6 text-white">
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 flex flex-col items-center justify-center p-4 md:p-6 text-white">
         <ConnectionStatus />
+        
+        {/* Back Button */}
+        <div className="absolute top-4 left-4">
+          <Button
+            variant="outline"
+            onClick={() => navigate('/')}
+            className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Games
+          </Button>
+        </div>
         
         {/* Screenshot capture area */}
         <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
-          <Card className="p-8 bg-white/10 backdrop-blur-sm border-white/20 text-center relative">
+          <Card className="p-6 md:p-8 bg-white/10 backdrop-blur-sm border-white/20 text-center relative">
             {/* Share button positioned absolutely */}
             <div className="absolute top-4 right-4">
               <ShareButton />
             </div>
             
-            <div className="flex justify-center mb-6">
-              <PartyPopper className="w-16 h-16 text-yellow-400 animate-bounce" />
+            <div className="flex justify-center mb-4 md:mb-6">
+              <PartyPopper className="w-12 h-12 md:w-16 md:h-16 text-yellow-400 animate-bounce" />
             </div>
             
-            <h2 className="text-5xl font-bold mb-2 bg-gradient-to-r from-pink-400 to-rose-400 bg-clip-text text-transparent">
+            <h2 className="text-3xl md:text-5xl font-bold mb-2 bg-gradient-to-r from-pink-400 to-rose-400 bg-clip-text text-transparent">
               {getCompatibilityMessage(score)}
             </h2>
             
-            <div className={`text-6xl font-black mb-4 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
+            <div className={`text-4xl md:text-6xl font-black mb-4 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
               {score}%
             </div>
             
-            <p className="text-xl text-white/80 mb-8">
+            <p className="text-lg md:text-xl text-white/80 mb-6 md:mb-8">
               {Object.keys(bothAnswers).join(" 💞 ")}
             </p>
 
-            {/* NEW: Additional Factors Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-              <div className="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
+            {/* Additional Factors Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-6 md:mb-8">
+              <div className="bg-white/10 rounded-lg p-3 md:p-4 backdrop-blur-sm">
                 <div className="flex items-center justify-center mb-2">
-                  <MessageCircle className="w-5 h-5 mr-2 text-blue-400" />
-                  <span className="font-semibold">Communication</span>
+                  <MessageCircle className="w-4 h-4 md:w-5 md:h-5 mr-2 text-blue-400" />
+                  <span className="font-semibold text-sm md:text-base">Communication</span>
                 </div>
-                <div className="text-lg text-white">{additionalFactors.communication}</div>
+                <div className="text-base md:text-lg text-white">{additionalFactors.communication}</div>
               </div>
-              <div className="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
+              <div className="bg-white/10 rounded-lg p-3 md:p-4 backdrop-blur-sm">
                 <div className="flex items-center justify-center mb-2">
-                  <Heart className="w-5 h-5 mr-2 text-red-400" />
-                  <span className="font-semibold">Love Languages</span>
+                  <Heart className="w-4 h-4 md:w-5 md:h-5 mr-2 text-red-400" />
+                  <span className="font-semibold text-sm md:text-base">Love Languages</span>
                 </div>
-                <div className="text-lg text-white">{additionalFactors.loveLanguages}</div>
+                <div className="text-base md:text-lg text-white">{additionalFactors.loveLanguages}</div>
               </div>
             </div>
 
             {/* Compatibility Breakdown */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
               {Object.entries(breakdown).map(([category, catScore]) => (
-                <div key={category} className="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
-                  <div className="text-sm text-white/70 mb-1">{category}</div>
-                  <div className="text-2xl font-bold text-white">
+                <div key={category} className="bg-white/10 rounded-lg p-3 md:p-4 backdrop-blur-sm">
+                  <div className="text-xs md:text-sm text-white/70 mb-1">{category}</div>
+                  <div className="text-xl md:text-2xl font-bold text-white">
                     {Math.round((catScore as number / questions.filter(q => q.category === category).length) * 100)}%
                   </div>
                   <Progress 
@@ -990,16 +980,16 @@ export default function EnhancedCompatibilityGame() {
               ))}
             </div>
 
-            {/* NEW: Personality Analysis */}
+            {/* Personality Analysis */}
             {personalityAnalysis.commonTraits.length > 0 && (
-              <div className="bg-white/10 rounded-xl p-6 mb-6 backdrop-blur-sm">
-                <h3 className="text-xl font-bold mb-4 flex items-center justify-center">
-                  <Brain className="w-5 h-5 mr-2 text-purple-400" />
+              <div className="bg-white/10 rounded-xl p-4 md:p-6 mb-4 md:mb-6 backdrop-blur-sm">
+                <h3 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center justify-center">
+                  <Brain className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-400" />
                   Shared Personality Traits
                 </h3>
-                <div className="flex flex-wrap gap-2 justify-center">
+                <div className="flex flex-wrap gap-1 md:gap-2 justify-center">
                   {personalityAnalysis.commonTraits.map((trait: string, index: number) => (
-                    <Badge key={index} className="bg-green-500/20 text-green-300 border-green-400/30 px-3 py-1">
+                    <Badge key={index} className="bg-green-500/20 text-green-300 border-green-400/30 px-2 py-1 text-xs">
                       {trait}
                     </Badge>
                   ))}
@@ -1008,53 +998,53 @@ export default function EnhancedCompatibilityGame() {
             )}
 
             {/* Insights */}
-            <div className="bg-white/10 rounded-xl p-6 mb-8 backdrop-blur-sm">
-              <h3 className="text-xl font-bold mb-4 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 mr-2 text-yellow-400" />
+            <div className="bg-white/10 rounded-xl p-4 md:p-6 mb-6 md:mb-8 backdrop-blur-sm">
+              <h3 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2 text-yellow-400" />
                 Relationship Insights
               </h3>
-              <div className="space-y-3">
+              <div className="space-y-2 md:space-y-3">
                 {insights.map((insight, index) => (
-                  <div key={index} className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg">
-                    <Sparkles className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-                    <span className="text-white/90">{insight}</span>
+                  <div key={index} className="flex items-center space-x-2 md:space-x-3 p-2 md:p-3 bg-white/5 rounded-lg">
+                    <Sparkles className="w-3 h-3 md:w-4 md:h-4 text-yellow-400 flex-shrink-0" />
+                    <span className="text-white/90 text-sm md:text-base">{insight}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Quick Reactions */}
-            <div className="flex justify-center space-x-2 mb-6">
+            <div className="flex justify-center space-x-1 md:space-x-2 mb-4 md:mb-6">
               {['❤️', '😂', '😮', '👏', '🎉'].map(reaction => (
                 <Button
                   key={reaction}
                   variant="outline"
                   size="sm"
                   onClick={() => sendReaction(reaction)}
-                  className="text-lg h-12 w-12 bg-white/10 border-white/20 hover:bg-white/20"
+                  className="text-base md:text-lg h-10 w-10 md:h-12 md:w-12 bg-white/10 border-white/20 hover:bg-white/20"
                 >
                   {reaction}
                 </Button>
               ))}
             </div>
 
-            <div className="flex gap-4 flex-col sm:flex-row">
+            <div className="flex gap-3 md:gap-4 flex-col sm:flex-row">
               <Button 
                 onClick={() => window.location.reload()} 
-                className="flex-1 py-6 text-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
               >
-                <Gamepad2 className="w-5 h-5 mr-2" />
+                <Gamepad2 className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                 Play Again
               </Button>
               <Button 
                 onClick={captureScreenshot}
                 disabled={isCapturing}
-                className="flex-1 py-6 text-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white"
+                className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white"
               >
                 {isCapturing ? (
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-2 animate-spin" />
                 ) : (
-                  <Share2 className="w-5 h-5 mr-2" />
+                  <Share2 className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                 )}
                 {isCapturing ? 'Capturing...' : 'Share Results'}
               </Button>
@@ -1069,51 +1059,63 @@ export default function EnhancedCompatibilityGame() {
 
   // Waiting Screen Component
   const WaitingScreen = () => (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6">
       <ConnectionStatus />
+      
+      {/* Back Button */}
+      <div className="absolute top-4 left-4">
+        <Button
+          variant="outline"
+          onClick={() => window.location.reload()}
+          className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Leave Room
+        </Button>
+      </div>
       
       {/* Screenshot capture area */}
       <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-2xl">
-        <Card className="p-8 bg-white/10 backdrop-blur-sm border-white/20 text-center relative">
+        <Card className="p-6 md:p-8 bg-white/10 backdrop-blur-sm border-white/20 text-center relative">
           {/* Share button */}
           <div className="absolute top-4 right-4">
             <ShareButton />
           </div>
           
-          <div className="flex justify-center mb-6">
+          <div className="flex justify-center mb-4 md:mb-6">
             <div className="relative">
-              <Heart className="w-20 h-20 text-pink-400 animate-pulse" />
-              <Sparkles className="w-8 h-8 text-yellow-400 absolute -top-2 -right-2 animate-spin" />
+              <Heart className="w-16 h-16 md:w-20 md:h-20 text-pink-400 animate-pulse" />
+              <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-spin" />
             </div>
           </div>
           
-          <h2 className="text-4xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-rose-400 bg-clip-text text-transparent">
+          <h2 className="text-2xl md:text-4xl font-bold mb-3 md:mb-4 bg-gradient-to-r from-pink-400 to-rose-400 bg-clip-text text-transparent">
             Compatibility Test
           </h2>
           
-          <div className="mb-6">
-            <h3 className="text-2xl font-bold mb-2">Room Code: {roomId}</h3>
-            <p className="text-white/80 mb-4">Share this code with your partner to begin the journey!</p>
+          <div className="mb-4 md:mb-6">
+            <h3 className="text-xl md:text-2xl font-bold mb-2">Room Code: {roomId}</h3>
+            <p className="text-white/80 mb-3 md:mb-4 text-sm md:text-base">Share this code with your partner to begin the journey!</p>
             <Button 
               onClick={() => navigator.clipboard?.writeText(roomId)}
-              className="bg-white/20 hover:bg-white/30 border-white/30"
+              className="bg-white/20 hover:bg-white/30 border-white/30 text-sm md:text-base"
             >
-              <LinkIcon className="w-4 h-4 mr-2" />
+              <LinkIcon className="w-3 h-3 md:w-4 md:h-4 mr-2" />
               Copy Code
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 gap-3 md:gap-4 mb-4 md:mb-6">
             {players.map((player, index) => (
               <PlayerCard key={player.name || index} player={player} index={index} />
             ))}
           </div>
 
           {players.length === 1 && (
-            <div className="bg-yellow-500/20 border border-yellow-400/30 rounded-lg p-4 mb-6">
+            <div className="bg-yellow-500/20 border border-yellow-400/30 rounded-lg p-3 md:p-4 mb-4 md:mb-6">
               <div className="flex items-center justify-center space-x-2">
-                <Users className="w-5 h-5 text-yellow-400" />
-                <span className="text-yellow-300">Waiting for partner to join...</span>
+                <Users className="w-4 h-4 md:w-5 md:h-5 text-yellow-400" />
+                <span className="text-yellow-300 text-sm md:text-base">Waiting for partner to join...</span>
               </div>
             </div>
           )}
@@ -1122,16 +1124,16 @@ export default function EnhancedCompatibilityGame() {
             <Button 
               onClick={startGame} 
               disabled={players.length < 2}
-              className="w-full py-6 text-lg bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Sparkles className="w-5 h-5 mr-2" />
+              <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
               Start Compatibility Test {players.length < 2 && `(Need ${2 - players.length} more)`}
             </Button>
           ) : (
-            <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
+            <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-3 md:p-4">
               <div className="flex items-center justify-center space-x-2">
-                <Clock className="w-5 h-5 text-blue-400 animate-pulse" />
-                <span className="text-blue-300">Waiting for host to start the test...</span>
+                <Clock className="w-4 h-4 md:w-5 md:h-5 text-blue-400 animate-pulse" />
+                <span className="text-blue-300 text-sm md:text-base">Waiting for host to start the test...</span>
               </div>
             </div>
           )}
@@ -1142,7 +1144,7 @@ export default function EnhancedCompatibilityGame() {
     </div>
   );
 
-  // FIXED: Game Screen Component with proper radio group handling - COMPLETELY REWRITTEN
+  // FIXED: Game Screen Component with proper input handling
   const GameScreen = () => {
     const currentQ = questions[currentQuestion];
     
@@ -1163,27 +1165,39 @@ export default function EnhancedCompatibilityGame() {
     };
 
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-6">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6">
         <ConnectionStatus />
+        
+        {/* Back Button */}
+        <div className="absolute top-4 left-4">
+          <Button
+            variant="outline"
+            onClick={() => window.location.reload()}
+            className="bg-white/10 border-white/20 text-white hover:bg-white/20 text-sm"
+          >
+            <ArrowLeft className="w-3 h-3 md:w-4 md:h-4 mr-2" />
+            Leave Game
+          </Button>
+        </div>
         
         {/* Screenshot capture area */}
         <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
           {/* Header */}
-          <div className="mb-6 relative">
-            <div className="flex justify-between items-center p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+          <div className="mb-4 md:mb-6 relative">
+            <div className="flex justify-between items-center p-3 md:p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
               <div>
-                <h2 className="text-xl font-bold">Room: {roomId}</h2>
-                <div className="text-white/70 flex items-center space-x-2">
-                  <Users className="w-4 h-4" />
+                <h2 className="text-lg md:text-xl font-bold">Room: {roomId}</h2>
+                <div className="text-white/70 flex items-center space-x-2 text-sm">
+                  <Users className="w-3 h-3 md:w-4 md:h-4" />
                   <span>{players.map(p => p.name).join(" & ")}</span>
                 </div>
               </div>
               
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3 md:space-x-4">
                 {/* Progress */}
                 <div className="text-right">
-                  <div className="text-sm text-white/70">Progress</div>
-                  <div className="text-lg font-bold text-white">
+                  <div className="text-xs md:text-sm text-white/70">Progress</div>
+                  <div className="text-base md:text-lg font-bold text-white">
                     {currentQuestion + 1} / {questions.length}
                   </div>
                 </div>
@@ -1191,11 +1205,11 @@ export default function EnhancedCompatibilityGame() {
                 {/* Timer */}
                 {timeLeft !== null && (
                   <div className="text-right">
-                    <div className="text-sm text-white/70">Time Left</div>
-                    <div className={`text-lg font-bold ${
+                    <div className="text-xs md:text-sm text-white/70">Time Left</div>
+                    <div className={`text-base md:text-lg font-bold ${
                       timeLeft <= 10 ? 'text-red-400 animate-pulse' : 'text-white'
                     }`}>
-                      <Timer className="w-4 h-4 inline mr-1" />
+                      <Timer className="w-3 h-3 md:w-4 md:h-4 inline mr-1" />
                       {timeLeft}s
                     </div>
                   </div>
@@ -1204,25 +1218,25 @@ export default function EnhancedCompatibilityGame() {
             </div>
             
             {/* Share button in header */}
-            <div className="absolute top-4 right-4">
+            <div className="absolute top-3 md:top-4 right-3 md:right-4">
               <ShareButton />
             </div>
           </div>
 
           {/* Player Progress Bars */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-4 md:mb-6">
             {players.map((player) => (
-              <div key={player.name} className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
+              <div key={player.name} className="bg-white/10 backdrop-blur-sm rounded-lg p-3 md:p-4 border border-white/20">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center space-x-2">
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="bg-gradient-to-br from-pink-500 to-rose-600 text-white text-sm">
+                    <Avatar className="w-6 h-6 md:w-8 md:h-8">
+                      <AvatarFallback className="bg-gradient-to-br from-pink-500 to-rose-600 text-white text-xs">
                         {player.name?.charAt(0).toUpperCase() || "?"}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="font-semibold text-white">{player.name}</span>
+                    <span className="font-semibold text-white text-sm md:text-base">{player.name}</span>
                   </div>
-                  <div className="text-sm font-bold text-white">
+                  <div className="text-xs md:text-sm font-bold text-white">
                     {playerProgress[player.name] || 0}%
                   </div>
                 </div>
@@ -1235,25 +1249,25 @@ export default function EnhancedCompatibilityGame() {
           </div>
 
           {/* Question Card */}
-          <Card className="p-8 bg-white/10 backdrop-blur-sm border-white/20 mb-6">
-            <div className="text-center mb-6">
-              <Badge className="mb-2 bg-pink-500/20 text-pink-300 border-pink-400/30">
+          <Card className="p-4 md:p-8 bg-white/10 backdrop-blur-sm border-white/20 mb-4 md:mb-6">
+            <div className="text-center mb-4 md:mb-6">
+              <Badge className="mb-2 bg-pink-500/20 text-pink-300 border-pink-400/30 text-xs">
                 {currentQ.category} • Weight: {currentQ.weight}x
               </Badge>
-              <h3 className="text-2xl font-bold text-white mb-2">
+              <h3 className="text-xl md:text-2xl font-bold text-white mb-2">
                 {currentQ.question}
               </h3>
-              <p className="text-white/70">
+              <p className="text-white/70 text-sm md:text-base">
                 Question {currentQuestion + 1} of {questions.length}
               </p>
             </div>
 
-            {/* FIXED: RadioGroup with proper value handling - COMPLETELY REWRITTEN */}
-            <div className="space-y-4">
+            {/* FIXED: RadioGroup with proper value handling */}
+            <div className="space-y-3 md:space-y-4">
               {currentQ.options.map((option, index) => (
                 <div 
                   key={index} 
-                  className={`flex items-center space-x-3 p-4 rounded-lg border transition-all cursor-pointer ${
+                  className={`flex items-center space-x-3 p-3 md:p-4 rounded-lg border transition-all cursor-pointer ${
                     currentAnswer === option 
                       ? 'bg-pink-500/20 border-pink-400/50 scale-105 shadow-lg' 
                       : 'bg-white/5 border-white/10 hover:bg-white/10 hover:scale-102'
@@ -1270,7 +1284,7 @@ export default function EnhancedCompatibilityGame() {
                     )}
                   </div>
                   <Label 
-                    className="flex-1 cursor-pointer text-white font-medium text-lg"
+                    className="flex-1 cursor-pointer text-white font-medium text-base md:text-lg"
                   >
                     {option}
                   </Label>
@@ -1278,45 +1292,45 @@ export default function EnhancedCompatibilityGame() {
               ))}
             </div>
 
-            {/* NEW: Show personality insight for selected answer */}
+            {/* Show personality insight for selected answer */}
             {currentAnswer && currentQ.insights && (
-              <div className="mt-4 p-3 bg-blue-500/20 border border-blue-400/30 rounded-lg">
+              <div className="mt-3 md:mt-4 p-2 md:p-3 bg-blue-500/20 border border-blue-400/30 rounded-lg">
                 <div className="flex items-center space-x-2 text-blue-300">
-                  <Sparkles className="w-4 h-4" />
-                  <span className="text-sm font-medium">
+                  <Sparkles className="w-3 h-3 md:w-4 md:h-4" />
+                  <span className="text-xs md:text-sm font-medium">
                     This suggests: {currentQ.insights[currentAnswer]}
                   </span>
                 </div>
               </div>
             )}
 
-            <div className="flex justify-between items-center mt-8">
+            <div className="flex justify-between items-center mt-6 md:mt-8">
               <Button
                 variant="outline"
                 onClick={() => setSoundEnabled(!soundEnabled)}
-                className="border-white/20 text-white hover:bg-white/10"
+                className="border-white/20 text-white hover:bg-white/10 h-8 w-8 md:h-10 md:w-10"
               >
-                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                {soundEnabled ? <Volume2 className="w-3 h-3 md:w-4 md:h-4" /> : <VolumeX className="w-3 h-3 md:w-4 md:h-4" />}
               </Button>
 
               <Button
                 onClick={handleSubmit}
                 disabled={!currentAnswer || isSubmitting}
-                className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white px-8 py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white px-6 py-2 md:px-8 md:py-3 text-base md:text-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-2 animate-spin" />
                     Submitting...
                   </>
                 ) : currentQuestion === questions.length - 1 ? (
                   <>
-                    <CheckCircle className="w-5 h-5 mr-2" />
+                    <CheckCircle className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                     Finish Test
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-5 h-5 mr-2" />
+                    <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                     Next Question
                   </>
                 )}
@@ -1330,14 +1344,14 @@ export default function EnhancedCompatibilityGame() {
           )}
 
           {/* Quick Reactions */}
-          <div className="flex justify-center space-x-2">
+          <div className="flex justify-center space-x-1 md:space-x-2">
             {['❤️', '😂', '😮', '👏', '🎉'].map(reaction => (
               <Button
                 key={reaction}
                 variant="outline"
                 size="sm"
                 onClick={() => sendReaction(reaction)}
-                className="text-lg h-12 w-12 bg-white/10 border-white/20 hover:bg-white/20"
+                className="text-base md:text-lg h-10 w-10 md:h-12 md:w-12 bg-white/10 border-white/20 hover:bg-white/20"
               >
                 {reaction}
               </Button>
@@ -1350,95 +1364,120 @@ export default function EnhancedCompatibilityGame() {
     );
   };
 
-  // FIXED: Join/Create Screen Component with better input handling - COMPLETELY REWRITTEN
-  // FIXED: Join/Create Screen Component with better input handling - COMPLETELY REWRITTEN
-const JoinCreateScreen = () => {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-6">
-      <ConnectionStatus />
-      
-      <Card className="p-8 max-w-md w-full bg-white/10 backdrop-blur-sm border-white/20 text-center">
-        <div className="flex justify-center mb-6">
-          <div className="relative">
-            <Heart className="w-16 h-16 text-pink-400" />
-            <Sparkles className="w-8 h-8 text-yellow-400 absolute -top-2 -right-2 animate-spin" />
-          </div>
+  // FIXED: Join/Create Screen Component with better input handling
+  const JoinCreateScreen = () => {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6">
+        <ConnectionStatus />
+        
+        {/* Back Button */}
+        <div className="absolute top-4 left-4">
+          <Button
+            variant="outline"
+            onClick={() => navigate('/')}
+            className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Games
+          </Button>
         </div>
         
-        <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-pink-400 to-rose-400 bg-clip-text text-transparent">
-          Compatibility Test
-        </h1>
-        <p className="text-white/70 mb-8">Discover your connection with someone special</p>
-
-        <div className="space-y-4 mb-6">
-          <div className="text-left">
-            <Label htmlFor="playerName" className="text-white font-medium mb-2 block">
-              Your Name
-            </Label>
-            <Input
-              id="playerName"
-              placeholder="Enter your name"
-              value={playerName}
-              onChange={(e) => {
-                console.log("Setting player name:", e.target.value);
-                setPlayerName(e.target.value);
-              }}
-              autoComplete="off"
-              className="bg-white/10 border-white/20 text-white placeholder-white/50"
-            />
+        <Card className="p-6 md:p-8 max-w-md w-full bg-white/10 backdrop-blur-sm border-white/20 text-center">
+          <div className="flex justify-center mb-4 md:mb-6">
+            <div className="relative">
+              <Heart className="w-12 h-12 md:w-16 md:h-16 text-pink-400" />
+              <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-spin" />
+            </div>
           </div>
           
-          <div>
-            <Label htmlFor="roomId" className="text-white font-medium mb-2 block">
-              Room Code (optional)
-            </Label>
-            <Input
-              id="roomId"
-              placeholder="Enter room code to join"
-              value={roomId}
-              onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-              className="bg-white/10 border-white/20 text-white placeholder-white/50"
-              autoComplete="off"
-            />
+          <h1 className="text-2xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-pink-400 to-rose-400 bg-clip-text text-transparent">
+            Compatibility Test
+          </h1>
+          <p className="text-white/70 mb-6 md:mb-8 text-sm md:text-base">Discover your connection with someone special</p>
+
+          <div className="space-y-3 md:space-y-4 mb-4 md:mb-6">
+            <div className="text-left">
+              <Label htmlFor="playerName" className="text-white font-medium mb-2 block">
+                Your Name
+              </Label>
+              <Input
+                id="playerName"
+                ref={playerNameInputRef}
+                placeholder="Enter your name"
+                value={playerName}
+                onChange={(e) => {
+                  console.log("Setting player name:", e.target.value);
+                  setPlayerName(e.target.value);
+                }}
+                autoComplete="off"
+                className="bg-white/10 border-white/20 text-white placeholder-white/50 text-sm md:text-base"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
+                    joinRoom();
+                  } else if (e.key === 'Enter' && playerName.trim()) {
+                    createRoom();
+                  }
+                }}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="roomId" className="text-white font-medium mb-2 block">
+                Room Code (optional)
+              </Label>
+              <Input
+                id="roomId"
+                ref={roomIdInputRef}
+                placeholder="Enter room code to join"
+                value={roomId}
+                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                className="bg-white/10 border-white/20 text-white placeholder-white/50 text-sm md:text-base"
+                autoComplete="off"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
+                    joinRoom();
+                  }
+                }}
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-3">
-          <Button
-            onClick={createRoom}
-            disabled={!playerName.trim()}
-            className="w-full py-6 text-lg bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-          >
-            <Crown className="w-5 h-5 mr-2" />
-            Create New Room
-          </Button>
+          <div className="space-y-2 md:space-y-3">
+            <Button
+              onClick={createRoom}
+              disabled={!playerName.trim()}
+              className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            >
+              <Crown className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+              Create New Room
+            </Button>
 
-          <Button
-            onClick={joinRoom}
-            disabled={!playerName.trim() || !roomId.trim()}
-            className="w-full py-6 text-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-          >
-            <Users className="w-5 h-5 mr-2" />
-            Join Existing Room
-          </Button>
-        </div>
+            <Button
+              onClick={joinRoom}
+              disabled={!playerName.trim() || !roomId.trim()}
+              className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            >
+              <Users className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+              Join Existing Room
+            </Button>
+          </div>
 
-        <div className="mt-6 p-4 bg-white/5 rounded-lg border border-white/10">
-          <h4 className="font-semibold text-white mb-2 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 mr-2 text-yellow-400" />
-            How it works
-          </h4>
-          <ul className="text-sm text-white/70 space-y-1 text-left">
-            <li>• Create a room and share the code</li>
-            <li>• Answer fun compatibility questions</li>
-            <li>• See your match percentage and insights</li>
-            <li>• Share your results with friends</li>
-          </ul>
-        </div>
-      </Card>
-    </div>
-  );
-};
+          <div className="mt-4 md:mt-6 p-3 md:p-4 bg-white/5 rounded-lg border border-white/10">
+            <h4 className="font-semibold text-white mb-2 flex items-center justify-center text-sm md:text-base">
+              <Sparkles className="w-3 h-3 md:w-4 h-4 mr-2 text-yellow-400" />
+              How it works
+            </h4>
+            <ul className="text-xs md:text-sm text-white/70 space-y-1 text-left">
+              <li>• Create a room and share the code</li>
+              <li>• Answer fun compatibility questions</li>
+              <li>• See your match percentage and insights</li>
+              <li>• Share your results with friends</li>
+            </ul>
+          </div>
+        </Card>
+      </div>
+    );
+  };
 
   // Add CSS for confetti animation
   useEffect(() => {

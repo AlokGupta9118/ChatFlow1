@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { motion } from "framer-motion";
-import { UserPlus, Users, Inbox, SendHorizonal } from "lucide-react";
+import { UserPlus, Users, Inbox, SendHorizonal, ArrowLeft } from "lucide-react";
 import { getToken } from "@/utils/getToken";
 
 interface IUser {
@@ -17,6 +18,7 @@ interface IFriendsData {
 }
 
 const AddFriends: React.FC = () => {
+  const navigate = useNavigate();
   const [users, setUsers] = useState<IUser[]>([]);
   const [friendsData, setFriendsData] = useState<IFriendsData>({
     friends: [],
@@ -136,9 +138,9 @@ const AddFriends: React.FC = () => {
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="bg-white/10 backdrop-blur-md rounded-2xl shadow-md p-5 border border-white/10 hover:shadow-lg transition"
+      className="bg-white/10 backdrop-blur-md rounded-2xl shadow-md p-4 md:p-5 border border-white/10 hover:shadow-lg transition"
     >
-      <div className="flex items-center gap-2 mb-4 text-xl font-semibold text-indigo-300">
+      <div className="flex items-center gap-2 mb-4 text-lg md:text-xl font-semibold text-indigo-300">
         {icon}
         <span>{title}</span>
       </div>
@@ -155,9 +157,9 @@ const AddFriends: React.FC = () => {
         <img
           src={user.profilePicture || "/default-avatar.png"}
           alt={user.name}
-          className="w-10 h-10 rounded-full mr-3 border border-white/20"
+          className="w-8 h-8 md:w-10 md:h-10 rounded-full mr-3 border border-white/20"
         />
-        <span className="font-medium text-gray-100">{user.name}</span>
+        <span className="font-medium text-gray-100 text-sm md:text-base">{user.name}</span>
       </div>
       {actions}
     </motion.div>
@@ -165,14 +167,25 @@ const AddFriends: React.FC = () => {
 
   return (
     <motion.div
-      className="min-h-screen bg-gradient-to-br from-gray-900 via-indigo-900 to-black text-white py-12 px-6 md:px-20"
+      className="min-h-screen bg-gradient-to-br from-gray-900 via-indigo-900 to-black text-white py-8 md:py-12 px-4 md:px-20"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.4 }}
     >
-      <div className="max-w-4xl mx-auto space-y-10">
+      {/* Back Button */}
+      <div className="absolute top-4 left-4 z-20">
+        <button
+          onClick={() => navigate('/chat')}
+          className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/30 transition-all border border-white/30"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm font-medium">Back to Chat</span>
+        </button>
+      </div>
+
+      <div className="max-w-4xl mx-auto space-y-6 md:space-y-10 pt-16 md:pt-0">
         <motion.h2
-          className="text-4xl font-bold text-center mb-10 bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400"
+          className="text-2xl md:text-4xl font-bold text-center mb-6 md:mb-10 bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400"
           initial={{ y: -30, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.6 }}
@@ -180,35 +193,35 @@ const AddFriends: React.FC = () => {
           🌐 Friends System
         </motion.h2>
 
-        <Section title="Your Friends" icon={<Users size={22} />}>
+        <Section title="Your Friends" icon={<Users size={20} />}>
           {friendsData.friends.length > 0 ? (
             friendsData.friends.map((user) => (
               <FriendCard key={user._id} user={user}>
-                <span className="text-green-400 text-sm">Friend</span>
+                <span className="text-green-400 text-xs md:text-sm">Friend</span>
               </FriendCard>
             ))
           ) : (
-            <p className="text-gray-400">You don’t have any friends yet 😅</p>
+            <p className="text-gray-400 text-sm md:text-base">You don't have any friends yet 😅</p>
           )}
         </Section>
 
-        <Section title="Incoming Friend Requests" icon={<Inbox size={22} />}>
+        <Section title="Incoming Friend Requests" icon={<Inbox size={20} />}>
           {friendsData.incomingRequests.length > 0 ? (
             friendsData.incomingRequests.map((user) => (
               <FriendCard
                 key={user._id}
                 user={user}
                 actions={
-                  <div>
+                  <div className="flex gap-1 md:gap-2">
                     <button
                       onClick={() => handleAcceptRequest(user._id)}
-                      className="bg-green-500 hover:bg-green-600 px-3 py-1 rounded mr-2 text-white text-sm"
+                      className="bg-green-500 hover:bg-green-600 px-2 py-1 md:px-3 md:py-1 rounded text-white text-xs md:text-sm"
                     >
                       Accept
                     </button>
                     <button
                       onClick={() => handleDeclineRequest(user._id)}
-                      className="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-white text-sm"
+                      className="bg-red-500 hover:bg-red-600 px-2 py-1 md:px-3 md:py-1 rounded text-white text-xs md:text-sm"
                     >
                       Decline
                     </button>
@@ -217,23 +230,23 @@ const AddFriends: React.FC = () => {
               />
             ))
           ) : (
-            <p className="text-gray-400">No incoming requests</p>
+            <p className="text-gray-400 text-sm md:text-base">No incoming requests</p>
           )}
         </Section>
 
-        <Section title="Sent Requests" icon={<SendHorizonal size={22} />}>
+        <Section title="Sent Requests" icon={<SendHorizonal size={20} />}>
           {friendsData.outgoingRequests.length > 0 ? (
             friendsData.outgoingRequests.map((user) => (
               <FriendCard key={user._id} user={user}>
-                <span className="text-blue-400 text-sm">Pending...</span>
+                <span className="text-blue-400 text-xs md:text-sm">Pending...</span>
               </FriendCard>
             ))
           ) : (
-            <p className="text-gray-400">You haven’t sent any requests</p>
+            <p className="text-gray-400 text-sm md:text-base">You haven't sent any requests</p>
           )}
         </Section>
 
-        <Section title="Discover Users" icon={<UserPlus size={22} />}>
+        <Section title="Discover Users" icon={<UserPlus size={20} />}>
           {availableToAdd.length > 0 ? (
             availableToAdd.map((user) => (
               <FriendCard
@@ -242,7 +255,7 @@ const AddFriends: React.FC = () => {
                 actions={
                   <button
                     onClick={() => handleSendRequest(user._id)}
-                    className="bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded text-white text-sm"
+                    className="bg-indigo-600 hover:bg-indigo-700 px-2 py-1 md:px-3 md:py-1 rounded text-white text-xs md:text-sm"
                   >
                     Add Friend
                   </button>
@@ -250,7 +263,7 @@ const AddFriends: React.FC = () => {
               />
             ))
           ) : (
-            <p className="text-gray-400">No new users available 🎉</p>
+            <p className="text-gray-400 text-sm md:text-base">No new users available 🎉</p>
           )}
         </Section>
       </div>

@@ -121,9 +121,9 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
   return (
     <div className="w-full h-full bg-transparent flex flex-col">
       {/* Enhanced Header */}
-      <div className="p-6 pb-4 space-y-4">
-        <div>
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+      <div className="p-4 lg:p-6 pb-3 lg:pb-4 space-y-4">
+        <div className="px-1">
+          <h2 className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
             Messages
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -133,41 +133,47 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
 
         {/* Search Bar */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 lg:w-5 lg:h-5" />
           <Input
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-white/50 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 backdrop-blur-sm"
+            className="pl-10 lg:pl-12 pr-4 h-12 lg:h-14 bg-white/70 dark:bg-gray-800/70 border-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 backdrop-blur-xl shadow-sm text-base"
           />
         </div>
 
-        {/* Category Tabs */}
-        <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
-          {["all", "friends", "groups"].map((category) => (
+        {/* Enhanced Category Tabs */}
+        <div className="flex space-x-2 bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl p-2 backdrop-blur-xl">
+          {[
+            { key: "all", label: "All", icon: MessageCircle },
+            { key: "friends", label: "Friends", icon: Users },
+            { key: "groups", label: "Groups", icon: Users }
+          ].map(({ key, label, icon: Icon }) => (
             <button
-              key={category}
-              onClick={() => setActiveCategory(category)}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium capitalize transition-all duration-200 ${
-                activeCategory === category
-                  ? "bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-gray-100"
+              key={key}
+              onClick={() => setActiveCategory(key)}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 px-2 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                activeCategory === key
+                  ? "bg-white dark:bg-gray-700 shadow-lg text-gray-900 dark:text-gray-100 transform scale-105"
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
               }`}
             >
-              {category}
+              <Icon className="w-4 h-4" />
+              <span className="hidden xs:inline">{label}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Chat List */}
-      <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-2">
+      {/* Enhanced Chat List */}
+      <div className="flex-1 overflow-y-auto px-3 lg:px-6 pb-4 space-y-3">
         {loading ? (
-          <div className="flex justify-center items-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+          <div className="flex flex-col items-center justify-center h-48 space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+            <p className="text-gray-500 dark:text-gray-400">Loading conversations...</p>
           </div>
         ) : displayedItems.length > 0 ? (
-          <AnimatePresence>
+          <AnimatePresence mode="popLayout">
             {displayedItems.map((item, index) => {
               const isGroup = item.participants;
               const itemName = item?.name || "Unnamed";
@@ -184,54 +190,65 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
                 return (
                   <motion.div
                     key={item._id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ delay: index * 0.1 }}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ 
+                      type: "spring",
+                      stiffness: 500,
+                      damping: 30,
+                      delay: index * 0.05
+                    }}
+                    className="px-2"
                   >
                     <div
                       onClick={() => handleSelect(null, { ...item, isGroup: true }, true)}
-                      className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group ${
+                      className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
-                          ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-200 dark:border-indigo-800 shadow-lg shadow-indigo-500/10"
-                          : "bg-white/70 dark:bg-gray-800/70 border border-gray-200/50 dark:border-gray-700/50 hover:bg-white/90 dark:hover:bg-gray-800/90 hover:shadow-md hover:scale-105"
-                      } backdrop-blur-sm`}
+                          ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
+                          : "bg-white/80 dark:bg-gray-800/80 border-gray-200/50 dark:border-gray-700/50 hover:bg-white/90 dark:hover:bg-gray-800/90 hover:shadow-lg hover:scale-105"
+                      }`}
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <Avatar className="w-14 h-14 shadow-md border-2 border-white dark:border-gray-700">
+                      <div className="flex items-center gap-3 lg:gap-4">
+                        {/* Avatar Container */}
+                        <div className="relative flex-shrink-0">
+                          <Avatar className="w-12 h-12 lg:w-14 lg:h-14 shadow-lg border-2 border-white/80 dark:border-gray-700/80">
                             <AvatarImage src={item.avatar || "/default-avatar.png"} />
-                            <AvatarFallback className="bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold">
+                            <AvatarFallback className="bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold text-lg">
                               {itemName[0]?.toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <div className="absolute -bottom-1 -right-1 bg-indigo-500 rounded-full p-1 shadow-lg">
+                          <div className="absolute -bottom-1 -right-1 bg-indigo-500 rounded-full p-1 shadow-lg border border-white dark:border-gray-900">
                             <Users className="w-3 h-3 text-white" />
                           </div>
                         </div>
                         
+                        {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-2">
-                            <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                            <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm lg:text-base">
                               {itemName}
                             </h3>
                             {unread > 0 && (
                               <motion.span
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
-                                className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg"
+                                className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg min-w-6 text-center"
                               >
                                 {unread}
                               </motion.span>
                             )}
                           </div>
                           
-                          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                            <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full text-xs">
+                          <div className="flex items-center gap-2 text-xs lg:text-sm">
+                            <span className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 px-2 py-1 rounded-full font-medium">
                               {role}
                             </span>
-                            <span>•</span>
-                            <span>{memberCount} members</span>
+                            <span className="text-gray-400">•</span>
+                            <span className="text-gray-500 dark:text-gray-400">
+                              {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -242,47 +259,56 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
                 return (
                   <motion.div
                     key={item._id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ delay: index * 0.1 }}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ 
+                      type: "spring",
+                      stiffness: 500,
+                      damping: 30,
+                      delay: index * 0.05
+                    }}
+                    className="px-2"
                   >
                     <div
                       onClick={() => handleSelect(item, null, false)}
-                      className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group ${
+                      className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
-                          ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-200 dark:border-indigo-800 shadow-lg shadow-indigo-500/10"
-                          : "bg-white/70 dark:bg-gray-800/70 border border-gray-200/50 dark:border-gray-700/50 hover:bg-white/90 dark:hover:bg-gray-800/90 hover:shadow-md hover:scale-105"
-                      } backdrop-blur-sm`}
+                          ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
+                          : "bg-white/80 dark:bg-gray-800/80 border-gray-200/50 dark:border-gray-700/50 hover:bg-white/90 dark:hover:bg-gray-800/90 hover:shadow-lg hover:scale-105"
+                      }`}
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <Avatar className="w-14 h-14 shadow-md border-2 border-white dark:border-gray-700">
+                      <div className="flex items-center gap-3 lg:gap-4">
+                        {/* Avatar Container */}
+                        <div className="relative flex-shrink-0">
+                          <Avatar className="w-12 h-12 lg:w-14 lg:h-14 shadow-lg border-2 border-white/80 dark:border-gray-700/80">
                             <AvatarImage src={item.profilePicture || "/default-avatar.png"} />
-                            <AvatarFallback className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold">
+                            <AvatarFallback className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold text-lg">
                               {itemName[0]?.toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-gray-900 ${getStatusColor(item.status)}`} />
+                          <div className={`absolute -bottom-1 -right-1 w-3 h-3 lg:w-4 lg:h-4 rounded-full border-2 border-white dark:border-gray-900 ${getStatusColor(item.status)}`} />
                         </div>
                         
+                        {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-2">
-                            <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                            <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm lg:text-base">
                               {itemName}
                             </h3>
                             {unread > 0 && (
                               <motion.span
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
-                                className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg"
+                                className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg min-w-6 text-center"
                               >
                                 {unread}
                               </motion.span>
                             )}
                           </div>
                           
-                          <div className="flex items-center gap-2 text-sm">
+                          <div className="flex items-center gap-2 text-xs lg:text-sm">
                             <span className={`w-2 h-2 rounded-full ${getStatusColor(item.status)}`} />
                             <span className="text-gray-500 dark:text-gray-400">
                               {getStatusText(item.status)}
@@ -297,14 +323,36 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
             })}
           </AnimatePresence>
         ) : (
-          <div className="text-center py-12">
-            <MessageCircle className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-400 text-lg">No conversations found</p>
-            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
-              {searchQuery ? "Try a different search" : "Start a new conversation"}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center py-16 px-8 text-center"
+          >
+            <div className="w-20 h-20 lg:w-24 lg:h-24 bg-gradient-to-r from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 rounded-3xl flex items-center justify-center mb-4 shadow-lg">
+              <MessageCircle className="w-8 h-8 lg:w-10 lg:h-10 text-gray-400 dark:text-gray-500" />
+            </div>
+            <h3 className="text-lg lg:text-xl font-semibold text-gray-600 dark:text-gray-300 mb-2">
+              {searchQuery ? "No matches found" : "No conversations"}
+            </h3>
+            <p className="text-sm lg:text-base text-gray-500 dark:text-gray-400 max-w-xs">
+              {searchQuery 
+                ? "Try adjusting your search terms" 
+                : "Start chatting with friends or create a group"
+              }
             </p>
-          </div>
+          </motion.div>
         )}
+      </div>
+
+      {/* Floating Action Button for Mobile */}
+      <div className="lg:hidden fixed bottom-6 right-6 z-10">
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          className="w-14 h-14 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl shadow-2xl shadow-indigo-500/50 flex items-center justify-center text-white"
+        >
+          <MessageCircle className="w-6 h-6" />
+        </motion.button>
       </div>
     </div>
   );

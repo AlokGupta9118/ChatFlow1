@@ -23,13 +23,13 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
     setLoading(true);
     try {
       const { data: groupData } = await axios.get(
-        "${import.meta.env.VITE_API_URL}/chatroom/getallgroups",
+        `${import.meta.env.VITE_API_URL}/chatroom/getallgroups`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const allGroups = groupData.groups || [];
 
       const { data: pendingData } = await axios.get(
-        "${import.meta.env.VITE_API_URL}/chatroom/my-join-requests",
+        `${import.meta.env.VITE_API_URL}/chatroom/my-join-requests`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const pendingRequests = pendingData.requests || [];
@@ -57,7 +57,7 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
     }
     try {
       await axios.post(
-        "${import.meta.env.VITE_API_URL}/chatroom/groups/create",
+        `${import.meta.env.VITE_API_URL}/chatroom/groups/create`,
         newGroup,
         { headers: { Authorization: `Bearer ${token}` } }
       );

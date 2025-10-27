@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -15,9 +16,11 @@ import {
   Database,
   Bot,
   Clock,
+  ArrowLeft,
 } from "lucide-react";
 
 const SettingsPanel = ({ currentUser }) => {
+  const navigate = useNavigate();
   const token = getToken();
   const systemPrefersDark =
     typeof window !== "undefined" &&
@@ -49,7 +52,7 @@ const SettingsPanel = ({ currentUser }) => {
     const fetchSettings = async () => {
       try {
         const res = await axios.get(
-          "${import.meta.env.VITE_API_URL}/api/user/get-settings",
+          `${import.meta.env.VITE_API_URL}/api/user/get-settings`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -112,7 +115,7 @@ const SettingsPanel = ({ currentUser }) => {
     setSaving(true);
     try {
       await axios.put(
-        "${import.meta.env.VITE_API_URL}/api/user/update-settings",
+        `${import.meta.env.VITE_API_URL}/api/user/update-settings`,
         settings,
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -169,30 +172,41 @@ const SettingsPanel = ({ currentUser }) => {
     : "bg-gradient-to-br from-gray-700 via-gray-600 to-gray-800 text-white";
 
   const card =
-    "bg-white/10 dark:bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 p-6 transition hover:shadow-lg hover:shadow-blue-500/20";
+    "bg-white/10 dark:bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 p-4 md:p-6 transition hover:shadow-lg hover:shadow-blue-500/20";
 
   return (
-    <div className={`min-h-screen py-12 px-6 transition-colors ${base}`}>
+    <div className={`min-h-screen py-8 md:py-12 px-4 md:px-6 transition-colors ${base}`}>
+      {/* Back Button */}
+      <div className="absolute top-4 left-4 z-20">
+        <button
+          onClick={() => navigate('/chat')}
+          className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/30 transition-all border border-white/30"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm font-medium">Back to Chat</span>
+        </button>
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 25 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-5xl mx-auto p-10 rounded-3xl shadow-2xl bg-white/5 dark:bg-white/10 backdrop-blur-2xl border border-white/10"
+        className="max-w-5xl mx-auto p-6 md:p-10 rounded-3xl shadow-2xl bg-white/5 dark:bg-white/10 backdrop-blur-2xl border border-white/10 mt-16 md:mt-0"
       >
-        <h2 className="text-4xl font-bold mb-10 flex items-center gap-3">
-          <Settings2 className="text-blue-400" size={32} /> Settings & Preferences
+        <h2 className="text-2xl md:text-4xl font-bold mb-6 md:mb-10 flex items-center gap-3">
+          <Settings2 className="text-blue-400" size={24} /> Settings & Preferences
         </h2>
 
         {/* PROFILE */}
-        <section className={`${card} mb-10`}>
-          <h3 className="text-2xl font-semibold mb-4">Profile</h3>
-          <div className="relative w-full h-48 rounded-xl overflow-hidden mb-6">
+        <section className={`${card} mb-6 md:mb-10`}>
+          <h3 className="text-xl md:text-2xl font-semibold mb-4">Profile</h3>
+          <div className="relative w-full h-32 md:h-48 rounded-xl overflow-hidden mb-4 md:mb-6">
             <img
               src={preview.cover}
               alt="Cover"
               className="object-cover w-full h-full"
             />
             <label className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition cursor-pointer">
-              <Upload size={24} />
+              <Upload size={20} />
               <input
                 type="file"
                 className="hidden"
@@ -201,15 +215,15 @@ const SettingsPanel = ({ currentUser }) => {
             </label>
           </div>
 
-          <div className="flex items-center gap-6 mb-6">
+          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 mb-4 md:mb-6">
             <div className="relative">
               <img
                 src={preview.profile}
                 alt="Profile"
-                className="w-24 h-24 rounded-full border-4 border-blue-400 object-cover shadow-lg"
+                className="w-16 h-16 md:w-24 md:h-24 rounded-full border-4 border-blue-400 object-cover shadow-lg"
               />
               <label className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 rounded-full cursor-pointer transition">
-                <Upload size={20} />
+                <Upload size={16} />
                 <input
                   type="file"
                   className="hidden"
@@ -217,31 +231,31 @@ const SettingsPanel = ({ currentUser }) => {
                 />
               </label>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 w-full">
               <Input
                 value={settings.name}
                 onChange={(e) => handleChange("name", e.target.value)}
                 placeholder="Display Name"
-                className="mb-3 bg-white/10 border-none text-white"
+                className="mb-3 bg-white/10 border-none text-white text-sm md:text-base"
               />
               <Textarea
                 value={settings.bio}
                 onChange={(e) => handleChange("bio", e.target.value)}
                 placeholder="Bio"
-                className="bg-white/10 border-none text-white"
+                className="bg-white/10 border-none text-white text-sm md:text-base min-h-[80px]"
               />
             </div>
           </div>
         </section>
 
         {/* THEME & DISPLAY */}
-        <section className={`${card} mb-10`}>
-          <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Monitor className="text-green-400" /> Display & Theme
+        <section className={`${card} mb-6 md:mb-10`}>
+          <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
+            <Monitor className="text-green-400" size={18} /> Display & Theme
           </h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block mb-1">Theme</label>
+              <label className="block mb-1 text-sm md:text-base">Theme</label>
               <select
                 value={settings.theme}
                 onChange={(e) => {
@@ -251,7 +265,7 @@ const SettingsPanel = ({ currentUser }) => {
                   else if (val === "light") setDarkMode(false);
                   else setDarkMode(systemPrefersDark);
                 }}
-                className="w-full bg-white/10 border-none rounded-lg p-2 text-white"
+                className="w-full bg-white/10 border-none rounded-lg p-2 text-white text-sm md:text-base"
               >
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
@@ -259,11 +273,11 @@ const SettingsPanel = ({ currentUser }) => {
               </select>
             </div>
             <div>
-              <label className="block mb-1">Language</label>
+              <label className="block mb-1 text-sm md:text-base">Language</label>
               <select
                 value={settings.language}
                 onChange={(e) => handleChange("language", e.target.value)}
-                className="w-full bg-white/10 border-none rounded-lg p-2 text-white"
+                className="w-full bg-white/10 border-none rounded-lg p-2 text-white text-sm md:text-base"
               >
                 <option value="English">English</option>
                 <option value="Hindi">Hindi</option>
@@ -272,8 +286,8 @@ const SettingsPanel = ({ currentUser }) => {
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Bot size={18} /> AI Chat Theme Personalization
+            <span className="flex items-center gap-2 text-sm md:text-base">
+              <Bot size={16} /> AI Chat Theme Personalization
             </span>
             <Switch
               checked={settings.aiThemeEnabled}
@@ -283,17 +297,17 @@ const SettingsPanel = ({ currentUser }) => {
         </section>
 
         {/* STATUS & ACTIVITY */}
-        <section className={`${card} mb-10`}>
-          <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Clock className="text-cyan-400" /> Status & Activity
+        <section className={`${card} mb-6 md:mb-10`}>
+          <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
+            <Clock className="text-cyan-400" size={18} /> Status & Activity
           </h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block mb-1">Status</label>
+              <label className="block mb-1 text-sm md:text-base">Status</label>
               <select
                 value={settings.status}
                 onChange={(e) => handleChange("status", e.target.value)}
-                className="w-full bg-white/10 border-none rounded-lg p-2 text-white"
+                className="w-full bg-white/10 border-none rounded-lg p-2 text-white text-sm md:text-base"
               >
                 <option value="online">Online</option>
                 <option value="away">Away</option>
@@ -302,7 +316,7 @@ const SettingsPanel = ({ currentUser }) => {
               </select>
             </div>
             <div className="flex items-center justify-between mt-4">
-              <span>Auto Status (based on activity)</span>
+              <span className="text-sm md:text-base">Auto Status (based on activity)</span>
               <Switch
                 checked={settings.autoStatus}
                 onCheckedChange={(val) => handleChange("autoStatus", val)}
@@ -312,19 +326,19 @@ const SettingsPanel = ({ currentUser }) => {
         </section>
 
         {/* SECURITY */}
-        <section className={`${card} mb-10`}>
-          <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Lock className="text-yellow-400" /> Security
+        <section className={`${card} mb-6 md:mb-10`}>
+          <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
+            <Lock className="text-yellow-400" size={18} /> Security
           </h3>
           <div className="flex items-center justify-between mb-3">
-            <span>Two-Factor Authentication</span>
+            <span className="text-sm md:text-base">Two-Factor Authentication</span>
             <Switch
               checked={settings.isTwoFactorEnabled}
               onCheckedChange={(val) => handleChange("isTwoFactorEnabled", val)}
             />
           </div>
           <Button
-            className="bg-white/10 mt-3"
+            className="bg-white/10 mt-3 w-full text-sm md:text-base"
             onClick={() => alert("Change Password flow")}
           >
             Change Password
@@ -332,20 +346,20 @@ const SettingsPanel = ({ currentUser }) => {
         </section>
 
         {/* DATA & PRIVACY */}
-        <section className={`${card} mb-10`}>
-          <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Database className="text-purple-400" /> Data & Privacy
+        <section className={`${card} mb-6 md:mb-10`}>
+          <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
+            <Database className="text-purple-400" size={18} /> Data & Privacy
           </h3>
           <Button
             variant="outline"
-            className="bg-white/10 w-full mb-3"
+            className="bg-white/10 w-full mb-3 text-sm md:text-base"
             onClick={() => alert("Export data")}
           >
             Download Chat Data
           </Button>
           <Button
             variant="outline"
-            className="bg-white/10 w-full"
+            className="bg-white/10 w-full text-sm md:text-base"
             onClick={() => alert("View login history")}
           >
             View Login History
@@ -353,13 +367,13 @@ const SettingsPanel = ({ currentUser }) => {
         </section>
 
         {/* DANGER */}
-        <section className="bg-red-600/10 p-6 rounded-2xl border border-red-400/30 mb-10">
-          <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-red-400">
-            <Trash2 /> Danger Zone
+        <section className="bg-red-600/10 p-4 md:p-6 rounded-2xl border border-red-400/30 mb-6 md:mb-10">
+          <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2 text-red-400">
+            <Trash2 size={18} /> Danger Zone
           </h3>
           <Button
             variant="destructive"
-            className="w-full bg-red-600 hover:bg-red-700"
+            className="w-full bg-red-600 hover:bg-red-700 text-sm md:text-base"
             onClick={() => alert("Delete account flow")}
           >
             Delete Account
@@ -370,7 +384,7 @@ const SettingsPanel = ({ currentUser }) => {
         <Button
           onClick={handleSave}
           disabled={saving}
-          className="w-full py-3 text-lg bg-blue-500 hover:bg-blue-600"
+          className="w-full py-3 text-base md:text-lg bg-blue-500 hover:bg-blue-600"
         >
           {saving ? "Saving..." : "Save Changes"}
         </Button>
