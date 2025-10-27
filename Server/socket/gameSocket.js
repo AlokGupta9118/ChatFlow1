@@ -5,6 +5,104 @@ export default function gameSocket(io) {
   // 🔥 NEW: Store chat messages for each room
   const chatMessages = new Map(); // roomId -> messages array
 
+  // ✅ NEW: Helper function to sync game state to all players
+  function syncGameState(room) {
+    const gameState = {
+      currentPlayer: room.currentPlayer,
+      currentChoice: room.currentChoice,
+      currentPrompt: room.currentPrompt,
+      proofUploaded: room.proofUploaded,
+      scores: room.scores,
+      playerStats: room.playerStats,
+      playerLevels: room.playerLevels,
+      playerStreaks: room.playerStreaks,
+      roundNumber: room.roundNumber,
+      proofs: room.proofs
+    };
+
+    io.to(room.roomId).emit("game-state-sync", gameState);
+  }
+
+  // ✅ Helper function to get random scenario - NEW
+  function getRandomScenario(room) {
+    let availableScenarios = room.scenarios
+      .map((_, i) => i)
+      .filter((i) => !room.usedScenarios.includes(i));
+
+    if (availableScenarios.length === 0) {
+      room.usedScenarios = [];
+      availableScenarios = room.scenarios.map((_, i) => i);
+    }
+
+    const randomIndex = availableScenarios[Math.floor(Math.random() * availableScenarios.length)];
+    room.usedScenarios.push(randomIndex);
+    return room.scenarios[randomIndex];
+  }
+
+  // ✅ Helper function to calculate round results - NEW
+  function calculateRoundResults(room) {
+    const voteCounts = {};
+    
+    // Count votes for each player
+    Object.values(room.votes).forEach(votedFor => {
+      voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
+    });
+
+    // Find player with most votes
+    let maxVotes = 0;
+    let winners = [];
+    
+    Object.entries(voteCounts).forEach(([player, votes]) => {
+      if (votes > maxVotes) {
+        maxVotes = votes;
+        winners = [player];
+      } else if (votes === maxVotes) {
+        winners.push(player);
+      }
+    });
+
+    // Award points to winners
+    winners.forEach(winner => {
+      room.scores[winner] = (room.scores[winner] || 0) + 10;
+      room.playerStats[winner].roundsWon++;
+    });
+
+    // Award participation points
+    Object.keys(room.votes).forEach(voter => {
+      room.scores[voter] = (room.scores[voter] || 0) + 1;
+    });
+
+    const roundResults = {
+      votes: room.votes,
+      voteCounts: voteCounts,
+      winners: winners,
+      scores: room.scores,
+      playerStats: room.playerStats,
+      scenario: room.currentScenario
+    };
+
+    io.to(room.roomId).emit("mostlikely-round-results", roundResults);
+    console.log(`🏆 Round ${room.currentRound} results: ${winners.join(', ')} won with ${maxVotes} votes`);
+  }
+
+  // ✅ Helper function to calculate final results - NEW
+  function calculateFinalResults(room) {
+    const playersWithScores = room.players.map(player => ({
+      name: player.name,
+      score: room.scores[player.name] || 0,
+      stats: room.playerStats[player.name]
+    }));
+
+    // Sort by score descending
+    playersWithScores.sort((a, b) => b.score - a.score);
+
+    return {
+      rankings: playersWithScores,
+      topPlayer: playersWithScores[0],
+      totalRounds: room.totalRounds
+    };
+  }
+
   io.on("connection", (socket) => {
     console.log("🎮 Game socket connected:", socket.id);
 
@@ -90,6 +188,107 @@ export default function gameSocket(io) {
 
       console.log(`🔄 Next round started broadcast in room ${roomId}`);
       io.to(roomId).emit("next-round-started");
+    });
+
+    // ✅ NEW: Game state synchronization for rejoining players
+    socket.on("request-game-state", ({ roomId }) => {
+      const room = rooms[roomId];
+      if (!room) return;
+
+      const gameState = {
+        currentPlayer: room.currentPlayer,
+        currentChoice: room.currentChoice,
+        currentPrompt: room.currentPrompt,
+        proofUploaded: room.proofUploaded,
+        scores: room.scores,
+        playerStats: room.playerStats,
+        playerLevels: room.playerLevels,
+        playerStreaks: room.playerStreaks,
+        roundNumber: room.roundNumber,
+        proofs: room.proofs,
+        gameType: room.gameType
+      };
+
+      socket.emit("game-state-sync", gameState);
+      console.log(`🔄 Sent game state sync to ${socket.id} for room ${roomId}`);
+    });
+
+    // ✅ NEW: Choose option/prompt handler
+    socket.on("choose-option", ({ roomId, choice, type }) => {
+      const room = rooms[roomId];
+      if (!room || room.gameType !== "truth-or-dare") return;
+
+      const player = room.players.find(p => p.socketId === socket.id);
+      if (!player || player.name !== room.currentPlayer?.name) return;
+
+      console.log(`✅ ${player.name} chose option: ${choice} (${type}) in ${roomId}`);
+      
+      // Update player stats based on prompt type completion
+      if (room.playerStats[player.name]) {
+        if (type === "truth") {
+          room.playerStats[player.name].truthsCompleted++;
+        } else if (type === "dare") {
+          room.playerStats[player.name].daresCompleted++;
+        }
+      }
+
+      // Award points for completing the prompt
+      if (!room.scores[player.name]) room.scores[player.name] = 0;
+      room.scores[player.name] += 25;
+
+      // Emit updates
+      io.to(roomId).emit("scores-update", room.scores);
+      io.to(roomId).emit("player-stats-update", room.playerStats);
+      io.to(roomId).emit("prompt-completed", { 
+        player: player.name, 
+        prompt: { type, text: choice },
+        points: 25
+      });
+
+      console.log(`🎯 ${player.name} completed ${type} for 25 points`);
+    });
+
+    // ✅ NEW: Reset proof status (for when user removes proof)
+    socket.on("reset-proof-status", ({ roomId, player }) => {
+      const room = rooms[roomId];
+      if (!room || room.gameType !== "truth-or-dare") return;
+
+      room.proofUploaded = false;
+      delete room.proofs[player];
+      
+      io.to(roomId).emit("proof-status-update", { 
+        proofUploaded: false,
+        player 
+      });
+      
+      console.log(`🔄 ${player} reset proof status in ${roomId}`);
+    });
+
+    // ✅ NEW: Enhanced proof ready notification with type support
+    socket.on("notify-proof-ready", ({ roomId, player, type = "dare" }) => {
+      const room = rooms[roomId];
+      if (!room || room.gameType !== "truth-or-dare") return;
+
+      console.log(`📸 ${player} completed ${type} in ${roomId}`);
+      
+      // Mark as proof uploaded
+      room.proofUploaded = true;
+      
+      // Notify host specifically with type information
+      const host = room.players.find(p => p.isHost);
+      if (host) {
+        io.to(host.socketId).emit("proof-ready-for-review", { 
+          player, 
+          type 
+        });
+      }
+
+      // Also notify all players about completion status
+      io.to(roomId).emit("proof-status-update", { 
+        proofUploaded: true,
+        player,
+        type
+      });
     });
 
     // ✅ Create a new room - ENHANCED with chat
@@ -368,28 +567,23 @@ export default function gameSocket(io) {
         candidatePlayers = room.players.filter(p => p.name !== previousPlayer.name);
       }
 
-      const spinCount = 15 + Math.floor(Math.random() * 10);
-      let spinIndex = 0;
+      // Reset game state for new round
+      room.currentPrompt = null;
+      room.currentChoice = null;
+      room.proofUploaded = false;
 
-      // FIXED: Remove the spinning animation from server side
-      // Instead, let the client handle the visual spinning
-      // We'll just select the player after a delay to simulate spinning time
-      
       // Wait for 3 seconds to simulate spinning animation on clients
       await new Promise(res => setTimeout(res, 3000));
 
       const selectedPlayer = candidatePlayers[Math.floor(Math.random() * candidatePlayers.length)];
       room.currentPlayer = selectedPlayer;
-      room.currentChoice = null;
-      room.proofUploaded = false;
-      room.proofs[selectedPlayer.name] = false;
       
       // Update player stats
       if (room.playerStats[selectedPlayer.name]) {
         room.playerStats[selectedPlayer.name].timesSelected++;
       }
 
-      // FIXED: Emit player selection to ALL players
+      // Emit player selection to ALL players
       io.to(roomId).emit("player-selected", selectedPlayer);
       io.to(roomId).emit("player-stats-update", room.playerStats);
 
@@ -399,13 +593,15 @@ export default function gameSocket(io) {
       console.log(`🎯 Selected player: ${selectedPlayer.name} in room ${roomId}`);
     });
 
-    // ✅ Selected player submits their choice (Truth or Dare only)
+    // ✅ ENHANCED: Submit truth/dare choice - better state management
     socket.on("submit-truth-dare", ({ roomId, choice }) => {
       const room = rooms[roomId];
       if (!room || !room.currentPlayer || room.gameType !== "truth-or-dare") return;
       if (!["Truth", "Dare"].includes(choice)) return;
 
       room.currentChoice = choice;
+      
+      // Notify all players about the choice
       io.to(roomId).emit("truth-dare-chosen", {
         player: room.currentPlayer.name,
         choice,
@@ -423,6 +619,7 @@ export default function gameSocket(io) {
       }
       room.playerStreaks[room.currentPlayer.name] += 1;
       
+      // Emit updates
       io.to(roomId).emit("scores-update", room.scores);
       io.to(roomId).emit("player-streaks-update", room.playerStreaks);
       
@@ -438,7 +635,7 @@ export default function gameSocket(io) {
       console.log(`💬 New ${type} prompt in ${roomId}: ${prompt}`);
     });
 
-    // ✅ Player uploads proof (Truth or Dare only)
+    // ✅ ENHANCED: Proof uploaded handler - ensure it works for both truth and dare
     socket.on("proof-uploaded", ({ roomId, player, proofKey }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -447,38 +644,40 @@ export default function gameSocket(io) {
       room.proofs[player] = proofKey;
       room.proofUploaded = true;
       
+      // Determine type based on current choice
+      const type = room.currentChoice === "Truth" ? "truth" : "dare";
+      
       // Notify all players that proof has been uploaded
       io.to(roomId).emit("proof-uploaded-notification", { 
         player, 
         proofKey 
       });
       
-      // Notify host specifically
-      io.to(roomId).emit("proof-status-update", { 
-        proofUploaded: true,
-        player 
-      });
-      
-      console.log(`📸 ${player} uploaded proof in ${roomId}`);
-    });
-
-    // ✅ Notify host that proof is ready (Truth or Dare only)
-    socket.on("notify-proof-ready", ({ roomId, player }) => {
-      const room = rooms[roomId];
-      if (!room || room.gameType !== "truth-or-dare") return;
-
+      // Notify host specifically with type information
       const host = room.players.find(p => p.isHost);
       if (host) {
-        io.to(host.socketId).emit("proof-ready-for-review", { player });
+        io.to(host.socketId).emit("proof-ready-for-review", { 
+          player,
+          type
+        });
       }
+      
+      // Update proof status for all players
+      io.to(roomId).emit("proof-status-update", { 
+        proofUploaded: true,
+        player,
+        type
+      });
+      
+      console.log(`📸 ${player} uploaded ${type} proof in ${roomId}`);
     });
 
-    // ✅ Request proof data from proof owner (Truth or Dare only)
+    // ✅ ENHANCED: Request proof data from proof owner (Truth or Dare only)
     socket.on("request-proof-data", ({ roomId, playerName, proofKey }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
 
-      console.log(`🔍 ${socket.id} requesting proof from ${playerName}`);
+      console.log(`🔍 ${socket.id} requesting proof from ${playerName} with key ${proofKey}`);
       
       const proofOwner = room.players.find(p => p.name === playerName);
       if (proofOwner && proofOwner.socketId) {
@@ -499,7 +698,7 @@ export default function gameSocket(io) {
       io.to(requestor).emit("proof-data-received", { proofData });
     });
 
-    // ✅ NEW: Truth completion handler
+    // ✅ ENHANCED: Truth completion handler - make sure it properly notifies everyone
     socket.on("truth-completed", ({ roomId, player, completionText }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -509,17 +708,42 @@ export default function gameSocket(io) {
       // Mark as proof uploaded for truth completion
       room.proofUploaded = true;
       
-      // Notify all players
+      // Update player stats
+      if (room.playerStats[player]) {
+        room.playerStats[player].truthsCompleted++;
+      }
+
+      // Award points for truth completion
+      if (!room.scores[player]) room.scores[player] = 0;
+      room.scores[player] += 25;
+
+      // Notify ALL players about the truth completion
       io.to(roomId).emit("truth-completed", {
         player,
         completionText
       });
-      
-      // Notify host
+
+      // Also emit prompt completed for scoring
+      io.to(roomId).emit("prompt-completed", { 
+        player, 
+        prompt: { type: "truth", text: "Truth completed" },
+        points: 25
+      });
+
+      // Update scores and stats
+      io.to(roomId).emit("scores-update", room.scores);
+      io.to(roomId).emit("player-stats-update", room.playerStats);
+
+      // Notify host that proof is ready for review
       const host = room.players.find(p => p.isHost);
       if (host) {
-        io.to(host.socketId).emit("proof-ready-for-review", { player });
+        io.to(host.socketId).emit("proof-ready-for-review", { 
+          player,
+          type: "truth"
+        });
       }
+
+      console.log(`📝 ${player} truth completion recorded with 25 points`);
     });
 
     // ✅ Prompt completed (Truth or Dare only)
@@ -892,86 +1116,6 @@ export default function gameSocket(io) {
         console.log(`🔄 Round ${room.currentRound} started in ${roomId}`);
       }
     });
-
-    // ✅ Helper function to get random scenario - NEW
-    function getRandomScenario(room) {
-      let availableScenarios = room.scenarios
-        .map((_, i) => i)
-        .filter((i) => !room.usedScenarios.includes(i));
-
-      if (availableScenarios.length === 0) {
-        room.usedScenarios = [];
-        availableScenarios = room.scenarios.map((_, i) => i);
-      }
-
-      const randomIndex = availableScenarios[Math.floor(Math.random() * availableScenarios.length)];
-      room.usedScenarios.push(randomIndex);
-      return room.scenarios[randomIndex];
-    }
-
-    // ✅ Helper function to calculate round results - NEW
-    function calculateRoundResults(room) {
-      const voteCounts = {};
-      
-      // Count votes for each player
-      Object.values(room.votes).forEach(votedFor => {
-        voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
-      });
-
-      // Find player with most votes
-      let maxVotes = 0;
-      let winners = [];
-      
-      Object.entries(voteCounts).forEach(([player, votes]) => {
-        if (votes > maxVotes) {
-          maxVotes = votes;
-          winners = [player];
-        } else if (votes === maxVotes) {
-          winners.push(player);
-        }
-      });
-
-      // Award points to winners
-      winners.forEach(winner => {
-        room.scores[winner] = (room.scores[winner] || 0) + 10;
-        room.playerStats[winner].roundsWon++;
-      });
-
-      // Award participation points
-      Object.keys(room.votes).forEach(voter => {
-        room.scores[voter] = (room.scores[voter] || 0) + 1;
-      });
-
-      const roundResults = {
-        votes: room.votes,
-        voteCounts: voteCounts,
-        winners: winners,
-        scores: room.scores,
-        playerStats: room.playerStats,
-        scenario: room.currentScenario
-      };
-
-      io.to(room.roomId).emit("mostlikely-round-results", roundResults);
-      console.log(`🏆 Round ${room.currentRound} results: ${winners.join(', ')} won with ${maxVotes} votes`);
-    }
-
-    // ✅ Helper function to calculate final results - NEW
-    function calculateFinalResults(room) {
-      const playersWithScores = room.players.map(player => ({
-        name: player.name,
-        score: room.scores[player.name] || 0,
-        stats: room.playerStats[player.name]
-      }));
-
-      // Sort by score descending
-      playersWithScores.sort((a, b) => b.score - a.score);
-
-      return {
-        rankings: playersWithScores,
-        topPlayer: playersWithScores[0],
-        totalRounds: room.totalRounds
-      };
-    }
 
     // ✅ Disconnect cleanup - ENHANCED with chat cleanup
     socket.on("disconnect", () => {

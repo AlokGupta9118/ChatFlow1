@@ -1,1001 +1,1600 @@
-// components/CompatibilityGame.jsx
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useRef } from "react";
+import { io } from "socket.io-client";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { 
-  Users, 
-  Clock, 
-  Trophy, 
-  Heart, 
-  MessageCircle, 
-  Send,
-  Zap,
-  CheckCircle,
-  Star,
-  TrendingUp
-} from 'lucide-react';
+  Heart, Users, LinkIcon, Crown, Sparkles, Timer, Trophy, 
+  Gamepad2, Camera, Volume2, VolumeX, Settings, Zap, Award,
+  Star, Target, TrendingUp, Clock, CheckCircle, PartyPopper,
+  MessageCircle, ThumbsUp, Flame, Medal, Users2, Brain,
+  Smile, Frown, Meh, Laugh, HeartCrack, Loader2, Share2,
+  Download, Image, Copy, Check, MapPin, Calendar, Music,
+  Coffee, Film, BookOpen, Utensils, Mountain, Palette,
+  Zap as Lightning, Moon, Sun, Wifi, WifiOff,
+  BarChart3, GitBranch, Eye, EyeOff, RotateCcw
+} from "lucide-react";
+import html2canvas from "html2canvas";
 
-const CompatibilityGame = ({ socket, roomId, player, onLeaveGame }) => {
-  const [gameState, setGameState] = useState({
-    players: [],
-    playerProgress: {},
-    currentQuestion: 0,
-    gameStarted: false,
-    answers: {},
-    showResults: false,
-    waitingFor: [],
-    answeredCount: 0,
-    totalPlayers: 0
+const socket = io(import.meta.env.VITE_API_URL, {
+  transports: ['websocket', 'polling'],
+  timeout: 10000
+});
+
+// Enhanced questions with categories, weights, and personality insights
+const questions = [
+  {
+    id: 1,
+    question: "What's your ideal weekend?",
+    options: ["Adventure outdoors", "Cozy at home", "Party with friends", "Exploring new places"],
+    category: "Lifestyle",
+    weight: 1.2,
+    insights: {
+      "Adventure outdoors": "Active, nature-loving, spontaneous",
+      "Cozy at home": "Homebody, introverted, comfort-seeking",
+      "Party with friends": "Social, extroverted, fun-loving",
+      "Exploring new places": "Curious, adventurous, open-minded"
+    }
+  },
+  {
+    id: 2,
+    question: "Pick your favorite food type:",
+    options: ["Italian", "Asian", "Fast food", "Healthy & organic"],
+    category: "Taste",
+    weight: 1.0,
+    insights: {
+      "Italian": "Comfort-seeking, traditional, romantic",
+      "Asian": "Adventurous, diverse tastes, experimental",
+      "Fast food": "Practical, busy lifestyle, casual",
+      "Healthy & organic": "Health-conscious, disciplined, mindful"
+    }
+  },
+  {
+    id: 3,
+    question: "Your dream vacation is:",
+    options: ["Beach paradise", "Mountain retreat", "City exploration", "Cultural experience"],
+    category: "Adventure",
+    weight: 1.3,
+    insights: {
+      "Beach paradise": "Relaxed, sun-loving, peaceful",
+      "Mountain retreat": "Reflective, nature-loving, adventurous",
+      "City exploration": "Energetic, cultural, social",
+      "Cultural experience": "Learning-oriented, curious, historical"
+    }
+  },
+  {
+    id: 4,
+    question: "How do you handle stress?",
+    options: ["Exercise", "Talk to friends", "Watch movies", "Sleep it off"],
+    category: "Emotional",
+    weight: 1.4,
+    insights: {
+      "Exercise": "Active coping, disciplined, physical",
+      "Talk to friends": "Social support, communicative, emotional",
+      "Watch movies": "Escapist, creative, solitary",
+      "Sleep it off": "Restorative, patient, introspective"
+    }
+  },
+  {
+    id: 5,
+    question: "Your favorite type of music:",
+    options: ["Pop", "Rock", "Hip-Hop", "Electronic"],
+    category: "Entertainment",
+    weight: 0.8,
+    insights: {
+      "Pop": "Mainstream, upbeat, social",
+      "Rock": "Energetic, rebellious, emotional",
+      "Hip-Hop": "Urban, confident, rhythmic",
+      "Electronic": "Modern, dance-oriented, experimental"
+    }
+  }
+];
+
+// Advanced compatibility parameters
+const advancedCompatibilityFactors = {
+  communicationStyles: ["Direct", "Diplomatic", "Emotional", "Analytical"],
+  loveLanguages: ["Words of Affirmation", "Quality Time", "Gifts", "Acts of Service", "Physical Touch"],
+  conflictResolution: ["Confront immediately", "Take time to cool off", "Seek compromise", "Avoid conflict"],
+  futureGoals: ["Career-focused", "Family-oriented", "Travel and adventure", "Stability and security"],
+  energyLevels: ["Morning Person", "Night Owl", "All Day Energy", "Balanced"],
+  socialPreferences: ["Large Groups", "Small Circles", "One-on-One", "Mixed"]
+};
+
+export default function AdvancedCompatibilityGame() {
+  // Core states
+  const [roomId, setRoomId] = useState("");
+  const [playerName, setPlayerName] = useState("");
+  const [isHost, setIsHost] = useState(false);
+  const [joined, setJoined] = useState(false);
+  const [players, setPlayers] = useState<any[]>([]);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Game states
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [currentAnswer, setCurrentAnswer] = useState("");
+  const [answers, setAnswers] = useState<any[]>([]);
+  const [bothAnswers, setBothAnswers] = useState<any>({});
+  const [showResults, setShowResults] = useState(false);
+  const [playerProgress, setPlayerProgress] = useState<{[key: string]: number}>({});
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [playerReactions, setPlayerReactions] = useState<{[key: string]: string}>({});
+  const [connectionStatus, setConnectionStatus] = useState("connected");
+
+  // Advanced states
+  const [advancedAnswers, setAdvancedAnswers] = useState({
+    communicationStyle: "",
+    loveLanguage: "",
+    conflictStyle: "",
+    futureGoal: "",
+    energyLevel: "",
+    socialPreference: "",
+    personalityTraits: [] as string[]
   });
 
-  const [currentAnswers, setCurrentAnswers] = useState([]);
-  const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const [timer, setTimer] = useState(30);
-  const [chatMessages, setChatMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingUsers, setTypingUsers] = useState([]);
-  const [reactions, setReactions] = useState([]);
-  const [compatibilityResults, setCompatibilityResults] = useState(null);
-  const [gamePhase, setGamePhase] = useState('waiting'); // waiting, playing, results
+  // UI/UX states
+  const [darkMode, setDarkMode] = useState(true);
+  const [animationsEnabled, setAnimationsEnabled] = useState(true);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState("basic");
+  const [typingIndicator, setTypingIndicator] = useState(false);
 
-  const timerRef = useRef(null);
-  const chatContainerRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
+  // Screenshot sharing states
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
-  // Enhanced compatibility questions with categories
-  const compatibilityQuestions = [
-    {
-      id: 1,
-      question: "What's your ideal weekend?",
-      category: "Lifestyle",
-      options: [
-        "Adventure and outdoor activities",
-        "Relaxing at home with movies",
-        "Socializing with friends",
-        "Trying new restaurants and cafes"
-      ]
-    },
-    {
-      id: 2,
-      question: "How do you handle conflict?",
-      category: "Communication",
-      options: [
-        "Address it immediately and directly",
-        "Take time to cool off first",
-        "Avoid confrontation if possible",
-        "Seek mediation from others"
-      ]
-    },
-    {
-      id: 3,
-      question: "What's most important in a relationship?",
-      category: "Values",
-      options: [
-        "Trust and honesty",
-        "Communication and understanding",
-        "Shared interests and hobbies",
-        "Emotional support and care"
-      ]
-    },
-    {
-      id: 4,
-      question: "How do you prefer to communicate?",
-      category: "Communication",
-      options: [
-        "Face-to-face conversations",
-        "Text messages throughout the day",
-        "Phone or video calls",
-        "Mixed - depends on the situation"
-      ]
-    },
-    {
-      id: 5,
-      question: "What's your love language?",
-      category: "Relationships",
-      options: [
-        "Words of affirmation",
-        "Quality time together",
-        "Receiving gifts",
-        "Acts of service"
-      ]
-    },
-    {
-      id: 6,
-      question: "How do you make important decisions?",
-      category: "Personality",
-      options: [
-        "Follow my intuition and feelings",
-        "Analyze all the facts logically",
-        "Seek advice from trusted people",
-        "Consider pros and cons carefully"
-      ]
-    },
-    {
-      id: 7,
-      question: "What's your social energy level?",
-      category: "Lifestyle",
-      options: [
-        "Very social - love being around people",
-        "Moderate - need balance of social and alone time",
-        "Introverted - prefer small gatherings",
-        "It varies depending on my mood"
-      ]
-    },
-    {
-      id: 8,
-      question: "How do you handle stress?",
-      category: "Personality",
-      options: [
-        "Exercise and physical activity",
-        "Talk to friends or family",
-        "Meditation or alone time",
-        "Distract myself with hobbies"
-      ]
-    },
-    {
-      id: 9,
-      question: "What's your approach to finances?",
-      category: "Values",
-      options: [
-        "Save for the future",
-        "Enjoy life and spend on experiences",
-        "Balance between saving and spending",
-        "Budget carefully for everything"
-      ]
-    },
-    {
-      id: 10,
-      question: "What makes you feel loved?",
-      category: "Relationships",
-      options: [
-        "Hearing 'I love you' regularly",
-        "Unexpected thoughtful gestures",
-        "Quality undivided attention",
-        "Help with daily tasks and responsibilities"
-      ]
-    }
-  ];
+  // Refs
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const roomInputRef = useRef<HTMLInputElement>(null);
+  const submitTimeoutRef = useRef<NodeJS.Timeout>();
+  const screenshotRef = useRef<HTMLDivElement>(null);
 
-  // Socket event handlers
-  useEffect(() => {
-    if (!socket) return;
-
-    // Game state updates
-    socket.on('game-state-update', (state) => {
-      setGameState(prev => ({ ...prev, ...state }));
-    });
-
-    socket.on('update-players', (players) => {
-      setGameState(prev => ({ ...prev, players }));
-    });
-
-    socket.on('game-started', () => {
-      setGameState(prev => ({ ...prev, gameStarted: true }));
-      setGamePhase('playing');
-      startTimer();
-    });
-
-    socket.on('player-progress', ({ player: playerName, progress }) => {
-      setGameState(prev => ({
-        ...prev,
-        playerProgress: {
-          ...prev.playerProgress,
-          [playerName]: progress
-        }
-      }));
-    });
-
-    socket.on('answers-update', ({ answered, total, waitingFor }) => {
-      setGameState(prev => ({
-        ...prev,
-        answeredCount: answered,
-        totalPlayers: total,
-        waitingFor
-      }));
-    });
-
-    socket.on('show-results', (answers) => {
-      setGameState(prev => ({ 
-        ...prev, 
-        answers, 
-        showResults: true 
-      }));
-      setGamePhase('results');
-      calculateCompatibility(answers);
-      clearTimer();
-    });
-
-    // Chat handlers
-    socket.on('chat-history', (messages) => {
-      setChatMessages(messages);
-    });
-
-    socket.on('receive-chat-message', (message) => {
-      setChatMessages(prev => [...prev, message]);
-      scrollToBottom();
-    });
-
-    socket.on('user-typing', ({ userName, isTyping }) => {
-      setTypingUsers(prev => {
-        const filtered = prev.filter(user => user !== userName);
-        return isTyping ? [...filtered, userName] : filtered;
-      });
-    });
-
-    // Reaction handlers
-    socket.on('player-reaction', ({ player: playerName, reaction }) => {
-      const newReaction = {
-        id: Date.now(),
-        player: playerName,
-        reaction,
-        position: {
-          x: Math.random() * 80 + 10,
-          y: Math.random() * 80 + 10
-        }
-      };
-      setReactions(prev => [...prev, newReaction]);
+  // FIXED: Enhanced sound effects with better error handling
+  const playSound = (soundName: string) => {
+    if (!soundEnabled) return;
+    
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
       
-      // Remove reaction after 3 seconds
-      setTimeout(() => {
-        setReactions(prev => prev.filter(r => r.id !== newReaction.id));
-      }, 3000);
-    });
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      const sounds: {[key: string]: {freq: number, type: OscillatorType, duration: number}} = {
+        select: { freq: 523.25, type: 'sine', duration: 0.1 },
+        success: { freq: 659.25, type: 'sine', duration: 0.3 },
+        notification: { freq: 392, type: 'square', duration: 0.2 },
+        victory: { freq: 1046.5, type: 'sine', duration: 0.5 }
+      };
+      
+      const sound = sounds[soundName];
+      if (sound) {
+        oscillator.frequency.setValueAtTime(sound.freq, audioContext.currentTime);
+        oscillator.type = sound.type;
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + sound.duration);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + sound.duration);
+      }
+    } catch (error) {
+      console.log("Web Audio API not supported");
+    }
+  };
 
-    // Time sync
-    socket.on('time-sync', (time) => {
-      setTimer(time);
-    });
+  // FIXED: Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (submitTimeoutRef.current) {
+        clearTimeout(submitTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // FIXED: Timer with proper cleanup
+  useEffect(() => {
+    if (timeLeft === null || !gameStarted || showResults) return;
+    
+    if (timeLeft <= 0) {
+      handleAutoSubmit();
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      setTimeLeft(prev => prev !== null ? prev - 1 : null);
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [timeLeft, gameStarted, showResults]);
+
+  // FIXED: Start timer when question changes
+  useEffect(() => {
+    if (gameStarted && !showResults && currentQuestion < questions.length) {
+      setTimeLeft(25); // Reduced time for faster gameplay
+    }
+  }, [currentQuestion, gameStarted, showResults]);
+
+  const handleAutoSubmit = () => {
+    if (currentAnswer) {
+      submitAnswer();
+    } else {
+      const randomOption = questions[currentQuestion].options[
+        Math.floor(Math.random() * questions[currentQuestion].options.length)
+      ];
+      setCurrentAnswer(randomOption);
+      
+      submitTimeoutRef.current = setTimeout(() => {
+        submitAnswer();
+      }, 800);
+    }
+  };
+
+  // FIXED: Enhanced screenshot capture
+  const captureScreenshot = async () => {
+    if (!screenshotRef.current) return;
+    
+    setIsCapturing(true);
+    setShareSuccess(false);
+    
+    try {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const canvas = await html2canvas(screenshotRef.current, {
+        backgroundColor: darkMode ? '#0f172a' : '#ffffff',
+        scale: 1.2,
+        useCORS: true,
+        logging: false,
+        width: screenshotRef.current.scrollWidth,
+        height: screenshotRef.current.scrollHeight
+      });
+      
+      const imageDataUrl = canvas.toDataURL('image/png', 0.9);
+      setCapturedImage(imageDataUrl);
+      
+      try {
+        if (navigator.clipboard && navigator.clipboard.write) {
+          const blob = await (await fetch(imageDataUrl)).blob();
+          const item = new ClipboardItem({ 'image/png': blob });
+          await navigator.clipboard.write([item]);
+          setShareSuccess(true);
+          setTimeout(() => setShareSuccess(false), 2000);
+        } else {
+          downloadImage(imageDataUrl);
+        }
+      } catch (clipboardError) {
+        downloadImage(imageDataUrl);
+      }
+      
+      setShowShareModal(true);
+    } catch (error) {
+      console.error('Screenshot capture failed:', error);
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  const downloadImage = (dataUrl: string) => {
+    const link = document.createElement('a');
+    link.download = `compatibility-${roomId}-${Date.now()}.png`;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // FIXED: Socket Event Handlers
+  useEffect(() => {
+    const handleRoomCreated = (room: any) => {
+      setRoomId(room.roomId);
+      setIsHost(true);
+      setJoined(true);
+      setPlayers(room.players || []);
+      playSound("success");
+    };
+
+    const handleRoomJoined = (room: any) => {
+      setRoomId(room.roomId);
+      setPlayers(room.players || []);
+      setJoined(true);
+      playSound("success");
+    };
+
+    const handleUpdatePlayers = (players: any[]) => {
+      const newPlayers = players.filter(p => !players.map(prev => prev.name).includes(p.name));
+      if (newPlayers.length > 0) {
+        playSound("notification");
+      }
+      setPlayers(players);
+    };
+
+    const handlePlayerProgress = (data: {player: string, progress: number}) => {
+      setPlayerProgress(prev => ({
+        ...prev,
+        [data.player]: data.progress
+      }));
+    };
+
+    const handleGameStarted = () => {
+      setGameStarted(true);
+      setCurrentQuestion(0);
+      setAnswers([]);
+      setCurrentAnswer("");
+      setAdvancedAnswers({
+        communicationStyle: "",
+        loveLanguage: "",
+        conflictStyle: "",
+        futureGoal: "",
+        energyLevel: "",
+        socialPreference: "",
+        personalityTraits: []
+      });
+      playSound("success");
+    };
+
+    const handleShowResults = (data: any) => {
+      setBothAnswers(data);
+      setShowResults(true);
+      setIsSubmitting(false);
+      playSound("victory");
+      triggerConfetti();
+    };
+
+    const handlePlayerReaction = (data: {player: string, reaction: string}) => {
+      setPlayerReactions(prev => ({
+        ...prev,
+        [data.player]: data.reaction
+      }));
+      
+      setTimeout(() => {
+        setPlayerReactions(prev => {
+          const newReactions = {...prev};
+          delete newReactions[data.player];
+          return newReactions;
+        });
+      }, 3000);
+    };
+
+    const handleConnectionError = () => {
+      setConnectionStatus("disconnected");
+    };
+
+    const handleReconnect = () => {
+      setConnectionStatus("connected");
+    };
+
+    // Register event listeners
+    socket.on("room-created", handleRoomCreated);
+    socket.on("room-joined", handleRoomJoined);
+    socket.on("update-players", handleUpdatePlayers);
+    socket.on("player-progress", handlePlayerProgress);
+    socket.on("game-started", handleGameStarted);
+    socket.on("show-results", handleShowResults);
+    socket.on("player-reaction", handlePlayerReaction);
+    socket.on("connect_error", handleConnectionError);
+    socket.on("reconnect", handleReconnect);
 
     return () => {
-      socket.off('game-state-update');
-      socket.off('update-players');
-      socket.off('game-started');
-      socket.off('player-progress');
-      socket.off('answers-update');
-      socket.off('show-results');
-      socket.off('chat-history');
-      socket.off('receive-chat-message');
-      socket.off('user-typing');
-      socket.off('player-reaction');
-      socket.off('time-sync');
-      clearTimer();
+      socket.off("room-created", handleRoomCreated);
+      socket.off("room-joined", handleRoomJoined);
+      socket.off("update-players", handleUpdatePlayers);
+      socket.off("player-progress", handlePlayerProgress);
+      socket.off("game-started", handleGameStarted);
+      socket.off("show-results", handleShowResults);
+      socket.off("player-reaction", handlePlayerReaction);
+      socket.off("connect_error", handleConnectionError);
+      socket.off("reconnect", handleReconnect);
     };
-  }, [socket]);
+  }, []);
 
-  // Timer management
-  const startTimer = () => {
-    clearTimer();
-    timerRef.current = setInterval(() => {
-      setTimer(prev => {
-        if (prev <= 1) {
-          clearTimer();
-          handleTimeUp();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const clearTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+  // FIXED: Room creation with better validation
+  const createRoom = () => {
+    const trimmedName = playerName.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      alert("Please enter a valid name (at least 2 characters)");
+      nameInputRef.current?.focus();
+      return;
     }
+    
+    socket.emit("create-room", { 
+      player: { name: trimmedName },
+      gameType: "advanced-compatibility"
+    });
   };
 
-  const handleTimeUp = () => {
-    if (selectedAnswer) {
-      submitAnswers();
+  // FIXED: Room joining with better validation
+  const joinRoom = () => {
+    const trimmedName = playerName.trim();
+    const trimmedRoomId = roomId.trim();
+    
+    if (!trimmedName || trimmedName.length < 2) {
+      alert("Please enter a valid name (at least 2 characters)");
+      nameInputRef.current?.focus();
+      return;
     }
+    if (!trimmedRoomId) {
+      alert("Please enter a room code");
+      roomInputRef.current?.focus();
+      return;
+    }
+    
+    socket.emit("join-room", { 
+      roomId: trimmedRoomId, 
+      player: { name: trimmedName } 
+    });
   };
 
-  // Game actions
   const startGame = () => {
-    socket.emit('start-game', { roomId });
+    if (players.length < 2) {
+      alert("Need at least 2 players to start");
+      return;
+    }
+    socket.emit("start-game", { roomId });
   };
 
-  const submitAnswers = () => {
-    if (!selectedAnswer) return;
+  // FIXED: Submit answer with proper state management
+  const submitAnswer = () => {
+    if (!currentAnswer || isSubmitting) return;
 
-    const answers = compatibilityQuestions.map((q, index) => ({
-      questionId: q.id,
-      question: q.question,
-      category: q.category,
-      answer: index === gameState.currentQuestion ? selectedAnswer : null
-    }));
+    setIsSubmitting(true);
+    playSound("select");
 
-    socket.emit('submit-answers', {
-      roomId,
-      player,
-      answers
+    const newAnswers = [...answers, { 
+      question: questions[currentQuestion].question,
+      answer: currentAnswer,
+      category: questions[currentQuestion].category,
+      weight: questions[currentQuestion].weight,
+      questionId: questions[currentQuestion].id,
+      personalityInsight: questions[currentQuestion].insights[currentAnswer]
+    }];
+    
+    setAnswers(newAnswers);
+
+    const progress = Math.round(((currentQuestion + 1) / questions.length) * 100);
+    socket.emit("player-progress", { roomId, progress });
+
+    setTimeout(() => {
+      if (currentQuestion < questions.length - 1) {
+        setCurrentQuestion(prev => prev + 1);
+        setCurrentAnswer("");
+        setIsSubmitting(false);
+      } else {
+        socket.emit("submit-answers", { 
+          roomId, 
+          player: { name: playerName }, 
+          answers: newAnswers,
+          advancedAnswers
+        });
+      }
+    }, 400);
+  };
+
+  const sendReaction = (reaction: string) => {
+    socket.emit("player-reaction", { roomId, reaction });
+  };
+
+  const triggerConfetti = () => {
+    if (!animationsEnabled) return;
+    
+    for (let i = 0; i < 75; i++) {
+      setTimeout(() => {
+        const confetti = document.createElement('div');
+        confetti.style.position = 'fixed';
+        confetti.style.width = '12px';
+        confetti.style.height = '12px';
+        confetti.style.background = `hsl(${Math.random() * 360}, 100%, 60%)`;
+        confetti.style.borderRadius = '50%';
+        confetti.style.left = `${Math.random() * 100}%`;
+        confetti.style.top = '-20px';
+        confetti.style.zIndex = '9999';
+        confetti.style.pointerEvents = 'none';
+        confetti.style.animation = `confetti-fall ${1.5 + Math.random() * 2}s ease-out forwards`;
+        
+        document.body.appendChild(confetti);
+        
+        setTimeout(() => {
+          if (document.body.contains(confetti)) {
+            document.body.removeChild(confetti);
+          }
+        }, 4000);
+      }, i * 75);
+    }
+  };
+
+  // NEW: Advanced compatibility calculation
+  const calculateCompatibility = () => {
+    const allPlayers = Object.keys(bothAnswers);
+    if (allPlayers.length < 2) return { score: 0, breakdown: {}, insights: [], advancedAnalysis: {} };
+
+    const [p1, p2] = allPlayers;
+    const ans1 = bothAnswers[p1];
+    const ans2 = bothAnswers[p2];
+    
+    let totalScore = 0;
+    let maxPossibleScore = 0;
+    const categoryScores: {[key: string]: number} = {};
+    const insights: string[] = [];
+    const advancedAnalysis: any = {};
+
+    // Calculate basic question compatibility
+    questions.forEach((question, i) => {
+      const weight = question.weight;
+      maxPossibleScore += weight;
+      
+      if (ans1[i]?.answer === ans2[i]?.answer) {
+        totalScore += weight;
+        categoryScores[question.category] = (categoryScores[question.category] || 0) + weight;
+      }
     });
 
-    // Update progress
-    const progress = Math.round(((gameState.currentQuestion + 1) / compatibilityQuestions.length) * 100);
-    socket.emit('player-progress', { roomId, progress });
+    // Calculate advanced factors compatibility
+    let advancedScore = 0;
+    let maxAdvancedScore = 0;
+    const advancedMatches: string[] = [];
 
-    setSelectedAnswer(null);
-  };
+    Object.keys(advancedCompatibilityFactors).forEach(factor => {
+      if (ans1.advancedAnswers?.[factor] && ans2.advancedAnswers?.[factor]) {
+        maxAdvancedScore += 1;
+        if (ans1.advancedAnswers[factor] === ans2.advancedAnswers[factor]) {
+          advancedScore += 1;
+          advancedMatches.push(factor);
+        }
+      }
+    });
 
-  const nextQuestion = () => {
-    if (gameState.currentQuestion < compatibilityQuestions.length - 1) {
-      setGameState(prev => ({
-        ...prev,
-        currentQuestion: prev.currentQuestion + 1,
-        showResults: false
-      }));
-      setSelectedAnswer(null);
-      setTimer(30);
-      startTimer();
+    // Combine scores (60% from questions, 40% from advanced factors)
+    const questionScore = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 60 : 0;
+    const advancedFactorScore = maxAdvancedScore > 0 ? (advancedScore / maxAdvancedScore) * 40 : 0;
+    const finalScore = Math.round(questionScore + advancedFactorScore);
+
+    // Generate enhanced insights
+    if (finalScore >= 95) {
+      insights.push("💖 Cosmic Connection! You're practically soulmates");
+      insights.push("✨ Perfect harmony in values, communication, and lifestyle");
+    } else if (finalScore >= 85) {
+      insights.push("🌟 Exceptional Match! Your connection is deep and natural");
+      insights.push("⭐ Strong alignment in core values and life goals");
+    } else if (finalScore >= 75) {
+      insights.push("💫 Great Chemistry! You complement each other beautifully");
+      insights.push("🎯 Good balance of similarities and complementary differences");
+    } else if (finalScore >= 65) {
+      insights.push("🌈 Strong Potential! With understanding, this could flourish");
+      insights.push("💡 Your differences create opportunities for growth");
+    } else if (finalScore >= 50) {
+      insights.push("🎭 Interesting Dynamic! You challenge and inspire each other");
+      insights.push("🌱 Unique combination with room for beautiful development");
+    } else {
+      insights.push("🌀 Unconventional Match! You bring fresh perspectives");
+      insights.push("⚡ Your differences create exciting, unpredictable chemistry");
     }
-  };
 
-  const sendReaction = (reaction) => {
-    socket.emit('player-reaction', { roomId, reaction });
-  };
+    // Advanced analysis
+    advancedAnalysis.matches = advancedMatches;
+    advancedAnalysis.communicationMatch = ans1.advancedAnswers?.communicationStyle === ans2.advancedAnswers?.communicationStyle;
+    advancedAnalysis.loveLanguageMatch = ans1.advancedAnswers?.loveLanguage === ans2.advancedAnswers?.loveLanguage;
+    advancedAnalysis.energyCompatibility = ans1.advancedAnswers?.energyLevel === ans2.advancedAnswers?.energyLevel;
+    advancedAnalysis.socialCompatibility = ans1.advancedAnswers?.socialPreference === ans2.advancedAnswers?.socialPreference;
 
-  // Chat functions
-  const sendMessage = () => {
-    if (!newMessage.trim()) return;
-
-    const message = {
-      sender: player.name,
-      content: newMessage.trim()
+    return {
+      score: finalScore,
+      breakdown: categoryScores,
+      insights,
+      advancedAnalysis,
+      advancedFactors: {
+        communication: ans1.advancedAnswers?.communicationStyle === ans2.advancedAnswers?.communicationStyle ? "Perfect match" : "Different styles",
+        loveLanguages: ans1.advancedAnswers?.loveLanguage === ans2.advancedAnswers?.loveLanguage ? "Same love language" : "Different love languages",
+        energy: ans1.advancedAnswers?.energyLevel === ans2.advancedAnswers?.energyLevel ? "Synced energy" : "Different rhythms",
+        social: ans1.advancedAnswers?.socialPreference === ans2.advancedAnswers?.socialPreference ? "Social harmony" : "Different preferences"
+      }
     };
-
-    socket.emit('send-chat-message', { roomId, message });
-    setNewMessage('');
-    stopTyping();
   };
 
-  const handleTyping = () => {
-    if (!isTyping) {
-      setIsTyping(true);
-      socket.emit('typing', { roomId, isTyping: true });
-    }
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    typingTimeoutRef.current = setTimeout(() => {
-      stopTyping();
-    }, 3000);
+  const getCompatibilityMessage = (score: number) => {
+    if (score >= 95) return "Cosmic Soulmates! 💫";
+    if (score >= 85) return "Perfect Match! 🌟";
+    if (score >= 75) return "Excellent Chemistry! ⭐";
+    if (score >= 65) return "Great Potential! 💫";
+    if (score >= 50) return "Interesting Connection! ✨";
+    return "Unique Chemistry! 🎭";
   };
 
-  const stopTyping = () => {
-    setIsTyping(false);
-    socket.emit('typing', { roomId, isTyping: false });
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+  const getScoreColor = (score: number) => {
+    if (score >= 85) return "from-green-400 to-emerald-500";
+    if (score >= 70) return "from-blue-400 to-cyan-500";
+    if (score >= 55) return "from-yellow-400 to-orange-500";
+    return "from-purple-400 to-pink-500";
   };
 
-  const scrollToBottom = () => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  };
-
-  // Compatibility calculation
-  const calculateCompatibility = (allAnswers) => {
-    const players = Object.keys(allAnswers);
-    const results = [];
-
-    // Calculate compatibility between all player pairs
-    for (let i = 0; i < players.length; i++) {
-      for (let j = i + 1; j < players.length; j++) {
-        const playerA = players[i];
-        const playerB = players[j];
-        const answersA = allAnswers[playerA];
-        const answersB = allAnswers[playerB];
-
-        let matchScore = 0;
-        let totalQuestions = 0;
-        const categoryScores = {};
-
-        answersA.forEach((answerA, index) => {
-          const answerB = answersB[index];
-          if (answerA.answer && answerB.answer) {
-            totalQuestions++;
-            if (answerA.answer === answerB.answer) {
-              matchScore++;
-              // Track category matches
-              const category = answerA.category;
-              categoryScores[category] = (categoryScores[category] || 0) + 1;
-            }
-          }
-        });
-
-        const compatibility = totalQuestions > 0 ? Math.round((matchScore / totalQuestions) * 100) : 0;
+  // NEW: Advanced Questions Component
+  const AdvancedQuestions = () => (
+    <Card className={`p-6 ${darkMode ? 'bg-slate-800/50' : 'bg-white/80'} backdrop-blur-sm border-white/20 mb-6 transition-all duration-300`}>
+      <h3 className="text-2xl font-bold text-center mb-6 flex items-center justify-center">
+        <Brain className="w-6 h-6 mr-2 text-purple-500" />
+        Advanced Compatibility Factors
+      </h3>
+      
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid grid-cols-2 mb-4">
+          <TabsTrigger value="personality" className="flex items-center">
+            <Sparkles className="w-4 h-4 mr-2" />
+            Personality
+          </TabsTrigger>
+          <TabsTrigger value="lifestyle" className="flex items-center">
+            <Heart className="w-4 h-4 mr-2" />
+            Lifestyle
+          </TabsTrigger>
+        </TabsList>
         
-        results.push({
-          pair: [playerA, playerB],
-          compatibility,
-          matchScore,
-          totalQuestions,
-          categoryScores,
-          level: getCompatibilityLevel(compatibility)
-        });
-      }
-    }
-
-    setCompatibilityResults(results);
-  };
-
-  const getCompatibilityLevel = (score) => {
-    if (score >= 90) return { level: "Soulmates", color: "text-purple-500", emoji: "💫" };
-    if (score >= 80) return { level: "Perfect Match", color: "text-pink-500", emoji: "💖" };
-    if (score >= 70) return { level: "Great Match", color: "text-red-500", emoji: "❤️" };
-    if (score >= 60) return { level: "Good Match", color: "text-orange-500", emoji: "💕" };
-    if (score >= 50) return { level: "Okay Match", color: "text-yellow-500", emoji: "💛" };
-    return { level: "Not Compatible", color: "text-gray-500", emoji: "💔" };
-  };
-
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1
-    }
-  };
-
-  if (!gameState.gameStarted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-8"
-          >
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <Heart className="w-12 h-12 text-pink-500" />
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                Compatibility Test
-              </h1>
-            </div>
-            <p className="text-gray-600 text-lg">
-              Discover how well you know each other through fun questions!
-            </p>
-          </motion.div>
-
-          {/* Players List */}
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"
-          >
-            <div className="bg-white rounded-2xl p-6 shadow-lg">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                Players in Room ({gameState.players.length})
-              </h2>
-              <div className="space-y-3">
-                {gameState.players.map((p, index) => (
-                  <motion.div
-                    key={p.socketId}
-                    variants={itemVariants}
-                    className={`flex items-center gap-3 p-3 rounded-lg ${
-                      p.isHost ? 'bg-purple-50 border border-purple-200' : 'bg-gray-50'
-                    }`}
-                  >
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold">
-                      {p.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">{p.name}</p>
-                      <p className="text-sm text-gray-500">
-                        {p.isHost ? 'Host' : 'Player'}
-                      </p>
-                    </div>
-                    {p.isHost && (
-                      <Trophy className="w-4 h-4 text-yellow-500" />
+        <TabsContent value="personality" className="space-y-6">
+          <div>
+            <Label className="font-medium mb-3 block text-lg">
+              <MessageCircle className="w-5 h-5 inline mr-2 text-blue-500" />
+              Communication Style
+            </Label>
+            <div className="grid grid-cols-2 gap-3">
+              {advancedCompatibilityFactors.communicationStyles.map((style) => (
+                <div 
+                  key={style} 
+                  className={`flex items-center space-x-2 p-3 rounded-lg border transition-all cursor-pointer ${
+                    advancedAnswers.communicationStyle === style
+                      ? 'bg-blue-500/20 border-blue-400/50 scale-105 shadow-lg'
+                      : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50' : 'bg-white/50 hover:bg-white/70'} border-white/20`
+                  }`}
+                  onClick={() => {
+                    setAdvancedAnswers(prev => ({...prev, communicationStyle: style}));
+                    playSound("select");
+                  }}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                    advancedAnswers.communicationStyle === style 
+                      ? 'border-blue-400 bg-blue-400' 
+                      : 'border-gray-400'
+                  }`}>
+                    {advancedAnswers.communicationStyle === style && (
+                      <div className="w-2 h-2 rounded-full bg-white"></div>
                     )}
-                  </motion.div>
+                  </div>
+                  <Label className="flex-1 cursor-pointer font-medium">
+                    {style}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <Label className="font-medium mb-3 block text-lg">
+              <Heart className="w-5 h-5 inline mr-2 text-red-500" />
+              Love Language
+            </Label>
+            <div className="grid grid-cols-2 gap-3">
+              {advancedCompatibilityFactors.loveLanguages.map((language) => (
+                <div 
+                  key={language} 
+                  className={`flex items-center space-x-2 p-3 rounded-lg border transition-all cursor-pointer ${
+                    advancedAnswers.loveLanguage === language
+                      ? 'bg-red-500/20 border-red-400/50 scale-105 shadow-lg'
+                      : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50' : 'bg-white/50 hover:bg-white/70'} border-white/20`
+                  }`}
+                  onClick={() => {
+                    setAdvancedAnswers(prev => ({...prev, loveLanguage: language}));
+                    playSound("select");
+                  }}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                    advancedAnswers.loveLanguage === language 
+                      ? 'border-red-400 bg-red-400' 
+                      : 'border-gray-400'
+                  }`}>
+                    {advancedAnswers.loveLanguage === language && (
+                      <div className="w-2 h-2 rounded-full bg-white"></div>
+                    )}
+                  </div>
+                  <Label className="flex-1 cursor-pointer font-medium text-sm">
+                    {language}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="lifestyle" className="space-y-6">
+          <div>
+            <Label className="font-medium mb-3 block text-lg">
+              <Zap className="w-5 h-5 inline mr-2 text-yellow-500" />
+              Energy Level
+            </Label>
+            <div className="grid grid-cols-2 gap-3">
+              {advancedCompatibilityFactors.energyLevels.map((level) => (
+                <div 
+                  key={level} 
+                  className={`flex items-center space-x-2 p-3 rounded-lg border transition-all cursor-pointer ${
+                    advancedAnswers.energyLevel === level
+                      ? 'bg-yellow-500/20 border-yellow-400/50 scale-105 shadow-lg'
+                      : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50' : 'bg-white/50 hover:bg-white/70'} border-white/20`
+                  }`}
+                  onClick={() => {
+                    setAdvancedAnswers(prev => ({...prev, energyLevel: level}));
+                    playSound("select");
+                  }}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                    advancedAnswers.energyLevel === level 
+                      ? 'border-yellow-400 bg-yellow-400' 
+                      : 'border-gray-400'
+                  }`}>
+                    {advancedAnswers.energyLevel === level && (
+                      <div className="w-2 h-2 rounded-full bg-white"></div>
+                    )}
+                  </div>
+                  <Label className="flex-1 cursor-pointer font-medium">
+                    {level}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <Label className="font-medium mb-3 block text-lg">
+              <Users2 className="w-5 h-5 inline mr-2 text-green-500" />
+              Social Preference
+            </Label>
+            <div className="grid grid-cols-2 gap-3">
+              {advancedCompatibilityFactors.socialPreferences.map((pref) => (
+                <div 
+                  key={pref} 
+                  className={`flex items-center space-x-2 p-3 rounded-lg border transition-all cursor-pointer ${
+                    advancedAnswers.socialPreference === pref
+                      ? 'bg-green-500/20 border-green-400/50 scale-105 shadow-lg'
+                      : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50' : 'bg-white/50 hover:bg-white/70'} border-white/20`
+                  }`}
+                  onClick={() => {
+                    setAdvancedAnswers(prev => ({...prev, socialPreference: pref}));
+                    playSound("select");
+                  }}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                    advancedAnswers.socialPreference === pref 
+                      ? 'border-green-400 bg-green-400' 
+                      : 'border-gray-400'
+                  }`}>
+                    {advancedAnswers.socialPreference === pref && (
+                      <div className="w-2 h-2 rounded-full bg-white"></div>
+                    )}
+                  </div>
+                  <Label className="flex-1 cursor-pointer font-medium">
+                    {pref}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </Card>
+  );
+
+  // Enhanced Player Card Component
+  const PlayerCard = ({ player, index }: { player: any, index: number }) => (
+    <div className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+      darkMode ? 'bg-slate-800/50 hover:bg-slate-700/50 border-slate-600' : 'bg-white/80 hover:bg-white border-gray-200'
+    }`}>
+      <div className="flex items-center space-x-3">
+        <Avatar className={`w-12 h-12 border-2 ${index === 0 ? 'border-yellow-400' : 'border-blue-400'}`}>
+          <AvatarFallback className={`${index === 0 ? 'bg-gradient-to-br from-yellow-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-cyan-600'} text-white font-bold`}>
+            {player.name?.charAt(0).toUpperCase() || "?"}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex items-center space-x-2">
+          <span className="font-bold text-lg">{player.name || "Unknown"}</span>
+          {index === 0 && <Crown className="w-5 h-5 text-yellow-400 animate-pulse" />}
+        </div>
+      </div>
+      
+      <div className="flex items-center space-x-3">
+        {playerProgress[player.name] !== undefined && (
+          <div className="text-right">
+            <div className="text-sm font-bold">{playerProgress[player.name]}%</div>
+            <Progress value={playerProgress[player.name]} className={`w-24 h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`} />
+          </div>
+        )}
+        
+        {playerReactions[player.name] && (
+          <div className={`px-3 py-1 rounded-full text-lg animate-bounce ${
+            darkMode ? 'bg-slate-600' : 'bg-gray-100'
+          }`}>
+            {playerReactions[player.name]}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Connection Status Indicator
+  const ConnectionStatus = () => (
+    <div className={`fixed top-4 right-4 px-3 py-2 rounded-full text-sm font-semibold z-50 backdrop-blur-sm border ${
+      connectionStatus === "connected" 
+        ? `${darkMode ? 'bg-green-500/20 border-green-400/50' : 'bg-green-100 border-green-200'} text-green-700` 
+        : `${darkMode ? 'bg-red-500/20 border-red-400/50' : 'bg-red-100 border-red-200'} text-red-700 animate-pulse`
+    }`}>
+      {connectionStatus === "connected" ? 
+        <><Wifi className="w-4 h-4 inline mr-2" />Connected</> : 
+        <><WifiOff className="w-4 h-4 inline mr-2" />Disconnected</>
+      }
+    </div>
+  );
+
+  // Settings Panel Component
+  const SettingsPanel = () => (
+    <Card className={`p-6 absolute top-16 right-4 w-80 backdrop-blur-sm border ${
+      darkMode ? 'bg-slate-800/90 border-slate-600' : 'bg-white/90 border-gray-200'
+    } shadow-2xl z-40 transition-all duration-300`}>
+      <h3 className="text-lg font-bold mb-4 flex items-center">
+        <Settings className="w-5 h-5 mr-2" />
+        Game Settings
+      </h3>
+      
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="dark-mode" className="flex items-center">
+            <Moon className="w-4 h-4 mr-2" />
+            Dark Mode
+          </Label>
+          <Switch
+            id="dark-mode"
+            checked={darkMode}
+            onCheckedChange={setDarkMode}
+          />
+        </div>
+        
+        <div className="flex items-center justify-between">
+          <Label htmlFor="animations" className="flex items-center">
+            <Sparkles className="w-4 h-4 mr-2" />
+            Animations
+          </Label>
+          <Switch
+            id="animations"
+            checked={animationsEnabled}
+            onCheckedChange={setAnimationsEnabled}
+          />
+        </div>
+        
+        <div className="flex items-center justify-between">
+          <Label htmlFor="sound" className="flex items-center">
+            <Volume2 className="w-4 h-4 mr-2" />
+            Sound Effects
+          </Label>
+          <Switch
+            id="sound"
+            checked={soundEnabled}
+            onCheckedChange={setSoundEnabled}
+          />
+        </div>
+        
+        <div className="pt-4 border-t">
+          <Button
+            onClick={() => setShowAdvancedSettings(false)}
+            className="w-full"
+            variant="outline"
+          >
+            Close Settings
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+
+  // Enhanced Results Screen
+  const ResultsScreen = () => {
+    const compatibility = calculateCompatibility();
+    const { score, breakdown, insights, advancedAnalysis, advancedFactors } = compatibility;
+
+    return (
+      <div className={`min-h-screen flex flex-col items-center justify-center p-6 transition-colors duration-300 ${
+        darkMode 
+          ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
+          : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+      }`}>
+        <ConnectionStatus />
+        
+        {/* Settings Button */}
+        <div className="absolute top-4 left-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
+          >
+            <Settings className="w-5 h-5" />
+          </Button>
+        </div>
+
+        {/* Screenshot capture area */}
+        <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-6xl">
+          <Card className={`p-8 backdrop-blur-sm border transition-all duration-300 ${
+            darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+          }`}>
+            {/* Header with share button */}
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-4xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                  Compatibility Results
+                </h2>
+                <p className={`mt-2 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                  {Object.keys(bothAnswers).join(" 💞 ")}
+                </p>
+              </div>
+              
+              <Button
+                onClick={captureScreenshot}
+                disabled={isCapturing}
+                className={`${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`}
+              >
+                {isCapturing ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Share2 className="w-5 h-5" />
+                )}
+              </Button>
+            </div>
+
+            {/* Main Score */}
+            <div className="text-center mb-8">
+              <div className={`text-7xl font-black mb-4 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
+                {score}%
+              </div>
+              <h3 className="text-3xl font-bold mb-2">{getCompatibilityMessage(score)}</h3>
+            </div>
+
+            {/* Advanced Factors Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              {Object.entries(advancedFactors).map(([key, value]) => (
+                <div key={key} className={`p-4 rounded-xl border text-center ${
+                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+                }`}>
+                  <div className="text-sm font-medium capitalize mb-1">
+                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                  </div>
+                  <div className={`text-lg font-semibold ${
+                    typeof value === 'string' && value.includes('match') 
+                      ? 'text-green-500' 
+                      : typeof value === 'string' && value.includes('Different')
+                      ? 'text-orange-500'
+                      : darkMode ? 'text-white' : 'text-gray-800'
+                  }`}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Category Breakdown */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+              {Object.entries(breakdown).map(([category, catScore]) => (
+                <div key={category} className={`p-4 rounded-xl border ${
+                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+                }`}>
+                  <div className="text-sm mb-2">{category}</div>
+                  <div className="text-2xl font-bold mb-2">
+                    {Math.round((catScore as number / questions.filter(q => q.category === category).length) * 100)}%
+                  </div>
+                  <Progress 
+                    value={(catScore as number / questions.filter(q => q.category === category).length) * 100} 
+                    className={`h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Insights */}
+            <div className={`p-6 rounded-xl border mb-8 ${
+              darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+            }`}>
+              <h3 className="text-xl font-bold mb-4 flex items-center justify-center">
+                <Brain className="w-5 h-5 mr-2 text-purple-500" />
+                Relationship Insights
+              </h3>
+              <div className="space-y-3">
+                {insights.map((insight, index) => (
+                  <div key={index} className={`flex items-center space-x-3 p-3 rounded-lg ${
+                    darkMode ? 'bg-slate-600/50' : 'bg-white'
+                  }`}>
+                    <Sparkles className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                    <span>{insight}</span>
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* Game Info */}
-            <div className="bg-white rounded-2xl p-6 shadow-lg">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <Zap className="w-5 h-5" />
-                Game Information
-              </h2>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
-                  <span className="text-gray-700">Questions</span>
-                  <span className="font-semibold">{compatibilityQuestions.length}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
-                  <span className="text-gray-700">Time per Question</span>
-                  <span className="font-semibold">30 seconds</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-yellow-50 rounded-lg">
-                  <span className="text-gray-700">Minimum Players</span>
-                  <span className="font-semibold">2</span>
-                </div>
-              </div>
-
-              {player.isHost && (
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={startGame}
-                  disabled={gameState.players.length < 2}
-                  className={`w-full mt-6 py-4 rounded-xl font-semibold text-white transition-all ${
-                    gameState.players.length < 2
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:shadow-lg'
-                  }`}
-                >
-                  Start Game ({gameState.players.length}/∞ players)
-                </motion.button>
-              )}
-
-              {!player.isHost && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-center mt-6 p-4 bg-purple-50 rounded-lg"
-                >
-                  <p className="text-purple-700">
-                    Waiting for host to start the game...
-                  </p>
-                </motion.div>
-              )}
-            </div>
-          </motion.div>
-
-          {/* Quick Chat */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <MessageCircle className="w-5 h-5" />
-              Quick Chat
-            </h2>
-            <ChatSection
-              messages={chatMessages}
-              newMessage={newMessage}
-              setNewMessage={setNewMessage}
-              onSendMessage={sendMessage}
-              onTyping={handleTyping}
-              typingUsers={typingUsers}
-              chatContainerRef={chatContainerRef}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (gamePhase === 'playing') {
-    const currentQuestion = compatibilityQuestions[gameState.currentQuestion];
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
-        <div className="max-w-6xl mx-auto">
-          {/* Game Header */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="bg-white rounded-2xl p-6 shadow-lg mb-6"
-          >
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 flex items-center justify-center text-white font-bold">
-                  {gameState.currentQuestion + 1}
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-800">
-                    Question {gameState.currentQuestion + 1} of {compatibilityQuestions.length}
-                  </h2>
-                  <p className="text-gray-600">{currentQuestion.category}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-6">
-                {/* Timer */}
-                <div className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-full">
-                  <Clock className="w-5 h-5 text-red-500" />
-                  <span className="font-mono font-bold text-red-600">
-                    {timer}s
-                  </span>
-                </div>
-
-                {/* Progress */}
-                <div className="flex items-center gap-2">
-                  <div className="w-32 bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                      style={{
-                        width: `${((gameState.currentQuestion + 1) / compatibilityQuestions.length) * 100}%`
-                      }}
-                    />
-                  </div>
-                  <span className="text-sm font-medium text-gray-600">
-                    {gameState.currentQuestion + 1}/{compatibilityQuestions.length}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Question Section */}
-            <div className="lg:col-span-2">
-              <motion.div
-                key={currentQuestion.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="bg-white rounded-2xl p-8 shadow-lg"
+            {/* Action Buttons */}
+            <div className="flex gap-4 flex-col sm:flex-row">
+              <Button 
+                onClick={() => window.location.reload()} 
+                className="flex-1 py-6 text-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white"
               >
-                <div className="mb-2">
-                  <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                    {currentQuestion.category}
-                  </span>
+                <RotateCcw className="w-5 h-5 mr-2" />
+                Play Again
+              </Button>
+              <Button 
+                onClick={captureScreenshot}
+                disabled={isCapturing}
+                className="flex-1 py-6 text-lg bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
+              >
+                {isCapturing ? (
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                ) : (
+                  <Share2 className="w-5 h-5 mr-2" />
+                )}
+                {isCapturing ? 'Capturing...' : 'Share Results'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+
+        {showAdvancedSettings && <SettingsPanel />}
+        {showShareModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-2xl font-bold text-gray-900 flex items-center">
+                    <Share2 className="w-6 h-6 mr-2 text-blue-600" />
+                    Share Your Results
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowShareModal(false)}
+                  >
+                    ✕
+                  </Button>
                 </div>
                 
-                <h1 className="text-2xl font-bold text-gray-800 mb-8">
-                  {currentQuestion.question}
-                </h1>
-
                 <div className="space-y-4">
-                  {currentQuestion.options.map((option, index) => (
-                    <motion.button
-                      key={index}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setSelectedAnswer(option)}
-                      className={`w-full p-4 text-left rounded-xl border-2 transition-all ${
-                        selectedAnswer === option
-                          ? 'border-blue-500 bg-blue-50 shadow-md'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
+                  {capturedImage && (
+                    <div className="text-center">
+                      <img
+                        src={capturedImage}
+                        alt="Compatibility Results"
+                        className="w-full h-auto max-h-96 object-contain border rounded-lg"
+                      />
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      onClick={() => capturedImage && downloadImage(capturedImage)}
+                      className="py-4"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                          selectedAnswer === option
-                            ? 'border-blue-500 bg-blue-500'
-                            : 'border-gray-300'
-                        }`}>
-                          {selectedAnswer === option && (
-                            <CheckCircle className="w-4 h-4 text-white" />
-                          )}
-                        </div>
-                        <span className="font-medium text-gray-700">{option}</span>
-                      </div>
-                    </motion.button>
-                  ))}
-                </div>
-
-                <div className="flex gap-4 mt-8">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={submitAnswers}
-                    disabled={!selectedAnswer}
-                    className={`flex-1 py-4 rounded-xl font-semibold text-white transition-all ${
-                      !selectedAnswer
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-lg'
-                    }`}
-                  >
-                    Submit Answer
-                  </motion.button>
-                </div>
-              </motion.div>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Players Progress */}
-              <div className="bg-white rounded-2xl p-6 shadow-lg">
-                <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  Players Progress
-                </h3>
-                <div className="space-y-3">
-                  {gameState.players.map((p) => (
-                    <div key={p.socketId} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-400 to-indigo-400 flex items-center justify-center text-white text-sm font-medium">
-                          {p.name.charAt(0)}
-                        </div>
-                        <span className="text-sm font-medium">{p.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-20 bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-green-500 h-2 rounded-full transition-all"
-                            style={{
-                              width: `${gameState.playerProgress[p.name] || 0}%`
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-500 w-8">
-                          {gameState.playerProgress[p.name] || 0}%
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Quick Reactions */}
-              <div className="bg-white rounded-2xl p-6 shadow-lg">
-                <h3 className="font-semibold text-gray-800 mb-4">Quick Reactions</h3>
-                <div className="grid grid-cols-4 gap-2">
-                  {['❤️', '😂', '😮', '😢', '🔥', '👏', '🎉', '💯'].map((reaction) => (
-                    <motion.button
-                      key={reaction}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => sendReaction(reaction)}
-                      className="p-2 text-xl hover:bg-gray-100 rounded-lg transition-colors"
+                      <Download className="w-5 h-5 mr-2" />
+                      Download
+                    </Button>
+                    
+                    <Button
+                      onClick={() => capturedImage && navigator.clipboard?.writeText(`Check out our compatibility score: ${calculateCompatibility().score}%! 🎉`)}
+                      className="py-4"
                     >
-                      {reaction}
-                    </motion.button>
-                  ))}
+                      <Copy className="w-5 h-5 mr-2" />
+                      Copy Text
+                    </Button>
+                  </div>
                 </div>
               </div>
-
-              {/* Chat Section */}
-              <div className="bg-white rounded-2xl shadow-lg">
-                <ChatSection
-                  messages={chatMessages}
-                  newMessage={newMessage}
-                  setNewMessage={setNewMessage}
-                  onSendMessage={sendMessage}
-                  onTyping={handleTyping}
-                  typingUsers={typingUsers}
-                  chatContainerRef={chatContainerRef}
-                  compact={true}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Floating Reactions */}
-          <AnimatePresence>
-            {reactions.map((reaction) => (
-              <motion.div
-                key={reaction.id}
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ 
-                  scale: 1, 
-                  opacity: 1,
-                  y: -100 
-                }}
-                exit={{ scale: 0, opacity: 0 }}
-                className="fixed text-2xl pointer-events-none"
-                style={{
-                  left: `${reaction.position.x}%`,
-                  top: `${reaction.position.y}%`
-                }}
-              >
-                {reaction.reaction}
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-      </div>
-    );
-  }
-
-  if (gamePhase === 'results' && compatibilityResults) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 p-4">
-        <div className="max-w-6xl mx-auto">
-          {/* Results Header */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-8"
-          >
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <TrendingUp className="w-12 h-12 text-emerald-500" />
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                Compatibility Results
-              </h1>
-            </div>
-            <p className="text-gray-600 text-lg">
-              Discover how well you match with other players!
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            {/* Compatibility Results */}
-            {compatibilityResults.map((result, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-white rounded-2xl p-6 shadow-lg"
-              >
-                <div className="text-center mb-4">
-                  <div className="flex items-center justify-center gap-4 mb-3">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold">
-                      {result.pair[0].charAt(0)}
-                    </div>
-                    <Heart className="w-6 h-6 text-pink-500" />
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center text-white font-bold">
-                      {result.pair[1].charAt(0)}
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-800">
-                    {result.pair[0]} & {result.pair[1]}
-                  </h3>
-                </div>
-
-                {/* Compatibility Score */}
-                <div className="text-center mb-4">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full text-white font-bold text-xl">
-                    <span>{result.compatibility}%</span>
-                    <span>{result.level.emoji}</span>
-                  </div>
-                  <p className={`text-sm font-medium mt-2 ${result.level.color}`}>
-                    {result.level.level}
-                  </p>
-                </div>
-
-                {/* Match Details */}
-                <div className="space-y-2 text-sm text-gray-600">
-                  <div className="flex justify-between">
-                    <span>Questions Matched:</span>
-                    <span className="font-semibold">
-                      {result.matchScore}/{result.totalQuestions}
-                    </span>
-                  </div>
-                  {Object.entries(result.categoryScores).map(([category, score]) => (
-                    <div key={category} className="flex justify-between">
-                      <span>{category}:</span>
-                      <span className="font-semibold">{score} matches</span>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-4 justify-center">
-            {gameState.currentQuestion < compatibilityQuestions.length - 1 ? (
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={nextQuestion}
-                className="px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
-              >
-                Next Question
-              </motion.button>
-            ) : (
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={onLeaveGame}
-                className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
-              >
-                Finish Game
-              </motion.button>
-            )}
-          </div>
-
-          {/* Chat Section */}
-          <div className="mt-8 bg-white rounded-2xl shadow-lg">
-            <ChatSection
-              messages={chatMessages}
-              newMessage={newMessage}
-              setNewMessage={setNewMessage}
-              onSendMessage={sendMessage}
-              onTyping={handleTyping}
-              typingUsers={typingUsers}
-              chatContainerRef={chatContainerRef}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return null;
-};
-
-// Chat Component
-const ChatSection = ({
-  messages,
-  newMessage,
-  setNewMessage,
-  onSendMessage,
-  onTyping,
-  typingUsers,
-  chatContainerRef,
-  compact = false
-}) => {
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      onSendMessage();
-    }
-  };
-
-  return (
-    <div className={`${compact ? 'h-64' : 'h-96'} flex flex-col`}>
-      <div className="flex items-center gap-2 p-4 border-b">
-        <MessageCircle className="w-5 h-5" />
-        <h3 className="font-semibold">Chat</h3>
-        {typingUsers.length > 0 && (
-          <div className="text-sm text-gray-500 ml-2">
-            {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+            </Card>
           </div>
         )}
       </div>
+    );
+  };
 
-      {/* Messages */}
-      <div
-        ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3"
-      >
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className="flex flex-col space-y-1"
-          >
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm text-gray-700">
-                {message.sender}
-              </span>
-              <span className="text-xs text-gray-500">
-                {new Date(message.timestamp).toLocaleTimeString()}
-              </span>
+  // Waiting Screen Component
+  const WaitingScreen = () => (
+    <div className={`min-h-screen flex flex-col items-center justify-center p-6 transition-colors duration-300 ${
+      darkMode 
+        ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
+        : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+    }`}>
+      <ConnectionStatus />
+      
+      {/* Settings Button */}
+      <div className="absolute top-4 left-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+          className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
+        >
+          <Settings className="w-5 h-5" />
+        </Button>
+      </div>
+
+      {/* Screenshot capture area */}
+      <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-2xl">
+        <Card className={`p-8 backdrop-blur-sm border transition-all duration-300 ${
+          darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+        }`}>
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="flex justify-center mb-6">
+              <div className="relative">
+                <Heart className="w-20 h-20 text-pink-500 animate-pulse" />
+                <Sparkles className="w-8 h-8 text-yellow-500 absolute -top-2 -right-2 animate-spin" />
+              </div>
             </div>
-            <div className="bg-gray-100 rounded-lg px-3 py-2 max-w-xs">
-              <p className="text-gray-800 text-sm">{message.content}</p>
-            </div>
+            
+            <h2 className="text-4xl font-bold mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+              Advanced Compatibility
+            </h2>
+            <p className={`text-lg ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              Room Code: <span className="font-mono font-bold text-2xl">{roomId}</span>
+            </p>
           </div>
-        ))}
+
+          {/* Players */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            {players.map((player, index) => (
+              <PlayerCard key={player.name || index} player={player} index={index} />
+            ))}
+          </div>
+
+          {/* Status Message */}
+          {players.length === 1 && (
+            <div className={`p-4 rounded-xl border mb-6 text-center ${
+              darkMode ? 'bg-yellow-500/20 border-yellow-400/30' : 'bg-yellow-100 border-yellow-200'
+            }`}>
+              <div className="flex items-center justify-center space-x-2">
+                <Users className="w-5 h-5 text-yellow-600" />
+                <span className={darkMode ? 'text-yellow-300' : 'text-yellow-700'}>
+                  Waiting for partner to join...
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Action Button */}
+          {isHost ? (
+            <Button 
+              onClick={startGame} 
+              disabled={players.length < 2}
+              className="w-full py-6 text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-2xl disabled:opacity-50"
+            >
+              <Sparkles className="w-5 h-5 mr-2" />
+              Start Compatibility Test {players.length < 2 && `(Need ${2 - players.length} more)`}
+            </Button>
+          ) : (
+            <div className={`p-4 rounded-xl border text-center ${
+              darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
+            }`}>
+              <div className="flex items-center justify-center space-x-2">
+                <Clock className="w-5 h-5 text-blue-500 animate-pulse" />
+                <span className={darkMode ? 'text-blue-300' : 'text-blue-700'}>
+                  Waiting for host to start the test...
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Quick Copy */}
+          <div className="mt-6 text-center">
+            <Button
+              onClick={() => navigator.clipboard?.writeText(roomId)}
+              variant="outline"
+              className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
+            >
+              <LinkIcon className="w-4 h-4 mr-2" />
+              Copy Room Code
+            </Button>
+          </div>
+        </Card>
       </div>
 
-      {/* Input */}
-      <div className="p-4 border-t">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => {
-              setNewMessage(e.target.value);
-              onTyping();
-            }}
-            onKeyPress={handleKeyPress}
-            placeholder="Type a message..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <button
-            onClick={onSendMessage}
-            disabled={!newMessage.trim()}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      {showAdvancedSettings && <SettingsPanel />}
     </div>
   );
-};
 
-export default CompatibilityGame;
+  // FIXED: Game Screen Component with improved input handling
+  const GameScreen = () => {
+    const currentQ = questions[currentQuestion];
+    
+    const handleOptionSelect = (option: string) => {
+      setCurrentAnswer(option);
+      playSound("select");
+    };
+
+    const handleSubmit = () => {
+      if (!currentAnswer) {
+        alert("Please select an answer before submitting");
+        return;
+      }
+      submitAnswer();
+    };
+
+    return (
+      <div className={`min-h-screen flex flex-col items-center justify-center p-6 transition-colors duration-300 ${
+        darkMode 
+          ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
+          : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+      }`}>
+        <ConnectionStatus />
+        
+        {/* Settings Button */}
+        <div className="absolute top-4 left-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
+          >
+            <Settings className="w-5 h-5" />
+          </Button>
+        </div>
+
+        {/* Screenshot capture area */}
+        <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
+          {/* Header */}
+          <div className="mb-6">
+            <div className={`flex justify-between items-center p-6 rounded-xl border backdrop-blur-sm ${
+              darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+            }`}>
+              <div>
+                <h2 className="text-xl font-bold">Room: {roomId}</h2>
+                <div className={`flex items-center space-x-2 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                  <Users className="w-4 h-4" />
+                  <span>{players.map(p => p.name).join(" & ")}</span>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-6">
+                {/* Progress */}
+                <div className="text-right">
+                  <div className={darkMode ? 'text-slate-300' : 'text-gray-600'}>Progress</div>
+                  <div className="text-lg font-bold">
+                    {currentQuestion + 1} / {questions.length}
+                  </div>
+                </div>
+                
+                {/* Timer */}
+                {timeLeft !== null && (
+                  <div className="text-right">
+                    <div className={darkMode ? 'text-slate-300' : 'text-gray-600'}>Time Left</div>
+                    <div className={`text-lg font-bold flex items-center ${
+                      timeLeft <= 10 ? 'text-red-500 animate-pulse' : ''
+                    }`}>
+                      <Timer className="w-4 h-4 mr-1" />
+                      {timeLeft}s
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Player Progress */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            {players.map((player) => (
+              <div key={player.name} className={`p-4 rounded-xl border backdrop-blur-sm ${
+                darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-3">
+                    <Avatar className="w-10 h-10">
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-600 text-white">
+                        {player.name?.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="font-semibold">{player.name}</span>
+                  </div>
+                  <div className="text-lg font-bold">
+                    {playerProgress[player.name] || 0}%
+                  </div>
+                </div>
+                <Progress 
+                  value={playerProgress[player.name] || 0} 
+                  className={`h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Question Card */}
+          <Card className={`p-8 backdrop-blur-sm border transition-all duration-300 mb-6 ${
+            darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+          }`}>
+            <div className="text-center mb-8">
+              <Badge className={`mb-3 ${darkMode ? 'bg-purple-500/20 text-purple-300 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>
+                {currentQ.category} • Weight: {currentQ.weight}x
+              </Badge>
+              <h3 className="text-3xl font-bold mb-4">
+                {currentQ.question}
+              </h3>
+              <p className={darkMode ? 'text-slate-300' : 'text-gray-600'}>
+                Question {currentQuestion + 1} of {questions.length}
+              </p>
+            </div>
+
+            {/* Options */}
+            <div className="space-y-4 mb-8">
+              {currentQ.options.map((option, index) => (
+                <div 
+                  key={index} 
+                  className={`flex items-center space-x-4 p-4 rounded-xl border transition-all cursor-pointer ${
+                    currentAnswer === option 
+                      ? 'bg-purple-500/20 border-purple-400/50 scale-105 shadow-lg' 
+                      : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50 border-slate-600' : 'bg-white hover:bg-gray-50 border-gray-200'} hover:scale-102`
+                  }`}
+                  onClick={() => handleOptionSelect(option)}
+                >
+                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                    currentAnswer === option 
+                      ? 'border-purple-400 bg-purple-400' 
+                      : 'border-gray-400'
+                  }`}>
+                    {currentAnswer === option && (
+                      <div className="w-3 h-3 rounded-full bg-white"></div>
+                    )}
+                  </div>
+                  <Label className="flex-1 cursor-pointer font-semibold text-lg">
+                    {option}
+                  </Label>
+                </div>
+              ))}
+            </div>
+
+            {/* Personality Insight */}
+            {currentAnswer && currentQ.insights && (
+              <div className={`p-4 rounded-xl border mb-6 ${
+                darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
+              }`}>
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-5 h-5 text-blue-500" />
+                  <span className="font-medium">
+                    This suggests: {currentQ.insights[currentAnswer]}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex justify-between items-center">
+              <Button
+                variant="outline"
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
+              >
+                {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              </Button>
+
+              <Button
+                onClick={handleSubmit}
+                disabled={!currentAnswer || isSubmitting}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-8 py-3 text-lg disabled:opacity-50 transition-all"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Submitting...
+                  </>
+                ) : currentQuestion === questions.length - 1 ? (
+                  <>
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    Finish Test
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Next Question
+                  </>
+                )}
+              </Button>
+            </div>
+          </Card>
+
+          {/* Show Advanced Questions after main questions */}
+          {currentQuestion === questions.length - 1 && (
+            <AdvancedQuestions />
+          )}
+
+          {/* Quick Reactions */}
+          <div className="flex justify-center space-x-2">
+            {['❤️', '😂', '😮', '👏', '🎉'].map(reaction => (
+              <Button
+                key={reaction}
+                variant="outline"
+                size="sm"
+                onClick={() => sendReaction(reaction)}
+                className={`text-lg h-12 w-12 ${
+                  darkMode ? 'bg-slate-700 border-slate-600 hover:bg-slate-600' : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {reaction}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {showAdvancedSettings && <SettingsPanel />}
+      </div>
+    );
+  };
+
+  // FIXED: Join/Create Screen with improved input handling
+  const JoinCreateScreen = () => {
+    return (
+      <div className={`min-h-screen flex flex-col items-center justify-center p-6 transition-colors duration-300 ${
+        darkMode 
+          ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
+          : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+      }`}>
+        <ConnectionStatus />
+        
+        {/* Settings Button */}
+        <div className="absolute top-4 left-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
+          >
+            <Settings className="w-5 h-5" />
+          </Button>
+        </div>
+
+        <Card className={`p-8 max-w-md w-full backdrop-blur-sm border transition-all duration-300 ${
+          darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+        }`}>
+          <div className="text-center mb-8">
+            <div className="flex justify-center mb-6">
+              <div className="relative">
+                <Heart className="w-16 h-16 text-pink-500" />
+                <Sparkles className="w-8 h-8 text-yellow-500 absolute -top-2 -right-2 animate-spin" />
+              </div>
+            </div>
+            
+            <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+              Advanced Compatibility
+            </h1>
+            <p className={darkMode ? 'text-slate-300' : 'text-gray-600'}>
+              Discover your deep connection with someone special
+            </p>
+          </div>
+
+          <div className="space-y-4 mb-6">
+            <div>
+              <Label htmlFor="playerName" className="font-medium mb-2 block">
+                Your Name
+              </Label>
+              <Input
+                ref={nameInputRef}
+                id="playerName"
+                placeholder="Enter your name"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && playerName.trim() && !roomId.trim()) {
+                    createRoom();
+                  } else if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
+                    joinRoom();
+                  }
+                }}
+                className={`${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
+                autoComplete="name"
+                autoFocus
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="roomId" className="font-medium mb-2 block">
+                Room Code (optional)
+              </Label>
+              <Input
+                ref={roomInputRef}
+                id="roomId"
+                placeholder="Enter room code to join"
+                value={roomId}
+                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
+                    joinRoom();
+                  }
+                }}
+                className={`${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Button
+              onClick={createRoom}
+              disabled={!playerName.trim()}
+              className="w-full py-6 text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
+            >
+              <Crown className="w-5 h-5 mr-2" />
+              Create New Room
+            </Button>
+
+            <Button
+              onClick={joinRoom}
+              disabled={!playerName.trim() || !roomId.trim()}
+              className="w-full py-6 text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white disabled:opacity-50 transition-all"
+            >
+              <Users className="w-5 h-5 mr-2" />
+              Join Existing Room
+            </Button>
+          </div>
+
+          <div className={`mt-6 p-4 rounded-lg border ${
+            darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+          }`}>
+            <h4 className="font-semibold mb-2 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 mr-2 text-yellow-500" />
+              Advanced Features
+            </h4>
+            <ul className="text-sm space-y-1 text-left">
+              <li>• Personality-based matching algorithm</li>
+              <li>• Advanced compatibility factors</li>
+              <li>• Real-time progress tracking</li>
+              <li>• Interactive results with insights</li>
+              <li>• Dark/Light mode support</li>
+            </ul>
+          </div>
+        </Card>
+
+        {showAdvancedSettings && <SettingsPanel />}
+      </div>
+    );
+  };
+
+  // Add CSS for confetti animation
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes confetti-fall {
+        0% {
+          transform: translateY(-20px) rotate(0deg) scale(1);
+          opacity: 1;
+        }
+        100% {
+          transform: translateY(100vh) rotate(720deg) scale(0.5);
+          opacity: 0;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
+  // Main render logic
+  if (showResults) {
+    return <ResultsScreen />;
+  }
+
+  if (gameStarted) {
+    return <GameScreen />;
+  }
+
+  if (joined) {
+    return <WaitingScreen />;
+  }
+
+  return <JoinCreateScreen />;
+}
