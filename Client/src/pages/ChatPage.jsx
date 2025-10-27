@@ -12,17 +12,11 @@ const ChatPage = ({ currentUser }) => {
   const [isGroupSelected, setIsGroupSelected] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
 
-  const handleSelectChat = (friend, group, groupFlag) => {
-    console.log("Selected chat:", { friend, group, groupFlag });
-    setSelectedChat(groupFlag ? group : friend);
-    setIsGroupSelected(groupFlag);
-    setShowGroupInfo(false);
-  };
-
-  const handleSelectGroupFromSidebar = (group) => {
-    console.log("Selected group from sidebar:", group);
-    setSelectedChat(group);
-    setIsGroupSelected(true);
+  // Unified handler for both friends and groups
+  const handleSelectChat = (chat, isGroup = false) => {
+    console.log("Selected chat:", { chat, isGroup }); // Debug log
+    setSelectedChat(chat);
+    setIsGroupSelected(isGroup);
     setShowGroupInfo(false);
   };
 
@@ -78,14 +72,13 @@ const ChatPage = ({ currentUser }) => {
                 {isGroupView ? (
                   <GroupChatSidebar
                     currentUser={currentUser}
-                    onSelectGroup={handleSelectGroupFromSidebar}
+                    onSelectGroup={(group) => handleSelectChat(group, true)}
                   />
                 ) : (
                   <ChatList
                     currentUser={currentUser}
-                    onSelectChat={handleSelectChat} // Fixed prop name
+                    onSelectChat={(chat) => handleSelectChat(chat, false)}
                     selectedChat={selectedChat}
-                    isGroupSelected={isGroupSelected}
                   />
                 )}
               </div>
@@ -101,18 +94,20 @@ const ChatPage = ({ currentUser }) => {
                   <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                 </button>
                 <h3 className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  {isGroupSelected ? selectedChat?.name : selectedChat?.name}
+                  {selectedChat?.name}
                 </h3>
               </div>
 
-              {/* Chat Window - Full height container */}
-              <div className="flex-1 overflow-hidden">
-                <ChatWindow
-                  currentUser={currentUser}
-                  selectedChat={selectedChat}
-                  isGroup={isGroupSelected}
-                  onToggleGroupInfo={() => setShowGroupInfo((prev) => !prev)}
-                />
+              {/* Chat Window - Scrollable Area */}
+              <div className="flex-1 overflow-hidden flex flex-col">
+                <div className="flex-1 overflow-y-auto">
+                  <ChatWindow
+                    currentUser={currentUser}
+                    selectedChat={selectedChat}
+                    isGroup={isGroupSelected}
+                    onToggleGroupInfo={() => setShowGroupInfo((prev) => !prev)}
+                  />
+                </div>
               </div>
 
               {/* Group Info Panel */}
