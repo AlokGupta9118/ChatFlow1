@@ -4,6 +4,7 @@ import ChatSidebar from "../components/chat/ChatSidebar";
 import ChatWindow from "../components/chat/ChatWindow";
 import GroupChatAdminPanel from "../components/chat/GroupChatAdminPanel";
 import GroupChatSidebar from "../components/chat/GroupChatSidebar";
+import { ArrowLeft } from "lucide-react";
 
 const ChatPage = ({ currentUser }) => {
   const [selectedChat, setSelectedChat] = useState(null);
@@ -23,33 +24,27 @@ const ChatPage = ({ currentUser }) => {
     setShowGroupInfo(false);
   };
 
+  const handleBackToList = () => {
+    setSelectedChat(null);
+  };
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-950 dark:to-black text-gray-900 dark:text-gray-200">
-      {/* Global reset */}
-      <style jsx global>{`
-        body {
-          margin: 0;
-          padding: 0;
-          overflow-x: hidden;
-        }
-      `}</style>
+      {/* Desktop Sidebar */}
+      <div className="hidden lg:block fixed top-0 left-0 h-full w-20 z-30">
+        <ChatSidebar />
+      </div>
 
-      {/* Responsive sidebar (desktop fixed + mobile toggle inside component) */}
-      <ChatSidebar />
-
-      {/* MAIN LAYOUT
-          - mobile: stacked column (left panel full width on top, chat window below)
-          - md+: row layout (left panel fixed width, chat window to right)
-          - lg:pl-20 accounts for the thin icon sidebar width
-      */}
-      <div className="flex h-screen lg:pl-20 overflow-hidden flex-col md:flex-row">
-        {/* Left panel (Chats / Groups)
-            - full width on small screens (top area)
-            - fixed width on md+ (side area)
-            - keep independent scrolling
-        */}
-        <div className="w-full md:w-80 border-r border-gray-200/50 dark:border-gray-800/50 bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl flex flex-col shadow-lg z-10 flex-shrink-0"
-             style={{ maxHeight: "50vh" /* allow top panel to be no more than half screen on tiny devices */ }}
+      {/* MAIN LAYOUT */}
+      <div className="flex h-screen lg:pl-20 overflow-hidden">
+        {/* LEFT PANEL (Chat List / Group List) */}
+        <div
+          className={`w-full md:w-80 border-r border-gray-200/50 dark:border-gray-800/50 
+            bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl flex flex-col shadow-lg z-10
+            transition-transform duration-500 ease-in-out
+            ${selectedChat ? "translate-x-0 md:translate-x-0" : "translate-x-0"}
+            ${selectedChat && "md:block hidden"} 
+          `}
         >
           <div className="flex justify-around items-center p-4 border-b border-gray-200/50 dark:border-gray-800/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md flex-shrink-0">
             <button
@@ -60,9 +55,6 @@ const ChatPage = ({ currentUser }) => {
                   : "text-gray-600 dark:text-gray-300 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:scale-105"
               }`}
             >
-              {!isGroupView && (
-                <span className="absolute inset-0 bg-white/20 rounded-xl animate-pulse"></span>
-              )}
               Chats
             </button>
             <button
@@ -73,14 +65,10 @@ const ChatPage = ({ currentUser }) => {
                   : "text-gray-600 dark:text-gray-300 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:scale-105"
               }`}
             >
-              {isGroupView && (
-                <span className="absolute inset-0 bg-white/20 rounded-xl animate-pulse"></span>
-              )}
               Groups
             </button>
           </div>
 
-          {/* Make the list scroll independently and fill available vertical space */}
           <div className="flex-1 overflow-y-auto min-h-0">
             {isGroupView ? (
               <GroupChatSidebar
@@ -99,15 +87,30 @@ const ChatPage = ({ currentUser }) => {
           </div>
         </div>
 
-        {/* Main chat window area
-            - on mobile (stacked) this will appear below the left panel
-            - ensure it can scroll internally and not overflow the body
-        */}
-        <div className="flex-1 flex flex-col bg-gradient-to-br from-white/40 via-blue-50/30 to-purple-50/20 dark:from-gray-900/40 dark:via-gray-800/30 dark:to-purple-900/20 backdrop-blur-sm overflow-hidden min-h-0">
+        {/* RIGHT PANEL (Chat Window) */}
+        <div
+          className={`flex-1 flex flex-col bg-gradient-to-br from-white/40 via-blue-50/30 to-purple-50/20 
+          dark:from-gray-900/40 dark:via-gray-800/30 dark:to-purple-900/20 backdrop-blur-sm 
+          overflow-hidden min-h-0 transition-all duration-500 ease-in-out 
+          ${selectedChat ? "translate-x-0" : "translate-x-full md:translate-x-0"} 
+          absolute top-0 left-0 w-full h-full md:relative md:w-auto`}
+        >
           {selectedChat ? (
             <>
-              <div className="flex-1 min-h-0 z-10 overflow-hidden">
-                {/* ChatWindow should internally handle overflow of messages */}
+              {/* Mobile back button */}
+              <div className="flex md:hidden items-center gap-3 px-4 py-3 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-900/80">
+                <button
+                  onClick={handleBackToList}
+                  className="w-9 h-9 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+                >
+                  <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                </button>
+                <h3 className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  {isGroupSelected ? selectedChat?.groupName : selectedChat?.name}
+                </h3>
+              </div>
+
+              <div className="flex-1 min-h-0 z-10 relative">
                 <ChatWindow
                   currentUser={currentUser}
                   selectedChat={selectedChat}
@@ -116,14 +119,13 @@ const ChatPage = ({ currentUser }) => {
                 />
               </div>
 
-              {/* Slide-in Group Info */}
+              {/* Group Info Panel (Desktop only) */}
               {isGroupSelected && (
                 <div
-                  className={`absolute top-0 right-0 h-full w-96 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl border-l border-gray-200/50 dark:border-gray-700/50 transform transition-all duration-500 ease-in-out z-20 ${
-                    showGroupInfo
-                      ? "translate-x-0 opacity-100"
-                      : "translate-x-full opacity-0 pointer-events-none"
-                  }`}
+                  className={`absolute top-0 right-0 h-full w-96 bg-white/95 dark:bg-gray-900/95 
+                  backdrop-blur-xl shadow-2xl border-l border-gray-200/50 dark:border-gray-700/50 
+                  transform transition-all duration-500 ease-in-out z-20 
+                  ${showGroupInfo ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"}`}
                 >
                   <div className="absolute top-4 left-4 z-30">
                     <button
@@ -144,7 +146,7 @@ const ChatPage = ({ currentUser }) => {
               )}
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 space-y-6 p-4 z-10 relative">
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 space-y-6 p-4">
               <div className="w-32 h-32 bg-gradient-to-r from-indigo-400 to-purple-500 rounded-full flex items-center justify-center shadow-2xl">
                 <div className="text-4xl">💬</div>
               </div>
@@ -152,9 +154,7 @@ const ChatPage = ({ currentUser }) => {
                 <h3 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                   Welcome to Chat
                 </h3>
-                <p className="text-lg opacity-75">
-                  Select a friend or group to start chatting
-                </p>
+                <p className="text-lg opacity-75">Select a friend or group to start chatting</p>
               </div>
             </div>
           )}
