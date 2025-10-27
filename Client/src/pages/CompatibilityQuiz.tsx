@@ -63,7 +63,7 @@ const ADVANCED_COMPATIBILITY_GAME = {
             { text: "Analyze it logically and make a plan", value: "analytical" },
             { text: "Follow your intuition and gut feeling", value: "intuitive" },
             { text: "Ask others for advice and opinions", value: "collaborative" },
-            { text: "Take immediate action and figure it out", value: "spontaneous" }
+            { text: "Take immediate action ad figure it out", value: "spontaneous" }
           ]
         },
         {
