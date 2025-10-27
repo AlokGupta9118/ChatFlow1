@@ -165,7 +165,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
 
       const endpoint = isGroup
         ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/sendGroupmessages`
-        : "${import.meta.env.VITE_API_URL}/chatroom/messages/send";
+        : `${import.meta.env.VITE_API_URL}/chatroom/messages/send`;
 
       const res = await axios.post(endpoint, msgData, {
         headers: { Authorization: `Bearer ${token}` },
