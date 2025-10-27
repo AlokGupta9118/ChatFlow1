@@ -22,7 +22,7 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
     const token = getToken();
     if (!token) return;
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/friends", {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/friends`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setFriends(res.data.friends || []);
@@ -36,7 +36,7 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
     const token = getToken();
     if (!token) return;
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/chatroom/mygroups", {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/chatroom/mygroups`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const safeGroups = (res.data.groups || []).filter(

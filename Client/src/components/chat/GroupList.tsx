@@ -30,7 +30,7 @@ const GroupList = ({ currentUser, onEnterGroup }) => {
   // Fetch all groups
   const fetchGroups = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/chatroom/getallgroups", {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/chatroom/getallgroups`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setGroups(res.data.groups);
