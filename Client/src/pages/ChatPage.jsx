@@ -4,19 +4,22 @@ import ChatWindow from "../components/chat/ChatWindow";
 import GroupChatAdminPanel from "../components/chat/GroupChatAdminPanel";
 import GroupChatSidebar from "../components/chat/GroupChatSidebar";
 import ChatSidebar from "../components/chat/ChatSidebar";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Menu } from "lucide-react";
 
 const ChatPage = ({ currentUser }) => {
   const [selectedChat, setSelectedChat] = useState(null);
   const [isGroupView, setIsGroupView] = useState(false);
   const [isGroupSelected, setIsGroupSelected] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
   const handleSelectChat = (chat, isGroup = false) => {
     console.log("Selected chat:", { chat, isGroup });
     setSelectedChat(chat);
     setIsGroupSelected(isGroup);
     setShowGroupInfo(false);
+    // Auto-close mobile sidebar when a chat is selected
+    setShowMobileSidebar(false);
   };
 
   const handleBackToList = () => {
@@ -24,20 +27,47 @@ const ChatPage = ({ currentUser }) => {
     setIsGroupSelected(false);
   };
 
+  const toggleMobileSidebar = () => {
+    setShowMobileSidebar(!showMobileSidebar);
+  };
+
   return (
     <div className="h-screen w-full flex overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-black text-gray-900 dark:text-gray-200">
-      {/* Sidebar - Hidden on mobile when chat is selected */}
-      <div className={`hidden lg:block ${selectedChat ? 'lg:flex' : 'flex'}`}>
+      {/* Sidebar - Always present but conditionally shown on mobile */}
+      <div className={`
+        ${showMobileSidebar ? 'flex absolute inset-0 z-30' : 'hidden'} 
+        lg:flex lg:static
+      `}>
         <ChatSidebar />
+        {/* Mobile overlay to close sidebar */}
+        {showMobileSidebar && (
+          <div 
+            className="lg:hidden fixed inset-0 bg-black/50 z-20"
+            onClick={() => setShowMobileSidebar(false)}
+          />
+        )}
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <header className="flex-shrink-0 bg-white/20 dark:bg-gray-900/40 backdrop-blur-2xl border-b border-gray-200/10 dark:border-gray-800/40 shadow-sm flex items-center justify-center px-4 py-3 lg:pl-24">
-          <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent select-none">
+        {/* Header with hamburger menu */}
+        <header className="flex-shrink-0 bg-white/20 dark:bg-gray-900/40 backdrop-blur-2xl border-b border-gray-200/10 dark:border-gray-800/40 shadow-sm flex items-center justify-between px-4 py-3 lg:pl-24">
+          {/* Hamburger menu for mobile */}
+          <button
+            onClick={toggleMobileSidebar}
+            className="lg:hidden w-10 h-10 rounded-full flex items-center justify-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition active:scale-95"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            <Menu className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+          </button>
+          
+          {/* Center title */}
+          <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent select-none flex-1 text-center lg:text-left lg:pl-8">
             FlowLink Chat
           </h1>
+          
+          {/* Spacer for mobile to balance the hamburger menu */}
+          <div className="lg:hidden w-10 h-10" />
         </header>
 
         {/* Content Area */}
@@ -100,6 +130,15 @@ const ChatPage = ({ currentUser }) => {
                 <h3 className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent truncate flex-1">
                   {selectedChat?.name}
                 </h3>
+                
+                {/* Mobile hamburger in chat view */}
+                <button
+                  onClick={toggleMobileSidebar}
+                  className="lg:hidden w-9 h-9 rounded-full flex items-center justify-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition active:scale-95"
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                >
+                  <Menu className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+                </button>
               </div>
 
               {/* Chat Window */}
@@ -148,6 +187,14 @@ const ChatPage = ({ currentUser }) => {
           )}
         </div>
       </div>
+
+      {/* Mobile sidebar backdrop */}
+      {showMobileSidebar && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-20"
+          onClick={() => setShowMobileSidebar(false)}
+        />
+      )}
     </div>
   );
 };
