@@ -95,6 +95,13 @@ export default function TruthOrDare({ currentUser }) {
     }
   }, [chatMessages]);
 
+  // NEW: Automatically set prompt type based on selected player's choice
+  useEffect(() => {
+    if (truthDareChoice && selectedPlayer !== localName) {
+      setPromptType(truthDareChoice.choice.toLowerCase());
+    }
+  }, [truthDareChoice, selectedPlayer, localName]);
+
   // Sound effects
   const playSound = (soundName) => {
     if (!gameSettings.soundEnabled) return;
@@ -238,6 +245,18 @@ export default function TruthOrDare({ currentUser }) {
           timesSelected: (prev[player.name]?.timesSelected || 0) + 1
         }
       }));
+    });
+
+    // 🔥 NEW: Truth completion handler - shows to everyone
+    sock.on("truth-completed", ({ player, completionText }) => {
+      console.log("✅ Truth completed by:", player, completionText);
+      addToast(`${player} completed their truth!`, 3000, "success");
+      
+      // Show the truth completion to everyone
+      if (player === selectedPlayer) {
+        setTruthCompletionText(completionText);
+        setProofUploaded(true);
+      }
     });
 
     // 🔥 CHAT SOCKET HANDLERS
@@ -447,16 +466,13 @@ export default function TruthOrDare({ currentUser }) {
     });
   };
 
-  // NEW: Submit truth completion
+  // NEW: Submit truth completion - FIXED to broadcast to everyone
   const submitTruthCompletion = () => {
     if (!truthCompletionText.trim()) {
       addToast("Please write your truth completion message", 3000, "error");
       return;
     }
 
-    setProofUploaded(true);
-    addToast("Truth completion submitted!", 2000, "success");
-    
     if (socket) {
       socket.emit("truth-completed", { 
         roomId, 
@@ -464,6 +480,9 @@ export default function TruthOrDare({ currentUser }) {
         completionText: truthCompletionText 
       });
     }
+    
+    // Don't set proofUploaded locally - wait for server broadcast
+    addToast("Truth completion submitted!", 2000, "success");
   };
 
   // Achievement system
@@ -556,6 +575,13 @@ export default function TruthOrDare({ currentUser }) {
   // 🎭 Send prompt - FIXED: Send correct prompt type
   const sendPrompt = () => {
     if (!socket || !promptText.trim()) return;
+    
+    // Check if we're sending the correct type based on player's choice
+    if (truthDareChoice && promptType !== truthDareChoice.choice.toLowerCase()) {
+      addToast(`You can only send ${truthDareChoice.choice.toLowerCase()} prompts for ${selectedPlayer}`, 3000, "error");
+      return;
+    }
+    
     socket.emit("send-prompt", { 
       roomId, 
       prompt: promptText, 
@@ -1328,14 +1354,34 @@ export default function TruthOrDare({ currentUser }) {
                         </Card>
                       )}
 
-                      {/* Truth Completion Section - TEXT INPUT FOR TRUTH */}
-                      {selectedPlayer === localName && chosenPrompt && !shouldRequireProof && (
+                      {/* FIXED: Truth Completion Section - Shows to everyone */}
+                      {chosenPrompt && !shouldRequireProof && (
                         <Card className="p-4 md:p-6 bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200">
                           <h4 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4 text-center">
-                            💬 Complete Your Truth
+                            💬 Truth Completion
                           </h4>
                           <div className="text-center space-y-3 md:space-y-4">
-                            {!proofUploaded ? (
+                            {proofUploaded ? (
+                              <>
+                                <div className="text-green-600 font-semibold mb-3 md:mb-4 text-sm md:text-base">
+                                  ✅ {selectedPlayer} completed their truth!
+                                </div>
+                                <Card className="p-3 md:p-4 bg-white border border-gray-200 text-left">
+                                  <div className="flex items-center space-x-2 mb-2">
+                                    <Avatar className="w-6 h-6">
+                                      <AvatarFallback className="bg-purple-500 text-white text-xs">
+                                        {selectedPlayer.charAt(0).toUpperCase()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span className="font-semibold text-gray-900">{selectedPlayer}:</span>
+                                  </div>
+                                  <p className="text-gray-900 text-sm md:text-base pl-8">{truthCompletionText}</p>
+                                </Card>
+                                <p className="text-xs md:text-sm text-gray-600 mt-2">
+                                  {isHost ? "You can start the next round!" : "Waiting for host to start next round..."}
+                                </p>
+                              </>
+                            ) : selectedPlayer === localName ? (
                               <>
                                 <p className="text-gray-600 mb-3 md:mb-4 text-sm md:text-base">
                                   Share your truth completion message:
@@ -1357,46 +1403,57 @@ export default function TruthOrDare({ currentUser }) {
                                 </div>
                               </>
                             ) : (
-                              <>
-                                <div className="text-green-600 font-semibold mb-3 md:mb-4 text-sm md:text-base">
-                                  ✅ Truth completed successfully!
-                                </div>
-                                <Card className="p-3 md:p-4 bg-white border border-gray-200 text-left">
-                                  <p className="text-gray-900 text-sm md:text-base">{truthCompletionText}</p>
-                                </Card>
-                                <p className="text-xs md:text-sm text-gray-600 mt-2">
-                                  Waiting for host to start next round...
-                                </p>
-                              </>
+                              <div className="text-yellow-600 font-semibold text-sm md:text-base">
+                                ⏳ Waiting for {selectedPlayer} to complete their truth...
+                              </div>
                             )}
                           </div>
                         </Card>
                       )}
 
-                      {/* Prompt Input */}
-                      {selectedPlayer !== localName && !chosenPrompt && (
+                      {/* FIXED: Prompt Input - Only shows correct type based on player's choice */}
+                      {selectedPlayer !== localName && !chosenPrompt && truthDareChoice && (
                         <Card className="p-4 md:p-6 bg-gray-50 border-2 border-gray-200">
                           <Tabs value={promptType} onValueChange={setPromptType} className="w-full">
                             <TabsList className="grid w-full grid-cols-2 mb-3 md:mb-4">
-                              <TabsTrigger value="truth" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-xs md:text-sm">
+                              <TabsTrigger 
+                                value="truth" 
+                                className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-xs md:text-sm"
+                                disabled={truthDareChoice.choice !== "Truth"}
+                              >
                                 💬 Truth
                               </TabsTrigger>
-                              <TabsTrigger value="dare" className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-xs md:text-sm">
+                              <TabsTrigger 
+                                value="dare" 
+                                className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-xs md:text-sm"
+                                disabled={truthDareChoice.choice !== "Dare"}
+                              >
                                 ⚡ Dare
                               </TabsTrigger>
                             </TabsList>
+                            
+                            {/* Show message if trying to send wrong type */}
+                            {promptType !== truthDareChoice.choice.toLowerCase() && (
+                              <div className="text-center p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-3">
+                                <p className="text-yellow-800 text-sm">
+                                  {selectedPlayer} chose <strong>{truthDareChoice.choice}</strong>. 
+                                  Please send a {truthDareChoice.choice.toLowerCase()} prompt.
+                                </p>
+                              </div>
+                            )}
+                            
                             <TabsContent value={promptType} className="space-y-3 md:space-y-4">
                               <div className="flex gap-2 md:gap-3">
                                 <Input 
                                   value={promptText} 
                                   onChange={(e) => setPromptText(e.target.value)}
-                                  placeholder={`Write a ${promptType} for ${selectedPlayer}...`}
+                                  placeholder={`Write a ${truthDareChoice.choice.toLowerCase()} for ${selectedPlayer}...`}
                                   className="flex-1 text-sm md:text-lg py-2 md:py-3"
                                   onKeyPress={(e) => e.key === 'Enter' && sendPrompt()}
                                 />
                                 <Button 
                                   onClick={sendPrompt} 
-                                  disabled={!promptText.trim()}
+                                  disabled={!promptText.trim() || promptType !== truthDareChoice.choice.toLowerCase()}
                                   className={`py-2 md:py-3 px-3 md:px-6 text-sm md:text-base ${
                                     promptType === "truth" 
                                       ? "bg-purple-600 hover:bg-purple-700" 
@@ -1406,6 +1463,11 @@ export default function TruthOrDare({ currentUser }) {
                                   Send
                                 </Button>
                               </div>
+                              {promptType !== truthDareChoice.choice.toLowerCase() && (
+                                <p className="text-red-500 text-sm text-center">
+                                  ❌ You can only send {truthDareChoice.choice.toLowerCase()} prompts for {selectedPlayer}
+                                </p>
+                              )}
                             </TabsContent>
                           </Tabs>
                         </Card>
