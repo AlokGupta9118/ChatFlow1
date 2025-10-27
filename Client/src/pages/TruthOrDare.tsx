@@ -14,7 +14,7 @@ import {
   Gamepad2, Camera, X, Ban, MessageCircle, Send, Smile, Paperclip 
 } from "lucide-react";
 
-const DEFAULT_SOCKET_URL = "${import.meta.env.VITE_API_URL}";
+const DEFAULT_SOCKET_URL = `${import.meta.env.VITE_API_URL}`;
 
 export default function TruthOrDare({ currentUser }) {
   const params = useParams();
