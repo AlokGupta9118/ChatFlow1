@@ -970,7 +970,7 @@ export default function EnhancedCompatibilityGame() {
         <div className="absolute top-4 left-4">
           <Button
             variant="outline"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/Games')}
             className="bg-white/10 border-white/20 text-white hover:bg-white/20"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1422,6 +1422,17 @@ export default function EnhancedCompatibilityGame() {
 
   // FIXED: Join/Create Screen Component with better input handling and mobile keyboard support
   const JoinCreateScreen = () => {
+    // FIXED: Proper input change handlers for mobile
+    const handlePlayerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setPlayerName(value);
+    };
+
+    const handleRoomIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value.toUpperCase();
+      setRoomId(value);
+    };
+
     return (
       <div 
         ref={mainContainerRef}
@@ -1466,11 +1477,8 @@ export default function EnhancedCompatibilityGame() {
                 ref={playerNameInputRef}
                 placeholder="Enter your name"
                 value={playerName}
-                onChange={(e) => {
-                  console.log("Setting player name:", e.target.value);
-                  setPlayerName(e.target.value);
-                }}
-                autoComplete="off"
+                onChange={handlePlayerNameChange}
+                autoComplete="name"
                 className="bg-white/10 border-white/20 text-white placeholder-white/50 text-sm md:text-base"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
@@ -1493,7 +1501,7 @@ export default function EnhancedCompatibilityGame() {
                 ref={roomIdInputRef}
                 placeholder="Enter room code to join"
                 value={roomId}
-                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                onChange={handleRoomIdChange}
                 className="bg-white/10 border-white/20 text-white placeholder-white/50 text-sm md:text-base"
                 autoComplete="off"
                 onKeyDown={(e) => {
