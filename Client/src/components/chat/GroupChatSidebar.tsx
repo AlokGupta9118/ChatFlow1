@@ -91,15 +91,24 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
     }
   };
 
+  // FIXED: This function now properly handles group selection
   const handleGroupClick = (group) => {
+    console.log("Group clicked:", group); // Debug log
     const isMember = group?.participants?.some(
       (p) => String(p.user._id) === String(userId)
     );
+    
     if (!isMember) {
       toast.error("You must join this group to view messages");
       return;
     }
-    onSelectGroup(group);
+    
+    // FIX: Call the prop function directly with the group
+    if (onSelectGroup) {
+      onSelectGroup(group);
+    } else {
+      console.error("onSelectGroup prop is not defined");
+    }
   };
 
   useEffect(() => {
@@ -183,15 +192,15 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
                   className="group relative"
                 >
                   <div
-                    className={`flex items-center justify-between p-4 rounded-2xl backdrop-blur-sm border transition-all duration-300 cursor-pointer ${
+                    className={`flex items-center justify-between p-4 rounded-2xl backdrop-blur-sm border transition-all duration-300 ${
                       isMember
-                        ? "bg-white/70 dark:bg-gray-800/70 border-gray-200/50 dark:border-gray-700/50 hover:bg-white/90 dark:hover:bg-gray-800/90 hover:shadow-lg hover:scale-105"
-                        : "bg-gray-100/50 dark:bg-gray-800/50 border-gray-200/30 dark:border-gray-700/30"
+                        ? "bg-white/70 dark:bg-gray-800/70 border-gray-200/50 dark:border-gray-700/50 hover:bg-white/90 dark:hover:bg-gray-800/90 hover:shadow-lg hover:scale-105 cursor-pointer"
+                        : "bg-gray-100/50 dark:bg-gray-800/50 border-gray-200/30 dark:border-gray-700/30 cursor-not-allowed"
                     }`}
+                    onClick={() => isMember && handleGroupClick(group)}
                   >
                     <div
                       className="flex items-center gap-4 flex-1"
-                      onClick={() => isMember && handleGroupClick(group)}
                     >
                       <div className="relative">
                         <img
@@ -228,7 +237,10 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={() => handleRequestJoin(group._id)}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent triggering the group click
+                          handleRequestJoin(group._id);
+                        }}
                         className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-green-500/25 transition-all duration-200"
                       >
                         Join
