@@ -1,90 +1,152 @@
-import React, { useState, useEffect } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import ChatSidebar from "./ChatSidebar";
-import ChatWindow from "./ChatWindow";
+import { useState } from "react";
+import ChatList from "../components/chat/ChatList";
+import ChatSidebar from "../components/chat/ChatSidebar";
+import ChatWindow from "../components/chat/ChatWindow";
+import GroupChatAdminPanel from "../components/chat/GroupChatAdminPanel";
+import GroupChatSidebar from "../components/chat/GroupChatSidebar";
 
-const ChatPage = () => {
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+const ChatPage = ({ currentUser }) => {
+  const [selectedChat, setSelectedChat] = useState(null);
+  const [isGroupView, setIsGroupView] = useState(false);
+  const [isGroupSelected, setIsGroupSelected] = useState(false);
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
 
-  // Lock body scroll when sidebar is open (mobile)
-  useEffect(() => {
-    document.body.style.overflow = isMobileOpen ? "hidden" : "auto";
-  }, [isMobileOpen]);
+  const handleSelectChat = (friend, group, groupFlag) => {
+    setSelectedChat(groupFlag ? group : friend);
+    setIsGroupSelected(groupFlag);
+    setShowGroupInfo(false);
+  };
+
+  const handleSelectGroupFromSidebar = (group) => {
+    setSelectedChat(group);
+    setIsGroupSelected(true);
+    setShowGroupInfo(false);
+  };
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-950 dark:to-black text-gray-900 dark:text-gray-200">
-      
-      {/* === Desktop Sidebar === */}
-      <div className="hidden lg:block fixed top-0 left-0 h-full w-20 z-30 bg-gray-900/90 backdrop-blur-md">
-        <ChatSidebar />
-      </div>
+      {/* Global reset */}
+      <style jsx global>{`
+        body {
+          margin: 0;
+          padding: 0;
+          overflow-x: hidden;
+        }
+      `}</style>
 
-      {/* === Mobile Sidebar Overlay === */}
-      <AnimatePresence>
-        {isMobileOpen && (
-          <>
-            {/* Dark backdrop */}
-            <motion.div
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
-              onClick={() => setIsMobileOpen(false)}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            />
-            {/* Sidebar sliding in */}
-            <motion.div
-              className="fixed top-0 left-0 h-full w-72 bg-gray-900 text-white shadow-xl z-50"
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            >
-              <ChatSidebar closeSidebar={() => setIsMobileOpen(false)} />
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {/* ✅ Responsive sidebar (Desktop fixed + Mobile toggle built-in) */}
+      <ChatSidebar />
 
-      {/* === Main Chat Area === */}
+      {/* ✅ Main layout */}
       <div className="flex h-screen lg:pl-20 overflow-hidden">
-        {/* === Chat List Panel === */}
-        <div className="w-80 border-r border-gray-200/50 dark:border-gray-800/50 bg-white/60 dark:bg-gray-900/70 backdrop-blur-xl flex flex-col shadow-lg z-10 flex-shrink-0 h-full">
-          <div className="flex justify-between items-center p-4">
-            <h2 className="text-xl font-semibold text-purple-600 dark:text-purple-400">
-              Messages
-            </h2>
-            {/* Mobile menu button */}
+        {/* Left panel (Chats / Groups) */}
+        <div className="w-80 border-r border-gray-200/50 dark:border-gray-800/50 bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl flex flex-col shadow-lg z-10 flex-shrink-0 h-full">
+          {/* Chat / Group Switch */}
+          <div className="flex justify-around items-center p-4 border-b border-gray-200/50 dark:border-gray-800/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md flex-shrink-0">
             <button
-              className="lg:hidden text-gray-800 dark:text-gray-200 p-2 rounded-md hover:bg-gray-200/20"
-              onClick={() => setIsMobileOpen(true)}
+              onClick={() => setIsGroupView(false)}
+              className={`relative px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                !isGroupView
+                  ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/25"
+                  : "text-gray-600 dark:text-gray-300 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:scale-105"
+              }`}
             >
-              ☰
+              {!isGroupView && (
+                <span className="absolute inset-0 bg-white/20 rounded-xl animate-pulse"></span>
+              )}
+              Chats
+            </button>
+            <button
+              onClick={() => setIsGroupView(true)}
+              className={`relative px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                isGroupView
+                  ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/25"
+                  : "text-gray-600 dark:text-gray-300 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:scale-105"
+              }`}
+            >
+              {isGroupView && (
+                <span className="absolute inset-0 bg-white/20 rounded-xl animate-pulse"></span>
+              )}
+              Groups
             </button>
           </div>
 
-          {/* Scrollable Chat List */}
-          <div className="overflow-y-auto flex-1 px-3 pb-4 space-y-3">
-            {/* Example chat items */}
-            {["AlokSingh", "Ansh Verma", "NewGroup1", "SpiderMan", "Alok's Room"].map((name, i) => (
-              <div
-                key={i}
-                className="bg-gray-200/70 dark:bg-gray-800/70 p-3 rounded-xl shadow-sm flex items-center justify-between"
-              >
-                <div>
-                  <p className="font-semibold">{name}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Online</p>
-                </div>
-                <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center">
-                  {name[0]}
-                </div>
-              </div>
-            ))}
+          {/* Sidebar List (Chats / Groups) */}
+          <div className="flex-1 overflow-hidden">
+            {isGroupView ? (
+              <GroupChatSidebar
+                currentUser={currentUser}
+                onSelectGroup={handleSelectGroupFromSidebar}
+              />
+            ) : (
+              <ChatList
+                currentUser={currentUser}
+                onSelectFriend={handleSelectChat}
+                selectedChat={selectedChat}
+                isGroupSelected={isGroupSelected}
+                viewGroups={isGroupView}
+              />
+            )}
           </div>
         </div>
 
-        {/* === Chat Window === */}
+        {/* ✅ Main chat area */}
         <div className="flex-1 flex flex-col bg-gradient-to-br from-white/40 via-blue-50/30 to-purple-50/20 dark:from-gray-900/40 dark:via-gray-800/30 dark:to-purple-900/20 backdrop-blur-sm overflow-hidden min-h-0 relative">
-          <ChatWindow />
+          {selectedChat ? (
+            <>
+              {/* Chat Window */}
+              <div className="flex-1 min-h-0 z-10 relative">
+                <ChatWindow
+                  currentUser={currentUser}
+                  selectedChat={selectedChat}
+                  isGroup={isGroupSelected}
+                  onToggleGroupInfo={() => setShowGroupInfo((prev) => !prev)}
+                />
+              </div>
+
+              {/* Group Info Panel */}
+              {isGroupSelected && (
+                <div
+                  className={`absolute top-0 right-0 h-full w-96 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl border-l border-gray-200/50 dark:border-gray-700/50 transform transition-all duration-500 ease-in-out z-20 ${
+                    showGroupInfo
+                      ? "translate-x-0 opacity-100"
+                      : "translate-x-full opacity-0 pointer-events-none"
+                  }`}
+                >
+                  <div className="absolute top-4 left-4 z-30">
+                    <button
+                      onClick={() => setShowGroupInfo(false)}
+                      className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center hover:scale-110 transition-transform shadow-md"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="h-full overflow-y-auto pt-4">
+                    <GroupChatAdminPanel
+                      group={selectedChat}
+                      currentUser={currentUser}
+                      refreshGroup={() => console.log("Reload group")}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            // Empty chat screen
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 space-y-6 p-4 z-10 relative">
+              <div className="w-32 h-32 bg-gradient-to-r from-indigo-400 to-purple-500 rounded-full flex items-center justify-center shadow-2xl">
+                <div className="text-4xl">💬</div>
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  Welcome to Chat
+                </h3>
+                <p className="text-lg opacity-75">
+                  Select a friend or group to start chatting
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

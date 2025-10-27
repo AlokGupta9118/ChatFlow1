@@ -1,4 +1,14 @@
-import { MessageCircle, Users, Clock, Settings, User, GamepadIcon, Plus, Menu, X } from "lucide-react";
+import {
+  MessageCircle,
+  Users,
+  Clock,
+  Settings,
+  User,
+  GamepadIcon,
+  Plus,
+  Menu,
+  X,
+} from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,14 +27,16 @@ const ChatSidebar = () => {
   const location = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Prevent scroll when mobile sidebar is open
+  // prevent background scroll when sidebar is open
   useEffect(() => {
     document.body.style.overflow = isMobileOpen ? "hidden" : "auto";
   }, [isMobileOpen]);
 
+  const closeSidebar = () => setIsMobileOpen(false);
+
   return (
     <>
-      {/* Mobile menu button */}
+      {/* ✅ Mobile menu button */}
       <button
         onClick={() => setIsMobileOpen(true)}
         className="lg:hidden fixed top-4 left-4 z-50 w-12 h-12 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg border border-gray-200/50 dark:border-gray-700/50"
@@ -32,7 +44,7 @@ const ChatSidebar = () => {
         <Menu className="w-6 h-6 text-gray-600 dark:text-gray-400" />
       </button>
 
-      {/* Desktop Sidebar */}
+      {/* ✅ Desktop Sidebar */}
       <div className="hidden lg:flex w-20 h-full bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-800/50 flex-col items-center py-6 gap-2 relative overflow-hidden shadow-xl">
         {/* Logo */}
         <motion.div
@@ -53,10 +65,11 @@ const ChatSidebar = () => {
                 key={item.name}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
+                transition={{ delay: index * 0.05 }}
               >
                 <Link
                   to={item.href}
+                  onClick={closeSidebar}
                   className={cn(
                     "relative w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 group",
                     isActive
@@ -67,7 +80,9 @@ const ChatSidebar = () => {
                   <item.icon
                     className={cn(
                       "w-6 h-6 transition-colors duration-300",
-                      isActive ? "text-white" : "text-gray-600 dark:text-gray-400 group-hover:text-indigo-500"
+                      isActive
+                        ? "text-white"
+                        : "text-gray-600 dark:text-gray-400 group-hover:text-indigo-500"
                     )}
                   />
                   {isActive && (
@@ -92,7 +107,7 @@ const ChatSidebar = () => {
         </motion.button>
       </div>
 
-      {/* Mobile Overlay */}
+      {/* ✅ Mobile Sidebar */}
       <AnimatePresence>
         {isMobileOpen && (
           <>
@@ -101,7 +116,7 @@ const ChatSidebar = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsMobileOpen(false)}
+              onClick={closeSidebar}
               className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
             />
 
@@ -113,6 +128,7 @@ const ChatSidebar = () => {
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
               className="lg:hidden fixed left-0 top-0 h-full w-80 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-800/50 flex flex-col py-6 gap-2 z-50 shadow-2xl"
             >
+              {/* Header */}
               <div className="flex items-center justify-between px-6 mb-6">
                 <motion.div
                   initial={{ scale: 0 }}
@@ -123,13 +139,14 @@ const ChatSidebar = () => {
                   <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
                 </motion.div>
                 <button
-                  onClick={() => setIsMobileOpen(false)}
+                  onClick={closeSidebar}
                   className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center hover:scale-105 transition-transform"
                 >
                   <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                 </button>
               </div>
 
+              {/* Navigation Links */}
               <nav className="flex-1 flex flex-col gap-3 px-4">
                 {navigation.map((item, index) => {
                   const isActive = location.pathname === item.href;
@@ -137,7 +154,7 @@ const ChatSidebar = () => {
                     <Link
                       key={item.name}
                       to={item.href}
-                      onClick={() => setIsMobileOpen(false)}
+                      onClick={closeSidebar}
                       className={cn(
                         "flex items-center gap-4 px-4 py-4 rounded-2xl transition-all duration-300",
                         isActive
@@ -164,6 +181,7 @@ const ChatSidebar = () => {
                 })}
               </nav>
 
+              {/* New Chat Button */}
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 className="mx-4 flex items-center gap-4 px-4 py-4 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-500 shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all duration-300"
