@@ -134,6 +134,10 @@ export default function EnhancedCompatibilityGame() {
     personalityTraits: [] as string[]
   });
 
+  // Mobile keyboard states
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
+
   // Screenshot sharing states
   const [isCapturing, setIsCapturing] = useState(false);
   const [shareSuccess, setShareSuccess] = useState(false);
@@ -148,6 +152,58 @@ export default function EnhancedCompatibilityGame() {
   const confettiRef = useRef<any>(null);
   const submitTimeoutRef = useRef<NodeJS.Timeout>();
   const screenshotRef = useRef<HTMLDivElement>(null);
+  const mainContainerRef = useRef<HTMLDivElement>(null);
+
+  // FIXED: Mobile keyboard detection
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobile = window.innerWidth < 768;
+      const viewportHeight = window.innerHeight;
+      const screenHeight = window.screen.height;
+      
+      // If viewport is significantly smaller than screen, keyboard is likely open
+      if (isMobile && viewportHeight < screenHeight * 0.7) {
+        setKeyboardVisible(true);
+      } else {
+        setKeyboardVisible(false);
+      }
+    };
+
+    const handleFocusIn = (e: FocusEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        setInputFocused(true);
+        // Scroll input into view on mobile
+        setTimeout(() => {
+          e.target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+      }
+    };
+
+    const handleFocusOut = () => {
+      setInputFocused(false);
+      // Small delay to ensure keyboard is fully hidden
+      setTimeout(() => setKeyboardVisible(false), 100);
+    };
+
+    window.addEventListener('resize', handleResize);
+    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
+    };
+  }, []);
+
+  // FIXED: Adjust layout when keyboard is visible
+  useEffect(() => {
+    if (mainContainerRef.current && keyboardVisible) {
+      mainContainerRef.current.style.paddingBottom = '200px';
+    } else if (mainContainerRef.current) {
+      mainContainerRef.current.style.paddingBottom = '0';
+    }
+  }, [keyboardVisible]);
 
   // FIXED: Enhanced sound effects with error handling
   const playSound = (soundName: string) => {
@@ -1364,17 +1420,22 @@ export default function EnhancedCompatibilityGame() {
     );
   };
 
-  // FIXED: Join/Create Screen Component with better input handling
+  // FIXED: Join/Create Screen Component with better input handling and mobile keyboard support
   const JoinCreateScreen = () => {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6">
+      <div 
+        ref={mainContainerRef}
+        className={`min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6 transition-all duration-300 ${
+          keyboardVisible ? 'pb-40' : ''
+        }`}
+      >
         <ConnectionStatus />
         
         {/* Back Button */}
-        <div className="absolute top-4 left-4">
+        <div className="absolute top-4 left-4 z-10">
           <Button
             variant="outline"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/Games')}
             className="bg-white/10 border-white/20 text-white hover:bg-white/20"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1382,7 +1443,7 @@ export default function EnhancedCompatibilityGame() {
           </Button>
         </div>
         
-        <Card className="p-6 md:p-8 max-w-md w-full bg-white/10 backdrop-blur-sm border-white/20 text-center">
+        <Card className="p-6 md:p-8 max-w-md w-full bg-white/10 backdrop-blur-sm border-white/20 text-center relative">
           <div className="flex justify-center mb-4 md:mb-6">
             <div className="relative">
               <Heart className="w-12 h-12 md:w-16 md:h-16 text-pink-400" />
@@ -1418,6 +1479,8 @@ export default function EnhancedCompatibilityGame() {
                     createRoom();
                   }
                 }}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
               />
             </div>
             
@@ -1438,6 +1501,8 @@ export default function EnhancedCompatibilityGame() {
                     joinRoom();
                   }
                 }}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
               />
             </div>
           </div>
