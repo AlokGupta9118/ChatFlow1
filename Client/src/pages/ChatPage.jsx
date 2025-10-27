@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import ChatList from "../components/chat/ChatList";
 import ChatWindow from "../components/chat/ChatWindow";
 import GroupChatAdminPanel from "../components/chat/GroupChatAdminPanel";
@@ -12,13 +12,13 @@ const ChatPage = ({ currentUser }) => {
   const [isGroupSelected, setIsGroupSelected] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const hamburgerRef = useRef(null);
 
   const handleSelectChat = (chat, isGroup = false) => {
     console.log("Selected chat:", { chat, isGroup });
     setSelectedChat(chat);
     setIsGroupSelected(isGroup);
     setShowGroupInfo(false);
-    // Auto-close mobile sidebar when a chat is selected
     setShowMobileSidebar(false);
   };
 
@@ -27,36 +27,87 @@ const ChatPage = ({ currentUser }) => {
     setIsGroupSelected(false);
   };
 
-  const toggleMobileSidebar = () => {
+  // Proper mobile touch handler
+  const toggleMobileSidebar = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setShowMobileSidebar(!showMobileSidebar);
   };
 
+  // Close sidebar when clicking outside on mobile
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showMobileSidebar && !event.target.closest('.sidebar-container') && !event.target.closest('.hamburger-button')) {
+        setShowMobileSidebar(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showMobileSidebar]);
+
+  // Prevent zoom on double tap
+  useEffect(() => {
+    const preventDoubleTapZoom = (e) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('touchstart', preventDoubleTapZoom, { passive: false });
+    
+    return () => {
+      document.removeEventListener('touchstart', preventDoubleTapZoom);
+    };
+  }, []);
+
   return (
     <div className="h-screen w-full flex overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-black text-gray-900 dark:text-gray-200">
-      {/* Sidebar - Always present but conditionally shown on mobile */}
+      {/* Sidebar - Mobile overlay */}
       <div className={`
-        ${showMobileSidebar ? 'flex absolute inset-0 z-30' : 'hidden'} 
-        lg:flex lg:static
+        sidebar-container
+        ${showMobileSidebar 
+          ? 'fixed inset-0 z-30 transform translate-x-0' 
+          : 'fixed inset-0 z-30 transform -translate-x-full'
+        } 
+        lg:relative lg:translate-x-0 lg:flex lg:z-0
+        transition-transform duration-300 ease-in-out
       `}>
-        <ChatSidebar />
-        {/* Mobile overlay to close sidebar */}
+        <div className="w-80 h-full bg-white dark:bg-gray-900 shadow-xl lg:shadow-none">
+          <ChatSidebar />
+        </div>
+        
+        {/* Mobile close area */}
         {showMobileSidebar && (
           <div 
-            className="lg:hidden fixed inset-0 bg-black/50 z-20"
+            className="lg:hidden flex-1 bg-black/30"
             onClick={() => setShowMobileSidebar(false)}
           />
         )}
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header with hamburger menu */}
-        <header className="flex-shrink-0 bg-white/20 dark:bg-gray-900/40 backdrop-blur-2xl border-b border-gray-200/10 dark:border-gray-800/40 shadow-sm flex items-center justify-between px-4 py-3 lg:pl-24">
+        <header className="flex-shrink-0 bg-white/20 dark:bg-gray-900/40 backdrop-blur-2xl border-b border-gray-200/10 dark:border-gray-800/40 shadow-sm flex items-center justify-between px-4 py-3">
           {/* Hamburger menu for mobile */}
           <button
+            ref={hamburgerRef}
             onClick={toggleMobileSidebar}
-            className="lg:hidden w-10 h-10 rounded-full flex items-center justify-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition active:scale-95"
-            style={{ WebkitTapHighlightColor: 'transparent' }}
+            onTouchStart={toggleMobileSidebar}
+            className="hamburger-button lg:hidden w-10 h-10 rounded-full flex items-center justify-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition active:scale-95 active:bg-indigo-100 dark:active:bg-indigo-900/30"
+            style={{ 
+              WebkitTapHighlightColor: 'transparent',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
+            }}
           >
             <Menu className="w-5 h-5 text-gray-700 dark:text-gray-300" />
           </button>
@@ -83,7 +134,10 @@ const ChatPage = ({ currentUser }) => {
                       ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg"
                       : "text-gray-600 dark:text-gray-300 hover:bg-gray-200/30 dark:hover:bg-gray-700/40"
                   }`}
-                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                  style={{ 
+                    WebkitTapHighlightColor: 'transparent',
+                    WebkitUserSelect: 'none'
+                  }}
                 >
                   Chats
                 </button>
@@ -94,7 +148,10 @@ const ChatPage = ({ currentUser }) => {
                       ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg"
                       : "text-gray-600 dark:text-gray-300 hover:bg-gray-200/30 dark:hover:bg-gray-700/40"
                   }`}
-                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                  style={{ 
+                    WebkitTapHighlightColor: 'transparent',
+                    WebkitUserSelect: 'none'
+                  }}
                 >
                   Groups
                 </button>
@@ -123,7 +180,10 @@ const ChatPage = ({ currentUser }) => {
                 <button
                   onClick={handleBackToList}
                   className="w-9 h-9 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition active:scale-95"
-                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                  style={{ 
+                    WebkitTapHighlightColor: 'transparent',
+                    WebkitUserSelect: 'none'
+                  }}
                 >
                   <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                 </button>
@@ -134,8 +194,13 @@ const ChatPage = ({ currentUser }) => {
                 {/* Mobile hamburger in chat view */}
                 <button
                   onClick={toggleMobileSidebar}
-                  className="lg:hidden w-9 h-9 rounded-full flex items-center justify-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition active:scale-95"
-                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                  onTouchStart={toggleMobileSidebar}
+                  className="hamburger-button lg:hidden w-9 h-9 rounded-full flex items-center justify-center bg-white/50 dark:bg-gray-800/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition active:scale-95 active:bg-indigo-100 dark:active:bg-indigo-900/30"
+                  style={{ 
+                    WebkitTapHighlightColor: 'transparent',
+                    WebkitUserSelect: 'none',
+                    WebkitTouchCallout: 'none',
+                  }}
                 >
                   <Menu className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                 </button>
@@ -187,14 +252,6 @@ const ChatPage = ({ currentUser }) => {
           )}
         </div>
       </div>
-
-      {/* Mobile sidebar backdrop */}
-      {showMobileSidebar && (
-        <div 
-          className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-20"
-          onClick={() => setShowMobileSidebar(false)}
-        />
-      )}
     </div>
   );
 };
