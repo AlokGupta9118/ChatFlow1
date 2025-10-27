@@ -10,7 +10,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   ArrowLeft, Users, Crown, Target, Timer, Sparkles, 
-  Volume2, VolumeX, Gamepad2, RefreshCw, MessageCircle, Send
+  Volume2, VolumeX, Gamepad2, RefreshCw, MessageCircle, Send,
+  ChevronDown, ChevronUp
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -85,20 +86,21 @@ const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
   }, []);
 
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-2 p-2 bg-white/95">
       <Input
         ref={inputRef}
         value={inputValue}
         onChange={handleChange}
         onKeyPress={handleKeyPress}
         placeholder="Type a message..."
-        className="flex-1"
+        className="flex-1 bg-white border-gray-300"
         disabled={disabled}
       />
       <Button
         onClick={handleSubmit}
         disabled={!inputValue.trim() || disabled}
-        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white"
+        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white flex-shrink-0"
+        size="sm"
       >
         <Send className="w-4 h-4" />
       </Button>
@@ -131,11 +133,11 @@ const ChatPanel = React.memo(({
   }, [chatMessages]);
 
   return (
-    <Card className="h-[500px] flex flex-col bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
-      <div className="p-4 border-b border-gray-200">
+    <Card className="h-full flex flex-col bg-white/95 backdrop-blur-sm shadow-xl rounded-xl border border-gray-200">
+      <div className="p-3 border-b border-gray-200 bg-white/80">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-            <MessageCircle className="w-5 h-5 mr-2 text-blue-600" />
+          <h3 className="text-base font-semibold text-gray-900 flex items-center">
+            <MessageCircle className="w-4 h-4 mr-2 text-blue-600" />
             Game Chat
           </h3>
           <Badge variant="outline" className="text-xs">
@@ -145,7 +147,7 @@ const ChatPanel = React.memo(({
         
         {/* Typing indicators */}
         {typingUsers.size > 0 && (
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-gray-500 mt-1 truncate">
             {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
           </div>
         )}
@@ -153,13 +155,13 @@ const ChatPanel = React.memo(({
 
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3"
+        className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0"
       >
         {chatMessages.length === 0 ? (
-          <div className="text-center text-gray-500 mt-8">
-            <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>No messages yet</p>
-            <p className="text-sm">Start the conversation!</p>
+          <div className="text-center text-gray-500 py-8">
+            <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No messages yet</p>
+            <p className="text-xs">Start the conversation!</p>
           </div>
         ) : (
           chatMessages.map((message) => (
@@ -168,7 +170,7 @@ const ChatPanel = React.memo(({
               className={`flex ${message.sender === playerName ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[80%] rounded-2xl p-3 ${
+                className={`max-w-[85%] rounded-xl p-2 ${
                   message.sender === playerName
                     ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-md'
                     : 'bg-gray-100 text-gray-900 rounded-bl-md'
@@ -179,7 +181,7 @@ const ChatPanel = React.memo(({
                     {message.sender}
                   </div>
                 )}
-                <div className="text-sm">{message.content}</div>
+                <div className="text-sm break-words">{message.content}</div>
                 <div className={`text-xs mt-1 ${
                   message.sender === playerName ? 'text-blue-100' : 'text-gray-500'
                 }`}>
@@ -191,7 +193,7 @@ const ChatPanel = React.memo(({
         )}
       </div>
 
-      <div className="p-4 border-t border-gray-200">
+      <div className="border-t border-gray-200">
         <ChatInput 
           onSendMessage={onSendMessage} 
           disabled={!isConnected}
@@ -229,10 +231,18 @@ const WhosMostLikely = () => {
 
   // Chat states
   const [chatMessages, setChatMessages] = useState([]);
-  const [showChat, setShowChat] = useState(true);
+  const [showChat, setShowChat] = useState(false); // Hidden by default on mobile
   const [typingUsers, setTypingUsers] = useState(new Set());
 
   const audioRef = useRef(null);
+  const mainContainerRef = useRef(null);
+
+  // Auto-scroll to top when game state changes
+  useEffect(() => {
+    if (mainContainerRef.current) {
+      mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [gameStarted, gameFinished, roundResults, currentRound]);
 
   // Sound effects
   const playSound = (soundName) => {
@@ -467,26 +477,26 @@ const WhosMostLikely = () => {
 
   // Player Card Component
   const PlayerCard = ({ player, index, showVotes = false, voteCounts = {} }) => (
-    <div className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+    <div className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
       selectedPlayer === player.name 
         ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-400 scale-105' 
         : 'bg-white/10 border-white/20 hover:bg-white/20'
     }`}>
       <div className="flex items-center space-x-3">
-        <Avatar className="w-10 h-10 border-2 border-white/30">
-          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+        <Avatar className="w-8 h-8 border-2 border-white/30">
+          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs">
             {player.name.charAt(0).toUpperCase()}
           </AvatarFallback>
         </Avatar>
         <div className="flex items-center space-x-2">
-          <span className="font-semibold text-white">{player.name}</span>
-          {player.isHost && <Crown className="w-4 h-4 text-yellow-400" />}
+          <span className="font-semibold text-white text-sm">{player.name}</span>
+          {player.isHost && <Crown className="w-3 h-3 text-yellow-400" />}
         </div>
       </div>
       
       <div className="flex items-center space-x-2">
         {showVotes && voteCounts[player.name] > 0 && (
-          <Badge className="bg-green-500 text-white">
+          <Badge className="bg-green-500 text-white text-xs">
             {voteCounts[player.name]} votes
           </Badge>
         )}
@@ -505,23 +515,33 @@ const WhosMostLikely = () => {
     </div>
   );
 
+  // Mobile Chat Toggle Button
+  const MobileChatToggle = () => (
+    <Button
+      onClick={() => setShowChat(!showChat)}
+      className="fixed bottom-4 right-4 z-40 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-2xl rounded-full w-14 h-14"
+    >
+      {showChat ? <ChevronDown className="w-5 h-5" /> : <MessageCircle className="w-5 h-5" />}
+    </Button>
+  );
+
   // Join/Create Screen
   if (!joined) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-6 relative overflow-hidden">
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden">
         <ConnectionStatus />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div className="max-w-2xl mx-auto relative z-10">
-          <Link to="/Games">
-            <Button variant="ghost" className="mb-6 text-white hover:bg-white/20 backdrop-blur-sm">
+        <div ref={mainContainerRef} className="max-w-2xl mx-auto relative z-10 min-h-screen flex flex-col justify-center">
+          <Link to="/Games" className="mb-4">
+            <Button variant="ghost" className="text-white hover:bg-white/20 backdrop-blur-sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Games
             </Button>
           </Link>
 
-          <Card className="p-8 bg-white/10 backdrop-blur-lg border-0 shadow-2xl">
-            <h1 className="text-4xl md:text-5xl font-bold mb-6 text-center bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+          <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl">
+            <h1 className="text-3xl md:text-5xl font-bold mb-6 text-center bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               Who's Most Likely?
             </h1>
 
@@ -557,28 +577,28 @@ const WhosMostLikely = () => {
               <Button
                 onClick={createRoom}
                 disabled={!playerName.trim()}
-                className="w-full py-6 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                className="w-full py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
               >
-                <Crown className="w-5 h-5 mr-2" />
+                <Crown className="w-4 h-4 mr-2" />
                 Create New Room
               </Button>
 
               <Button
                 onClick={joinRoom}
                 disabled={!playerName.trim() || !roomId.trim()}
-                className="w-full py-6 text-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                className="w-full py-4 text-base bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
               >
-                <Users className="w-5 h-5 mr-2" />
+                <Users className="w-4 h-4 mr-2" />
                 Join Existing Room
               </Button>
             </div>
 
-            <div className="mt-6 p-4 bg-white/5 rounded-lg border border-white/10">
-              <h4 className="font-semibold text-white mb-2 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 mr-2 text-yellow-400" />
+            <div className="mt-6 p-3 bg-white/5 rounded-lg border border-white/10">
+              <h4 className="font-semibold text-white mb-2 flex items-center justify-center text-sm">
+                <Sparkles className="w-3 h-3 mr-2 text-yellow-400" />
                 How it works
               </h4>
-              <ul className="text-sm text-white/70 space-y-1 text-left">
+              <ul className="text-xs text-white/70 space-y-1 text-left">
                 <li>• Create a room and share the code with friends</li>
                 <li>• Vote for who's most likely to do something</li>
                 <li>• Can't vote for yourself!</li>
@@ -598,64 +618,68 @@ const WhosMostLikely = () => {
   // Waiting Room
   if (!gameStarted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-6 relative overflow-hidden">
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden">
         <ConnectionStatus />
+        <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div className="max-w-6xl mx-auto relative z-10">
-          <div className="flex justify-between items-center mb-6">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
             <Button
               variant="ghost"
               onClick={() => window.location.reload()}
-              className="text-white hover:bg-white/20 backdrop-blur-sm"
+              className="text-white hover:bg-white/20 backdrop-blur-sm self-start"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Leave Room
             </Button>
-            <div className="text-white font-medium bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm">
+            <div className="text-white font-medium bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm text-center">
               Room: {roomId}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
             {/* Main Content */}
-            <div className="lg:col-span-2">
-              <Card className="p-8 bg-white/10 backdrop-blur-lg border-0 shadow-2xl">
+            <div className="lg:col-span-2 flex flex-col min-h-0">
+              <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl flex-1 flex flex-col min-h-0">
                 <div className="text-center mb-6">
                   <div className="flex justify-center mb-4">
                     <div className="relative">
-                      <Target className="w-20 h-20 text-purple-400" />
-                      <Sparkles className="w-8 h-8 text-yellow-400 absolute -top-2 -right-2 animate-spin" />
+                      <Target className="w-16 h-16 text-purple-400" />
+                      <Sparkles className="w-6 h-6 text-yellow-400 absolute -top-1 -right-1 animate-spin" />
                     </div>
                   </div>
                   
-                  <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
                     Who's Most Likely?
                   </h2>
                   <p className="text-white/70 mb-6">Waiting for players to join...</p>
 
                   <div className="mb-6">
-                    <h3 className="text-xl font-bold text-white mb-2">Room Code: {roomId}</h3>
+                    <h3 className="text-lg font-bold text-white mb-2">Room Code: {roomId}</h3>
                     <Button 
                       onClick={() => navigator.clipboard?.writeText(roomId)}
-                      className="bg-white/20 hover:bg-white/30 border-white/30"
+                      className="bg-white/20 hover:bg-white/30 border-white/30 text-sm"
+                      size="sm"
                     >
                       Copy Code
                     </Button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 mb-6 max-h-60 overflow-y-auto">
-                  {players.map((player, index) => (
-                    <PlayerCard key={player.name} player={player} index={index} />
-                  ))}
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6">
+                  <div className="space-y-2">
+                    {players.map((player, index) => (
+                      <PlayerCard key={player.name} player={player} index={index} />
+                    ))}
+                  </div>
                 </div>
 
                 {players.length === 1 && (
-                  <div className="bg-yellow-500/20 border border-yellow-400/30 rounded-lg p-4 mb-6">
+                  <div className="bg-yellow-500/20 border border-yellow-400/30 rounded-lg p-3 mb-6">
                     <div className="flex items-center justify-center space-x-2">
-                      <Users className="w-5 h-5 text-yellow-400" />
-                      <span className="text-yellow-300">Waiting for more players to join...</span>
+                      <Users className="w-4 h-4 text-yellow-400" />
+                      <span className="text-yellow-300 text-sm">Waiting for more players to join...</span>
                     </div>
                   </div>
                 )}
@@ -664,16 +688,16 @@ const WhosMostLikely = () => {
                   <Button 
                     onClick={startGame} 
                     disabled={players.length < 2}
-                    className="w-full py-6 text-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-2xl"
+                    className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-2xl"
                   >
-                    <Gamepad2 className="w-5 h-5 mr-2" />
+                    <Gamepad2 className="w-4 h-4 mr-2" />
                     Start Game ({players.length} players ready)
                   </Button>
                 ) : (
-                  <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
+                  <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-3">
                     <div className="flex items-center justify-center space-x-2">
-                      <Timer className="w-5 h-5 text-blue-400 animate-pulse" />
-                      <span className="text-blue-300">Waiting for host to start the game...</span>
+                      <Timer className="w-4 h-4 text-blue-400 animate-pulse" />
+                      <span className="text-blue-300 text-sm">Waiting for host to start the game...</span>
                     </div>
                   </div>
                 )}
@@ -681,7 +705,7 @@ const WhosMostLikely = () => {
             </div>
 
             {/* Chat Panel */}
-            <div className="lg:col-span-1">
+            <div className={`lg:col-span-1 flex flex-col min-h-0 ${showChat ? 'flex' : 'hidden lg:flex'}`}>
               <ChatPanel 
                 chatMessages={chatMessages}
                 playerName={playerName}
@@ -702,58 +726,59 @@ const WhosMostLikely = () => {
   // Game Finished Screen
   if (gameFinished) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-6 relative overflow-hidden">
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden">
         <ConnectionStatus />
+        <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div className="max-w-6xl mx-auto relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
             {/* Main Content */}
-            <div className="lg:col-span-2">
-              <Card className="p-8 bg-white/10 backdrop-blur-lg border-0 shadow-2xl">
-                <div className="text-center mb-8">
-                  <Target className="w-20 h-20 text-purple-400 mx-auto mb-4" />
-                  <h2 className="text-4xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+            <div className="lg:col-span-2 flex flex-col min-h-0">
+              <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl flex-1 flex flex-col min-h-0">
+                <div className="text-center mb-6">
+                  <Target className="w-16 h-16 text-purple-400 mx-auto mb-4" />
+                  <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                     Game Complete!
                   </h2>
-                  <p className="text-white/70 text-xl">
+                  <p className="text-white/70 text-lg">
                     After {totalRounds} rounds, here are the results:
                   </p>
                 </div>
 
-                <div className="space-y-4 mb-8">
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6 space-y-3">
                   {finalResults?.rankings?.map((player, index) => (
-                    <Card key={player.name} className={`p-6 text-center backdrop-blur-sm border-0 ${
+                    <Card key={player.name} className={`p-4 text-center backdrop-blur-sm border-0 ${
                       index === 0 
                         ? 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 scale-105' 
                         : 'bg-white/5'
                     }`}>
-                      <Avatar className="w-16 h-16 mx-auto mb-3 border-2 border-white/30">
-                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xl">
+                      <Avatar className="w-12 h-12 mx-auto mb-2 border-2 border-white/30">
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-lg">
                           {player.name.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <h3 className="text-xl font-bold text-white mb-2">{player.name}</h3>
-                      <div className="text-lg text-white/70">
+                      <h3 className="text-lg font-bold text-white mb-1">{player.name}</h3>
+                      <div className="text-sm text-white/70">
                         Most likely in {player.stats.roundsWon} rounds
                       </div>
                     </Card>
                   ))}
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <Button 
                     onClick={restartGame}
-                    className="flex-1 py-6 text-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                    className="flex-1 py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
                   >
-                    <RefreshCw className="w-5 h-5 mr-2" />
+                    <RefreshCw className="w-4 h-4 mr-2" />
                     Play Again
                   </Button>
                   <Button 
                     onClick={() => window.location.reload()}
-                    className="flex-1 py-6 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                    className="flex-1 py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
                   >
-                    <ArrowLeft className="w-5 h-5 mr-2" />
+                    <ArrowLeft className="w-4 h-4 mr-2" />
                     Main Menu
                   </Button>
                 </div>
@@ -761,7 +786,7 @@ const WhosMostLikely = () => {
             </div>
 
             {/* Chat Panel */}
-            <div className="lg:col-span-1">
+            <div className={`lg:col-span-1 flex flex-col min-h-0 ${showChat ? 'flex' : 'hidden lg:flex'}`}>
               <ChatPanel 
                 chatMessages={chatMessages}
                 playerName={playerName}
@@ -782,47 +807,48 @@ const WhosMostLikely = () => {
   // Round Results Screen
   if (roundResults) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-6 relative overflow-hidden">
+      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden">
         <ConnectionStatus />
+        <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div className="max-w-6xl mx-auto relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
             {/* Main Content */}
-            <div className="lg:col-span-2">
-              <Card className="p-8 bg-white/10 backdrop-blur-lg border-0 shadow-2xl">
-                <div className="text-center mb-8">
+            <div className="lg:col-span-2 flex flex-col min-h-0">
+              <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl flex-1 flex flex-col min-h-0">
+                <div className="text-center mb-6">
                   <div className="flex justify-center mb-4">
-                    <Sparkles className="w-16 h-16 text-yellow-400 animate-bounce" />
+                    <Sparkles className="w-12 h-12 text-yellow-400 animate-bounce" />
                   </div>
                   
-                  <h2 className="text-3xl font-bold mb-2 text-white">
+                  <h2 className="text-2xl font-bold mb-2 text-white">
                     {roundResults.winners.length === 1 
                       ? `${roundResults.winners[0]} is most likely!` 
                       : "Multiple players are most likely!"}
                   </h2>
                   
-                  <Card className="p-6 mb-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-400/30">
-                    <p className="text-xl font-semibold text-white">{roundResults.scenario}</p>
+                  <Card className="p-4 mb-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-400/30">
+                    <p className="text-lg font-semibold text-white">{roundResults.scenario}</p>
                   </Card>
                 </div>
 
-                <div className="space-y-4 mb-8">
-                  <h3 className="text-xl font-bold text-white mb-4 text-center">
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6">
+                  <h3 className="text-lg font-bold text-white mb-4 text-center">
                     Voting Results
                   </h3>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {Object.entries(roundResults.voteCounts)
                       .sort(([,a], [,b]) => b - a)
                       .map(([player, count]) => (
-                      <div key={player} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
+                      <div key={player} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
                         <div className="flex items-center space-x-3">
                           <Avatar className="w-8 h-8 border-2 border-white/30">
                             <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs">
                               {player.charAt(0).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="text-white font-medium">{player}</span>
+                          <span className="text-white font-medium text-sm">{player}</span>
                         </div>
                         <Badge className={
                           roundResults.winners.includes(player) 
@@ -839,18 +865,18 @@ const WhosMostLikely = () => {
                 {isHost && (
                   <Button
                     onClick={nextRound}
-                    className="w-full py-6 text-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                    className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
                   >
-                    <Sparkles className="w-5 h-5 mr-2" />
+                    <Sparkles className="w-4 h-4 mr-2" />
                     {currentRound < totalRounds ? "Next Round" : "See Final Results"}
                   </Button>
                 )}
 
                 {!isHost && (
-                  <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4 text-center">
+                  <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-3 text-center">
                     <div className="flex items-center justify-center space-x-2">
-                      <Timer className="w-5 h-5 text-blue-400 animate-pulse" />
-                      <span className="text-blue-300">Waiting for host to start next round...</span>
+                      <Timer className="w-4 h-4 text-blue-400 animate-pulse" />
+                      <span className="text-blue-300 text-sm">Waiting for host to start next round...</span>
                     </div>
                   </div>
                 )}
@@ -858,7 +884,7 @@ const WhosMostLikely = () => {
             </div>
 
             {/* Chat Panel */}
-            <div className="lg:col-span-1">
+            <div className={`lg:col-span-1 flex flex-col min-h-0 ${showChat ? 'flex' : 'hidden lg:flex'}`}>
               <ChatPanel 
                 chatMessages={chatMessages}
                 playerName={playerName}
@@ -878,35 +904,36 @@ const WhosMostLikely = () => {
 
   // Main Game Screen
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden">
       <ConnectionStatus />
+      <MobileChatToggle />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
       
-      <div className="max-w-6xl mx-auto relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
           {/* Main Game Content */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 flex flex-col min-h-0">
             {/* Header */}
-            <div className="flex justify-between items-center mb-6 p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-3 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20">
               <div>
-                <h2 className="text-xl font-bold text-white">Room: {roomId}</h2>
-                <div className="text-white/70 flex items-center space-x-2">
-                  <Users className="w-4 h-4" />
+                <h2 className="text-lg font-bold text-white">Room: {roomId}</h2>
+                <div className="text-white/70 flex items-center space-x-2 text-sm">
+                  <Users className="w-3 h-3" />
                   <span>{players.length} players</span>
                 </div>
               </div>
               
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
                 <div className="text-right">
-                  <div className="text-sm text-white/70">Round</div>
-                  <div className="text-lg font-bold text-white">
+                  <div className="text-xs text-white/70">Round</div>
+                  <div className="text-base font-bold text-white">
                     {currentRound} / {totalRounds}
                   </div>
                 </div>
                 
                 <div className="text-right">
-                  <div className="text-sm text-white/70">Votes</div>
-                  <div className="text-lg font-bold text-white">
+                  <div className="text-xs text-white/70">Votes</div>
+                  <div className="text-base font-bold text-white">
                     {voteCount} / {players.length}
                   </div>
                 </div>
@@ -914,45 +941,37 @@ const WhosMostLikely = () => {
                 <Button
                   variant="outline"
                   onClick={() => setSoundEnabled(!soundEnabled)}
-                  className="border-white/20 text-white hover:bg-white/10"
+                  className="border-white/20 text-white hover:bg-white/10 p-2"
+                  size="sm"
                 >
-                  {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                </Button>
-
-                {/* Chat Toggle Button */}
-                <Button
-                  variant="outline"
-                  onClick={() => setShowChat(!showChat)}
-                  className="border-white/20 text-white hover:bg-white/10 lg:hidden"
-                >
-                  <MessageCircle className="w-4 h-4" />
+                  {soundEnabled ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
                 </Button>
               </div>
             </div>
 
             {/* Main Game Content */}
-            <Card className="p-8 bg-white/10 backdrop-blur-lg border-0 shadow-2xl">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl md:text-4xl font-bold mb-8 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+            <Card className="p-4 sm:p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl flex-1 flex flex-col min-h-0">
+              <div className="text-center mb-6">
+                <h2 className="text-2xl sm:text-3xl font-bold mb-6 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
                   Who's Most Likely?
                 </h2>
 
-                <Card className="p-8 md:p-12 mb-8 bg-gradient-to-br from-purple-500/10 via-pink-500/10 to-blue-500/10 border-2 border-purple-400/30 min-h-[200px] flex items-center justify-center backdrop-blur-sm">
-                  <p className="text-2xl md:text-4xl font-bold text-center text-white">
+                <Card className="p-4 sm:p-6 mb-6 bg-gradient-to-br from-purple-500/10 via-pink-500/10 to-blue-500/10 border-2 border-purple-400/30 min-h-[120px] flex items-center justify-center backdrop-blur-sm">
+                  <p className="text-xl sm:text-2xl font-bold text-center text-white leading-tight">
                     {currentScenario}
                   </p>
                 </Card>
 
-                <div className="mb-6">
-                  <p className="text-white/80 mb-4 text-lg">
+                <div className="mb-4">
+                  <p className="text-white/80 mb-3 text-base">
                     {hasVoted 
                       ? "✅ You've voted! Waiting for other players..." 
                       : "Choose who you think is most likely (can't choose yourself!)"}
                   </p>
                   
                   {!hasVoted && selectedPlayer && (
-                    <div className="bg-green-500/20 border border-green-400/30 rounded-lg p-3 mb-4">
-                      <p className="text-green-300 font-medium">
+                    <div className="bg-green-500/20 border border-green-400/30 rounded-lg p-2 mb-3">
+                      <p className="text-green-300 font-medium text-sm">
                         You selected: <span className="font-bold">{selectedPlayer}</span>
                       </p>
                     </div>
@@ -962,32 +981,34 @@ const WhosMostLikely = () => {
 
               {/* Player Selection Grid */}
               {!hasVoted && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                  {players
-                    .filter(player => player.name !== playerName) // Can't vote for yourself
-                    .map((player) => (
-                      <div
-                        key={player.name}
-                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                          selectedPlayer === player.name
-                            ? 'bg-gradient-to-r from-green-500/30 to-emerald-500/30 border-green-400 scale-105 shadow-lg'
-                            : 'bg-white/10 border-white/20 hover:bg-white/20 hover:scale-102'
-                        }`}
-                        onClick={() => setSelectedPlayer(player.name)}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <Avatar className="w-12 h-12 border-2 border-white/30">
-                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                              {player.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <h3 className="text-lg font-bold text-white">{player.name}</h3>
-                            <p className="text-white/70 text-sm">Click to select</p>
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6">
+                  <div className="grid grid-cols-1 gap-3">
+                    {players
+                      .filter(player => player.name !== playerName) // Can't vote for yourself
+                      .map((player) => (
+                        <div
+                          key={player.name}
+                          className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                            selectedPlayer === player.name
+                              ? 'bg-gradient-to-r from-green-500/30 to-emerald-500/30 border-green-400 scale-105 shadow-lg'
+                              : 'bg-white/10 border-white/20 hover:bg-white/20 hover:scale-102'
+                          }`}
+                          onClick={() => setSelectedPlayer(player.name)}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <Avatar className="w-10 h-10 border-2 border-white/30">
+                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                                {player.name.charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <h3 className="text-base font-bold text-white">{player.name}</h3>
+                              <p className="text-white/70 text-xs">Click to select</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                  </div>
                 </div>
               )}
 
@@ -996,19 +1017,19 @@ const WhosMostLikely = () => {
                 <Button
                   onClick={submitVote}
                   disabled={!selectedPlayer}
-                  className="w-full py-6 text-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                  className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
                 >
-                  <Target className="w-5 h-5 mr-2" />
+                  <Target className="w-4 h-4 mr-2" />
                   Submit Your Vote
                 </Button>
               ) : (
-                <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-6 text-center">
+                <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4 text-center">
                   <div className="flex items-center justify-center space-x-2 mb-2">
-                    <Timer className="w-6 h-6 text-blue-400 animate-pulse" />
-                    <span className="text-blue-300 text-lg font-medium">Waiting for other players...</span>
+                    <Timer className="w-4 h-4 text-blue-400 animate-pulse" />
+                    <span className="text-blue-300 text-base font-medium">Waiting for other players...</span>
                   </div>
-                  <Progress value={(voteCount / players.length) * 100} className="h-2 bg-white/20" />
-                  <p className="text-white/70 mt-2">
+                  <Progress value={(voteCount / players.length) * 100} className="h-1.5 bg-white/20" />
+                  <p className="text-white/70 mt-2 text-sm">
                     {voteCount} of {players.length} players have voted
                   </p>
                 </div>
@@ -1016,8 +1037,8 @@ const WhosMostLikely = () => {
             </Card>
           </div>
 
-          {/* Chat Panel - Hidden on mobile when not shown */}
-          <div className={`lg:col-span-1 ${showChat ? 'block' : 'hidden lg:block'}`}>
+          {/* Chat Panel */}
+          <div className={`lg:col-span-1 flex flex-col min-h-0 ${showChat ? 'flex' : 'hidden lg:flex'}`}>
             <ChatPanel 
               chatMessages={chatMessages}
               playerName={playerName}
