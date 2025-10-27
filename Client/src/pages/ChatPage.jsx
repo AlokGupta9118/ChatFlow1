@@ -34,14 +34,23 @@ const ChatPage = ({ currentUser }) => {
         }
       `}</style>
 
-      {/* ✅ Responsive sidebar (Desktop fixed + Mobile toggle built-in) */}
+      {/* Responsive sidebar (desktop fixed + mobile toggle inside component) */}
       <ChatSidebar />
 
-      {/* ✅ Main layout */}
-      <div className="flex h-screen lg:pl-20 overflow-hidden">
-        {/* Left panel (Chats / Groups) */}
-        <div className="w-80 border-r border-gray-200/50 dark:border-gray-800/50 bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl flex flex-col shadow-lg z-10 flex-shrink-0 h-full">
-          {/* Chat / Group Switch */}
+      {/* MAIN LAYOUT
+          - mobile: stacked column (left panel full width on top, chat window below)
+          - md+: row layout (left panel fixed width, chat window to right)
+          - lg:pl-20 accounts for the thin icon sidebar width
+      */}
+      <div className="flex h-screen lg:pl-20 overflow-hidden flex-col md:flex-row">
+        {/* Left panel (Chats / Groups)
+            - full width on small screens (top area)
+            - fixed width on md+ (side area)
+            - keep independent scrolling
+        */}
+        <div className="w-full md:w-80 border-r border-gray-200/50 dark:border-gray-800/50 bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl flex flex-col shadow-lg z-10 flex-shrink-0"
+             style={{ maxHeight: "50vh" /* allow top panel to be no more than half screen on tiny devices */ }}
+        >
           <div className="flex justify-around items-center p-4 border-b border-gray-200/50 dark:border-gray-800/50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md flex-shrink-0">
             <button
               onClick={() => setIsGroupView(false)}
@@ -71,8 +80,8 @@ const ChatPage = ({ currentUser }) => {
             </button>
           </div>
 
-          {/* Sidebar List (Chats / Groups) */}
-          <div className="flex-1 overflow-hidden">
+          {/* Make the list scroll independently and fill available vertical space */}
+          <div className="flex-1 overflow-y-auto min-h-0">
             {isGroupView ? (
               <GroupChatSidebar
                 currentUser={currentUser}
@@ -90,12 +99,15 @@ const ChatPage = ({ currentUser }) => {
           </div>
         </div>
 
-        {/* ✅ Main chat area */}
-        <div className="flex-1 flex flex-col bg-gradient-to-br from-white/40 via-blue-50/30 to-purple-50/20 dark:from-gray-900/40 dark:via-gray-800/30 dark:to-purple-900/20 backdrop-blur-sm overflow-hidden min-h-0 relative">
+        {/* Main chat window area
+            - on mobile (stacked) this will appear below the left panel
+            - ensure it can scroll internally and not overflow the body
+        */}
+        <div className="flex-1 flex flex-col bg-gradient-to-br from-white/40 via-blue-50/30 to-purple-50/20 dark:from-gray-900/40 dark:via-gray-800/30 dark:to-purple-900/20 backdrop-blur-sm overflow-hidden min-h-0">
           {selectedChat ? (
             <>
-              {/* Chat Window */}
-              <div className="flex-1 min-h-0 z-10 relative">
+              <div className="flex-1 min-h-0 z-10 overflow-hidden">
+                {/* ChatWindow should internally handle overflow of messages */}
                 <ChatWindow
                   currentUser={currentUser}
                   selectedChat={selectedChat}
@@ -104,7 +116,7 @@ const ChatPage = ({ currentUser }) => {
                 />
               </div>
 
-              {/* Group Info Panel */}
+              {/* Slide-in Group Info */}
               {isGroupSelected && (
                 <div
                   className={`absolute top-0 right-0 h-full w-96 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl border-l border-gray-200/50 dark:border-gray-700/50 transform transition-all duration-500 ease-in-out z-20 ${
@@ -132,7 +144,6 @@ const ChatPage = ({ currentUser }) => {
               )}
             </>
           ) : (
-            // Empty chat screen
             <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 space-y-6 p-4 z-10 relative">
               <div className="w-32 h-32 bg-gradient-to-r from-indigo-400 to-purple-500 rounded-full flex items-center justify-center shadow-2xl">
                 <div className="text-4xl">💬</div>
