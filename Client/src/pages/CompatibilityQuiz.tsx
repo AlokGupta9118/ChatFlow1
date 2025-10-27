@@ -1,7 +1,7 @@
 // components/AdvancedCompatibilityGame.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { AdvancedCompatibilityGame } from '../games/compatibilityGame';
-import './AdvancedCompatibilityGame.css';
+import './AdvancedCompatibilityGame.css' 
 
 const AdvancedCompatibilityGameComponent = ({ socket, room, player, onExit }) => {
   const [currentQuestion, setCurrentQuestion] = useState(0);
