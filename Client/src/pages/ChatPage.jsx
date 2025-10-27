@@ -86,11 +86,12 @@ const ChatPage = ({ currentUser }) => {
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden relative">
         
-        {/* Chat List/Group Sidebar - Show on desktop or when in list view on mobile */}
+        {/* Chat List/Group Sidebar */}
         <div className={`
+          absolute lg:relative inset-0 lg:inset-auto
           w-full lg:w-80 border-r border-gray-200/50 dark:border-gray-800/50 
-          bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl flex flex-col shadow-lg z-10 
-          flex-shrink-0 h-full transition-transform duration-300
+          bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl flex flex-col shadow-2xl lg:shadow-lg 
+          z-30 lg:z-10 flex-shrink-0 h-full transition-transform duration-300 ease-in-out
           ${mobileView === 'list' ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}>
           {/* Mobile Header for List View */}
@@ -148,11 +149,11 @@ const ChatPage = ({ currentUser }) => {
           </div>
         </div>
 
-        {/* Chat Window Area */}
+        {/* Chat Window Area - FIXED LAYOUT */}
         <div className={`
           absolute lg:relative inset-0 flex flex-col bg-gradient-to-br from-white/40 via-blue-50/30 to-purple-50/20 
           dark:from-gray-900/40 dark:via-gray-800/30 dark:to-purple-900/20 backdrop-blur-sm 
-          overflow-hidden min-h-0 transition-transform duration-300
+          overflow-hidden min-h-0 transition-transform duration-300 ease-in-out z-20
           ${mobileView === 'chat' || mobileView === 'groupInfo' ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
         `}>
           {selectedChat ? (
@@ -201,9 +202,9 @@ const ChatPage = ({ currentUser }) => {
               {/* Group Info Panel */}
               {isGroupSelected && (
                 <div className={`
-                  absolute lg:relative inset-0 flex flex-col bg-white/90 dark:bg-gray-900/95 backdrop-blur-xl 
+                  absolute lg:relative inset-0 flex flex-col bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl 
                   shadow-2xl border-l border-gray-200/50 dark:border-gray-700/50 
-                  transition-transform duration-300 z-20
+                  transition-transform duration-300 ease-in-out z-30
                   ${(showGroupInfo && window.innerWidth >= 1024) || mobileView === 'groupInfo' 
                     ? 'translate-x-0' 
                     : 'translate-x-full lg:translate-x-full'
