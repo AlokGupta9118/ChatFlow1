@@ -17,53 +17,82 @@ import {
 
 const DEFAULT_SOCKET_URL = `${import.meta.env.VITE_API_URL}`;
 
+// 🔥 NEW: Enhanced localStorage management
+const useGamePersistence = () => {
+  const saveGameState = (key, data) => {
+    try {
+      localStorage.setItem(`truthDare_${key}`, JSON.stringify(data));
+    } catch (error) {
+      console.warn("Failed to save game state:", error);
+    }
+  };
+
+  const loadGameState = (key, defaultValue = null) => {
+    try {
+      const saved = localStorage.getItem(`truthDare_${key}`);
+      return saved ? JSON.parse(saved) : defaultValue;
+    } catch (error) {
+      console.warn("Failed to load game state:", error);
+      return defaultValue;
+    }
+  };
+
+  const clearGameState = () => {
+    const keys = Object.keys(localStorage).filter(key => key.startsWith('truthDare_'));
+    keys.forEach(key => localStorage.removeItem(key));
+  };
+
+  return { saveGameState, loadGameState, clearGameState };
+};
+
 export default function TruthOrDare({ currentUser }) {
   const params = useParams();
   const navigate = useNavigate();
+  const { saveGameState, loadGameState, clearGameState } = useGamePersistence();
 
   const [socket, setSocket] = useState(null);
-  const [stage, setStage] = useState("lobby"); // lobby | waiting | playing | results
-  const [roomId, setRoomId] = useState(params.roomId || localStorage.getItem("roomId") || "");
-  const [localName, setLocalName] = useState(currentUser?.name || localStorage.getItem("localName") || "");
-  const [players, setPlayers] = useState(JSON.parse(localStorage.getItem("players") || "[]"));
+  const [stage, setStage] = useState(loadGameState("stage", "lobby"));
+  const [roomId, setRoomId] = useState(params.roomId || loadGameState("roomId", ""));
+  const [localName, setLocalName] = useState(currentUser?.name || loadGameState("localName", ""));
+  const [players, setPlayers] = useState(loadGameState("players", []));
   const [prevPlayers, setPrevPlayers] = useState(players);
-  const [isHost, setIsHost] = useState(localStorage.getItem("isHost") === "true");
+  const [isHost, setIsHost] = useState(loadGameState("isHost", false));
 
   // Game state
-  const [selectedPlayer, setSelectedPlayer] = useState(null);
-  const [promptType, setPromptType] = useState("truth"); // truth | dare
+  const [selectedPlayer, setSelectedPlayer] = useState(loadGameState("selectedPlayer", null));
+  const [promptType, setPromptType] = useState("truth");
   const [promptText, setPromptText] = useState("");
-  const [prompts, setPrompts] = useState([]);
-  const [chosenPrompt, setChosenPrompt] = useState(null);
+  const [prompts, setPrompts] = useState(loadGameState("prompts", []));
+  const [chosenPrompt, setChosenPrompt] = useState(loadGameState("chosenPrompt", null));
   const [spinning, setSpinning] = useState(false);
   const [toasts, setToasts] = useState([]);
-  const [truthDareChoice, setTruthDareChoice] = useState(null);
+  const [truthDareChoice, setTruthDareChoice] = useState(loadGameState("truthDareChoice", null));
   const [isChoicePending, setIsChoicePending] = useState(false);
   
   // Game features
-  const [scores, setScores] = useState({});
-  const [gameSettings, setGameSettings] = useState({
+  const [scores, setScores] = useState(loadGameState("scores", {}));
+  const [gameSettings, setGameSettings] = useState(loadGameState("gameSettings", {
     timerDuration: 30,
     enableScoring: true,
     soundEnabled: true,
     maxPlayers: 8
-  });
+  }));
   const [timeLeft, setTimeLeft] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [playerStats, setPlayerStats] = useState({});
-  const [achievements, setAchievements] = useState([]);
+  const [playerStats, setPlayerStats] = useState(loadGameState("playerStats", {}));
+  const [achievements, setAchievements] = useState(loadGameState("achievements", []));
   
   // Proof system
   const [proofImage, setProofImage] = useState(null);
   const [proofUploaded, setProofUploaded] = useState(false);
   const [showKickMenu, setShowKickMenu] = useState(false);
-  const [proofs, setProofs] = useState({});
+  const [proofs, setProofs] = useState(loadGameState("proofs", {}));
   const [showProofModal, setShowProofModal] = useState(false);
   const [currentProof, setCurrentProof] = useState(null);
   const [truthCompletionText, setTruthCompletionText] = useState("");
 
   // 🔥 CHAT STATE
-  const [chatMessages, setChatMessages] = useState([]);
+  const [chatMessages, setChatMessages] = useState(loadGameState("chatMessages", []));
   const [chatInput, setChatInput] = useState("");
   const [showChat, setShowChat] = useState(false);
   const [typingUsers, setTypingUsers] = useState(new Set());
@@ -81,7 +110,68 @@ export default function TruthOrDare({ currentUser }) {
 
   promptsRef.current = prompts;
 
-  // FIXED 1: Improved mobile scrolling - scroll to top on major game state changes
+  // 🔥 NEW: Enhanced persistence - save state on changes
+  useEffect(() => {
+    saveGameState("stage", stage);
+  }, [stage]);
+
+  useEffect(() => {
+    saveGameState("roomId", roomId);
+  }, [roomId]);
+
+  useEffect(() => {
+    saveGameState("localName", localName);
+  }, [localName]);
+
+  useEffect(() => {
+    saveGameState("players", players);
+  }, [players]);
+
+  useEffect(() => {
+    saveGameState("isHost", isHost);
+  }, [isHost]);
+
+  useEffect(() => {
+    saveGameState("selectedPlayer", selectedPlayer);
+  }, [selectedPlayer]);
+
+  useEffect(() => {
+    saveGameState("prompts", prompts);
+  }, [prompts]);
+
+  useEffect(() => {
+    saveGameState("chosenPrompt", chosenPrompt);
+  }, [chosenPrompt]);
+
+  useEffect(() => {
+    saveGameState("truthDareChoice", truthDareChoice);
+  }, [truthDareChoice]);
+
+  useEffect(() => {
+    saveGameState("scores", scores);
+  }, [scores]);
+
+  useEffect(() => {
+    saveGameState("gameSettings", gameSettings);
+  }, [gameSettings]);
+
+  useEffect(() => {
+    saveGameState("playerStats", playerStats);
+  }, [playerStats]);
+
+  useEffect(() => {
+    saveGameState("achievements", achievements);
+  }, [achievements]);
+
+  useEffect(() => {
+    saveGameState("proofs", proofs);
+  }, [proofs]);
+
+  useEffect(() => {
+    saveGameState("chatMessages", chatMessages);
+  }, [chatMessages]);
+
+  // FIXED 1: Improved mobile scrolling
   useEffect(() => {
     if (mainContainerRef.current) {
       mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
@@ -159,7 +249,24 @@ export default function TruthOrDare({ currentUser }) {
     sock.on("connect", () => {
       console.log("✅ Socket connected:", sock.id);
       addToast("Connected to game server", 2000);
-      if (roomId && localName) sock.emit("rejoin-room", { roomId, name: localName });
+      
+      // 🔥 NEW: Enhanced reconnection logic
+      if (roomId && localName) {
+        sock.emit("rejoin-room", { 
+          roomId, 
+          name: localName,
+          gameState: {
+            stage,
+            players,
+            selectedPlayer,
+            chosenPrompt,
+            truthDareChoice,
+            scores,
+            proofs,
+            chatMessages
+          }
+        });
+      }
     });
 
     sock.on("room-created", (room) => {
@@ -169,8 +276,8 @@ export default function TruthOrDare({ currentUser }) {
       setIsHost(true);
       setStage("waiting");
 
-      localStorage.setItem("roomId", room.roomId);
-      localStorage.setItem("isHost", "true");
+      saveGameState("roomId", room.roomId);
+      saveGameState("isHost", true);
       playSound("success");
     });
 
@@ -181,8 +288,8 @@ export default function TruthOrDare({ currentUser }) {
       setIsHost(false);
       setStage("waiting");
 
-      localStorage.setItem("roomId", room.roomId);
-      localStorage.setItem("isHost", "false");
+      saveGameState("roomId", room.roomId);
+      saveGameState("isHost", false);
       playSound("success");
     });
 
@@ -198,7 +305,7 @@ export default function TruthOrDare({ currentUser }) {
 
       setPlayers(playersList);
       setPrevPlayers(playersList);
-      localStorage.setItem("players", JSON.stringify(playersList));
+      saveGameState("players", playersList);
     });
 
     sock.on("game-started", () => {
@@ -247,7 +354,7 @@ export default function TruthOrDare({ currentUser }) {
       }));
     });
 
-    // 🔥 FIXED 2: Truth completion handler - shows to everyone with proper state update
+    // 🔥 FIXED 2: Enhanced truth completion handler - shows to everyone with proper state update
     sock.on("truth-completed", ({ player, completionText }) => {
       console.log("✅ Truth completed by:", player, completionText);
       addToast(`${player} completed their truth!`, 3000, "success");
@@ -256,6 +363,14 @@ export default function TruthOrDare({ currentUser }) {
       if (player === selectedPlayer) {
         setTruthCompletionText(completionText);
         setProofUploaded(true); // Mark as completed for truth as well
+        
+        // 🔥 NEW: Save proof for truth completion
+        const truthProofKey = `truth_${roomId}_${player}_${Date.now()}`;
+        localStorage.setItem(truthProofKey, completionText);
+        setProofs(prev => ({
+          ...prev,
+          [player]: truthProofKey
+        }));
       }
     });
 
@@ -364,6 +479,7 @@ export default function TruthOrDare({ currentUser }) {
 
     // FIXED 3: Enhanced proof ready notification for both truth and dare
     sock.on("proof-ready-for-review", ({ player, type = "dare" }) => {
+      console.log(`📢 Proof ready for ${player} - type: ${type}`);
       if (isHost && player === selectedPlayer) {
         setProofUploaded(true);
         addToast(`${player} has completed their ${type}! You can now start the next round!`, 3000, "success");
@@ -404,14 +520,25 @@ export default function TruthOrDare({ currentUser }) {
       addToast("Disconnected from server", 3000, "error");
     });
 
+    // 🔥 NEW: Handle reconnection with game state
+    sock.on("rejoin-success", (gameState) => {
+      console.log("🔄 Rejoined game successfully");
+      if (gameState) {
+        // Restore game state from server
+        setStage(gameState.stage || "waiting");
+        setPlayers(gameState.players || []);
+        setSelectedPlayer(gameState.selectedPlayer || null);
+        setChosenPrompt(gameState.chosenPrompt || null);
+        setTruthDareChoice(gameState.truthDareChoice || null);
+        setScores(gameState.scores || {});
+        setProofs(gameState.proofs || {});
+        setChatMessages(gameState.chatMessages || []);
+      }
+    });
+
     setSocket(sock);
     return () => sock.disconnect();
   }, []);
-
-  // Persist localName
-  useEffect(() => {
-    if (localName) localStorage.setItem("localName", localName);
-  }, [localName]);
 
   // 🔥 CHAT FUNCTIONS
   const sendChatMessage = () => {
@@ -525,10 +652,8 @@ export default function TruthOrDare({ currentUser }) {
   };
 
   const leaveRoom = () => {
-    localStorage.removeItem("roomId");
-    localStorage.removeItem("players");
-    localStorage.removeItem("isHost");
-
+    clearGameState();
+    
     setRoomId("");
     setPlayers([]);
     setPrevPlayers([]);
@@ -545,7 +670,7 @@ export default function TruthOrDare({ currentUser }) {
     setProofs({});
     setChatMessages([]);
     setNextRoundLoading(false);
-    setSpinning(false); // Ensure spinner stops
+    setSpinning(false);
 
     if (socket && roomId) socket.emit("leave-room", roomId);
     addToast("Left the room", 2000);
@@ -770,7 +895,7 @@ export default function TruthOrDare({ currentUser }) {
   // Check if proof should be required (only for dares)
   const shouldRequireProof = chosenPrompt && chosenPrompt.type === "dare";
 
-  // 🧩 Lobby UI
+  // 🧩 Lobby UI - Mobile Optimized
   if (stage === "lobby") {
     return (
       <div className="h-screen w-full flex overflow-hidden bg-background">
@@ -793,15 +918,15 @@ export default function TruthOrDare({ currentUser }) {
             </div>
 
             <div className="w-full max-w-2xl relative z-10">
-              <Card className="p-6 md:p-8 bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0">
+              <Card className="p-4 md:p-8 bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0 mx-2">
                 <div className="text-center mb-6 md:mb-8">
                   <div className="flex justify-center items-center mb-4">
-                    <Gamepad2 className="w-10 h-10 md:w-12 md:h-12 text-purple-600 mr-3" />
-                    <h1 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                    <Gamepad2 className="w-8 h-8 md:w-12 md:h-12 text-purple-600 mr-3" />
+                    <h1 className="text-2xl md:text-5xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                       Truth or Dare
                     </h1>
                   </div>
-                  <p className="text-gray-600 text-base md:text-lg">Create or join a room to start playing with friends!</p>
+                  <p className="text-gray-600 text-sm md:text-lg px-2">Create or join a room to start playing with friends!</p>
                 </div>
 
                 <div className="space-y-4 md:space-y-6">
@@ -812,7 +937,7 @@ export default function TruthOrDare({ currentUser }) {
                         value={localName} 
                         onChange={(e) => setLocalName(e.target.value)} 
                         placeholder="Enter your nickname" 
-                        className="text-base md:text-lg py-4 md:py-6 border-2 focus:border-purple-500 transition-all"
+                        className="text-base md:text-lg py-3 md:py-6 border-2 focus:border-purple-500 transition-all"
                       />
                     </div>
                     <div>
@@ -821,7 +946,7 @@ export default function TruthOrDare({ currentUser }) {
                         value={roomId} 
                         onChange={(e) => setRoomId(e.target.value.toUpperCase())} 
                         placeholder="Enter room code (leave empty to create new)" 
-                        className="text-base md:text-lg py-4 md:py-6 border-2 focus:border-purple-500 transition-all font-mono uppercase"
+                        className="text-base md:text-lg py-3 md:py-6 border-2 focus:border-purple-500 transition-all font-mono uppercase"
                       />
                     </div>
                   </div>
@@ -847,14 +972,14 @@ export default function TruthOrDare({ currentUser }) {
                 </div>
 
                 {/* Features showcase */}
-                <div className="mt-6 md:mt-8 grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
+                <div className="mt-6 md:mt-8 grid grid-cols-2 gap-2 md:gap-4 text-xs">
                   <div className="flex items-center text-gray-600">
                     <Trophy className="w-3 h-3 md:w-4 md:h-4 mr-2 text-yellow-500" />
-                    Scoring System
+                    Scoring
                   </div>
                   <div className="flex items-center text-gray-600">
                     <Timer className="w-3 h-3 md:w-4 md:h-4 mr-2 text-blue-500" />
-                    Timer Rounds
+                    Timer
                   </div>
                   <div className="flex items-center text-gray-600">
                     <Crown className="w-3 h-3 md:w-4 md:h-4 mr-2 text-purple-500" />
@@ -862,7 +987,7 @@ export default function TruthOrDare({ currentUser }) {
                   </div>
                   <div className="flex items-center text-gray-600">
                     <Volume2 className="w-3 h-3 md:w-4 md:h-4 mr-2 text-green-500" />
-                    Sound Effects
+                    Sound
                   </div>
                 </div>
               </Card>
@@ -876,11 +1001,11 @@ export default function TruthOrDare({ currentUser }) {
     );
   }
 
-  // 🧩 Game UI
+  // 🧩 Game UI - Mobile Optimized
   return (
     <div className="h-screen w-full flex overflow-hidden bg-background">
       <div className="flex-1 overflow-y-auto" ref={mainContainerRef}>
-        <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-3 md:p-6 relative">
+        <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-2 md:p-6 relative">
           {/* Animated background */}
           <div className="absolute inset-0 overflow-hidden">
             {[...Array(10)].map((_, i) => (
@@ -900,8 +1025,8 @@ export default function TruthOrDare({ currentUser }) {
           <div className="max-w-7xl mx-auto relative z-10">
             {/* FIXED: Next Round Loading Overlay */}
             {nextRoundLoading && (
-              <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-                <Card className="p-6 md:p-8 bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0 text-center">
+              <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                <Card className="p-6 md:p-8 bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0 text-center max-w-sm w-full">
                   <Loader2 className="w-12 h-12 md:w-16 md:h-16 text-purple-600 animate-spin mx-auto mb-4" />
                   <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">Starting Next Round</h3>
                   <p className="text-gray-600">Get ready for the next turn!</p>
@@ -910,8 +1035,8 @@ export default function TruthOrDare({ currentUser }) {
             )}
 
             {/* Header - Mobile Responsive */}
-            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-0 mb-4 md:mb-6 p-3 md:p-4 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20">
-              <div className="flex items-center space-x-3 md:space-x-4">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2 md:gap-0 mb-3 md:mb-6 p-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 mx-1">
+              <div className="flex items-center space-x-2 md:space-x-4">
                 {/* BACK BUTTON */}
                 <Button
                   onClick={() => navigate('/games')}
@@ -923,8 +1048,8 @@ export default function TruthOrDare({ currentUser }) {
                 </Button>
                 
                 <div>
-                  <h2 className="text-lg md:text-xl font-bold text-white">Room Code</h2>
-                  <div className="font-mono text-xl md:text-2xl font-bold text-yellow-300 bg-black/30 px-2 md:px-3 py-1 rounded-lg">
+                  <h2 className="text-sm md:text-xl font-bold text-white">Room Code</h2>
+                  <div className="font-mono text-lg md:text-2xl font-bold text-yellow-300 bg-black/30 px-2 md:px-3 py-1 rounded-lg">
                     {roomId}
                   </div>
                 </div>
@@ -934,7 +1059,7 @@ export default function TruthOrDare({ currentUser }) {
                 </Badge>
               </div>
 
-              <div className="flex items-center justify-between md:justify-end space-x-2 md:space-x-3">
+              <div className="flex items-center justify-between md:justify-end space-x-1 md:space-x-3 mt-2 md:mt-0">
                 {/* CHAT TOGGLE BUTTON */}
                 <TooltipProvider>
                   <Tooltip>
@@ -980,7 +1105,7 @@ export default function TruthOrDare({ currentUser }) {
                           variant="outline" 
                           size="sm"
                           onClick={() => setShowKickMenu(!showKickMenu)}
-                          className="text-white hover:bg-white/20 border-white text-xs h-8 md:h-9"
+                          className="text-white hover:bg-white/20 border-white text-xs h-8 md:h-9 px-2"
                         >
                           <Ban className="w-3 h-3 md:w-4 md:h-4 mr-1" />
                           {showKickMenu ? "Cancel" : "Kick"}
@@ -1015,26 +1140,26 @@ export default function TruthOrDare({ currentUser }) {
 
                 <Button 
                   onClick={() => navigator.clipboard?.writeText(roomId)} 
-                  className="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold text-xs h-8 md:h-9"
+                  className="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold text-xs h-8 md:h-9 px-2"
                 >
-                  Copy Code
+                  Copy
                 </Button>
                 <Button 
                   variant="outline" 
                   onClick={leaveRoom} 
-                  className="border-white text-white hover:bg-white/10 text-xs h-8 md:h-9"
+                  className="border-white text-white hover:bg-white/10 text-xs h-8 md:h-9 px-2"
                 >
                   Leave
                 </Button>
               </div>
             </div>
 
-            <div className={`grid gap-4 md:gap-6 ${showChat ? 'grid-cols-1 lg:grid-cols-4' : 'grid-cols-1 lg:grid-cols-3'}`}>
+            <div className={`grid gap-3 md:gap-6 ${showChat ? 'grid-cols-1 lg:grid-cols-4' : 'grid-cols-1 lg:grid-cols-3'} px-1`}>
               {/* Left Column - Players & Controls */}
-              <div className="space-y-4 md:space-y-6">
-                <Card className="p-4 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
+              <div className="space-y-3 md:space-y-6">
+                <Card className="p-3 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
                   <div className="flex items-center justify-between mb-3 md:mb-4">
-                    <h3 className="text-base md:text-lg font-semibold text-gray-900 flex items-center">
+                    <h3 className="text-sm md:text-lg font-semibold text-gray-900 flex items-center">
                       <Users className="w-4 h-4 md:w-5 md:h-5 mr-2 text-blue-600" />
                       Players ({players.length})
                     </h3>
@@ -1046,7 +1171,7 @@ export default function TruthOrDare({ currentUser }) {
                     )}
                   </div>
 
-                  <div className="space-y-2 md:space-y-3 max-h-60 md:max-h-80 overflow-y-auto">
+                  <div className="space-y-2 md:space-y-3 max-h-48 md:max-h-80 overflow-y-auto">
                     {players.map((player, index) => (
                       <div
                         key={player.name}
@@ -1063,7 +1188,9 @@ export default function TruthOrDare({ currentUser }) {
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex items-center space-x-1 md:space-x-2">
-                            <span className="font-medium text-gray-900 text-sm md:text-base">{player.name}</span>
+                            <span className="font-medium text-gray-900 text-sm md:text-base truncate max-w-20 md:max-w-none">
+                              {player.name}
+                            </span>
                             {index === 0 && <Crown className="w-3 h-3 md:w-4 md:h-4 text-yellow-500" />}
                             {player.name === localName && (
                               <Badge variant="secondary" className="text-xs">You</Badge>
@@ -1103,7 +1230,7 @@ export default function TruthOrDare({ currentUser }) {
                             </Button>
                           )}
                           {gameSettings.enableScoring && (
-                            <div className="text-right">
+                            <div className="text-right min-w-12">
                               <div className="text-xs md:text-sm font-bold text-gray-900">{scores[player.name] || 0}</div>
                               <div className="text-xs text-gray-500">pts</div>
                             </div>
@@ -1118,7 +1245,7 @@ export default function TruthOrDare({ currentUser }) {
                     {stage === "waiting" && isHost && (
                       <Button 
                         onClick={() => socket.emit("start-game", { roomId })} 
-                        className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg"
+                        className="w-full py-3 md:py-6 text-sm md:text-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg"
                         disabled={players.length < 2}
                       >
                         <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
@@ -1130,7 +1257,7 @@ export default function TruthOrDare({ currentUser }) {
                       <Button 
                         onClick={startSpin} 
                         disabled={spinning || players.length === 0} 
-                        className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg transition-all duration-300"
+                        className="w-full py-3 md:py-6 text-sm md:text-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg transition-all duration-300"
                       >
                         <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                         Spin the Wheel
@@ -1139,9 +1266,9 @@ export default function TruthOrDare({ currentUser }) {
 
                     {/* Show spinning state for all players */}
                     {stage === "playing" && spinning && (
-                      <div className="w-full py-4 md:py-6 text-center bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg shadow-lg">
+                      <div className="w-full py-3 md:py-6 text-center bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg shadow-lg">
                         <div className="animate-spin rounded-full h-6 w-6 md:h-8 md:w-8 border-b-2 border-white mx-auto mb-2"></div>
-                        <div className="text-base md:text-lg font-semibold">Spinning the wheel...</div>
+                        <div className="text-sm md:text-lg font-semibold">Spinning the wheel...</div>
                       </div>
                     )}
 
@@ -1150,7 +1277,7 @@ export default function TruthOrDare({ currentUser }) {
                       <Button 
                         onClick={resetRound} 
                         disabled={nextRoundLoading}
-                        className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg transition-all duration-300"
+                        className="w-full py-3 md:py-6 text-sm md:text-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg transition-all duration-300"
                       >
                         {nextRoundLoading ? (
                           <>
@@ -1170,8 +1297,8 @@ export default function TruthOrDare({ currentUser }) {
 
                 {/* Settings Panel */}
                 {showSettings && isHost && (
-                  <Card className="p-4 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
-                    <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4 flex items-center">
+                  <Card className="p-3 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
+                    <h3 className="text-sm md:text-lg font-semibold text-gray-900 mb-3 md:mb-4 flex items-center">
                       <Settings className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                       Game Settings
                     </h3>
@@ -1214,10 +1341,10 @@ export default function TruthOrDare({ currentUser }) {
               </div>
 
               {/* Middle Column - Game Area */}
-              <div className={`space-y-4 md:space-y-6 ${showChat ? 'lg:col-span-2' : 'lg:col-span-2'}`}>
+              <div className={`space-y-3 md:space-y-6 ${showChat ? 'lg:col-span-2' : 'lg:col-span-2'}`}>
                 {/* Spinner Wheel - FIXED: Now shows for all players during spin */}
                 {stage === "playing" && !nextRoundLoading && (
-                  <Card className="p-4 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0 text-center">
+                  <Card className="p-3 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0 text-center">
                     <SpinnerWheel 
                       players={players} 
                       selectedPlayer={selectedPlayer} 
@@ -1227,11 +1354,11 @@ export default function TruthOrDare({ currentUser }) {
                     
                     {/* Show spinning status for all players */}
                     {spinning && (
-                      <div className="mt-4 md:mt-6">
-                        <div className="text-lg md:text-xl font-bold text-gray-900 mb-2">
+                      <div className="mt-3 md:mt-6">
+                        <div className="text-base md:text-xl font-bold text-gray-900 mb-2">
                           🎡 Spinning the wheel...
                         </div>
-                        <div className="text-sm md:text-base text-gray-600">
+                        <div className="text-xs md:text-base text-gray-600">
                           Wait to see who gets selected!
                         </div>
                       </div>
@@ -1241,22 +1368,22 @@ export default function TruthOrDare({ currentUser }) {
 
                 {/* Selected Player & Game Flow */}
                 {selectedPlayer && !nextRoundLoading && (
-                  <Card className="p-4 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
-                    <div className="space-y-4 md:space-y-6">
+                  <Card className="p-3 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
+                    <div className="space-y-3 md:space-y-6">
                       {/* Selected Player Header */}
                       <div className="text-center">
-                        <div className="inline-flex items-center space-x-2 md:space-x-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-4 md:px-6 py-2 md:py-3 rounded-full shadow-lg">
+                        <div className="inline-flex items-center space-x-2 md:space-x-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 md:px-6 py-2 md:py-3 rounded-full shadow-lg">
                           <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
-                          <h3 className="text-lg md:text-xl font-bold">Selected Player</h3>
+                          <h3 className="text-base md:text-xl font-bold">Selected Player</h3>
                           <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
                         </div>
-                        <div className="mt-3 md:mt-4">
-                          <Avatar className="w-16 h-16 md:w-20 md:h-20 mx-auto mb-2 md:mb-3 border-4 border-yellow-400 shadow-lg">
-                            <AvatarFallback className="text-xl md:text-2xl bg-gradient-to-br from-orange-500 to-red-600 text-white">
+                        <div className="mt-2 md:mt-4">
+                          <Avatar className="w-12 h-12 md:w-20 md:h-20 mx-auto mb-2 md:mb-3 border-4 border-yellow-400 shadow-lg">
+                            <AvatarFallback className="text-lg md:text-2xl bg-gradient-to-br from-orange-500 to-red-600 text-white">
                               {selectedPlayer.charAt(0).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <h2 className="text-2xl md:text-3xl font-bold text-gray-900">{selectedPlayer}</h2>
+                          <h2 className="text-xl md:text-3xl font-bold text-gray-900">{selectedPlayer}</h2>
                           {timeLeft !== null && (
                             <div className="mt-2">
                               <Progress value={(timeLeft / gameSettings.timerDuration) * 100} className="h-2" />
@@ -1276,13 +1403,13 @@ export default function TruthOrDare({ currentUser }) {
                           <div className="flex flex-col md:flex-row justify-center gap-3 md:gap-6">
                             <Button 
                               onClick={() => submitTruthDare("Truth")} 
-                              className="px-6 py-4 md:px-8 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg transition-transform hover:scale-105"
+                              className="px-4 py-3 md:px-8 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg transition-transform hover:scale-105"
                             >
                               💬 Truth
                             </Button>
                             <Button 
                               onClick={() => submitTruthDare("Dare")} 
-                              className="px-6 py-4 md:px-8 md:py-6 text-base md:text-lg bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white shadow-lg transition-transform hover:scale-105"
+                              className="px-4 py-3 md:px-8 md:py-6 text-base md:text-lg bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white shadow-lg transition-transform hover:scale-105"
                             >
                               ⚡ Dare
                             </Button>
@@ -1292,11 +1419,11 @@ export default function TruthOrDare({ currentUser }) {
 
                       {/* Show Choice */}
                       {truthDareChoice && truthDareChoice.player === selectedPlayer && (
-                        <Card className="p-4 md:p-6 bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 text-center">
-                          <div className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
+                        <Card className="p-3 md:p-6 bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 text-center">
+                          <div className="text-lg md:text-2xl font-bold text-gray-900 mb-2">
                             {selectedPlayer} chose:
                           </div>
-                          <div className={`text-2xl md:text-3xl font-extrabold ${
+                          <div className={`text-xl md:text-3xl font-extrabold ${
                             truthDareChoice.choice === "Truth" 
                               ? "text-purple-600" 
                               : "text-red-600"
@@ -1308,7 +1435,7 @@ export default function TruthOrDare({ currentUser }) {
 
                       {/* Proof Upload Section - ONLY FOR DARES */}
                       {selectedPlayer === localName && chosenPrompt && shouldRequireProof && (
-                        <Card className="p-4 md:p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
+                        <Card className="p-3 md:p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
                           <h4 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4 text-center">
                             📸 Upload Proof for Dare
                           </h4>
@@ -1328,7 +1455,7 @@ export default function TruthOrDare({ currentUser }) {
                                   />
                                   <Button
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-2 md:py-3 px-4 md:px-6 text-sm md:text-base"
+                                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-2 md:py-3 px-3 md:px-6 text-sm md:text-base"
                                   >
                                     <Camera className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                                     Upload Proof Image
@@ -1348,7 +1475,7 @@ export default function TruthOrDare({ currentUser }) {
                                     <img
                                       src={proofImage}
                                       alt="Proof"
-                                      className="max-w-full h-32 md:h-48 object-cover rounded-lg shadow-md border-2 border-green-300"
+                                      className="max-w-full h-24 md:h-48 object-cover rounded-lg shadow-md border-2 border-green-300"
                                     />
                                     <Button
                                       variant="destructive"
@@ -1371,7 +1498,7 @@ export default function TruthOrDare({ currentUser }) {
 
                       {/* FIXED 2: Truth Completion Section - Shows to everyone */}
                       {chosenPrompt && !shouldRequireProof && (
-                        <Card className="p-4 md:p-6 bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200">
+                        <Card className="p-3 md:p-6 bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200">
                           <h4 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4 text-center">
                             💬 Truth Completion
                           </h4>
@@ -1381,14 +1508,14 @@ export default function TruthOrDare({ currentUser }) {
                                 <div className="text-green-600 font-semibold mb-3 md:mb-4 text-sm md:text-base">
                                   ✅ {selectedPlayer} completed their truth!
                                 </div>
-                                <Card className="p-3 md:p-4 bg-white border border-gray-200 text-left">
+                                <Card className="p-2 md:p-4 bg-white border border-gray-200 text-left">
                                   <div className="flex items-center space-x-2 mb-2">
                                     <Avatar className="w-6 h-6">
                                       <AvatarFallback className="bg-purple-500 text-white text-xs">
                                         {selectedPlayer.charAt(0).toUpperCase()}
                                       </AvatarFallback>
                                     </Avatar>
-                                    <span className="font-semibold text-gray-900">{selectedPlayer}:</span>
+                                    <span className="font-semibold text-gray-900 text-sm">{selectedPlayer}:</span>
                                   </div>
                                   <p className="text-gray-900 text-sm md:text-base pl-8">{truthCompletionText}</p>
                                 </Card>
@@ -1411,7 +1538,7 @@ export default function TruthOrDare({ currentUser }) {
                                   <Button
                                     onClick={submitTruthCompletion}
                                     disabled={!truthCompletionText.trim()}
-                                    className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-2 md:py-3 px-4 md:px-6 text-sm md:text-base"
+                                    className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-2 md:py-3 px-3 md:px-6 text-sm md:text-base"
                                   >
                                     Submit Truth Completion
                                   </Button>
@@ -1428,7 +1555,7 @@ export default function TruthOrDare({ currentUser }) {
 
                       {/* FIXED: Prompt Input - Only shows correct type based on player's choice */}
                       {selectedPlayer !== localName && !chosenPrompt && truthDareChoice && (
-                        <Card className="p-4 md:p-6 bg-gray-50 border-2 border-gray-200">
+                        <Card className="p-3 md:p-6 bg-gray-50 border-2 border-gray-200">
                           <Tabs value={promptType} onValueChange={setPromptType} className="w-full">
                             <TabsList className="grid w-full grid-cols-2 mb-3 md:mb-4">
                               <TabsTrigger 
@@ -1449,8 +1576,8 @@ export default function TruthOrDare({ currentUser }) {
                             
                             {/* Show message if trying to send wrong type */}
                             {promptType !== truthDareChoice.choice.toLowerCase() && (
-                              <div className="text-center p-3 bg-yellow-50 border border-yellow-200 rounded-lg mb-3">
-                                <p className="text-yellow-800 text-sm">
+                              <div className="text-center p-2 bg-yellow-50 border border-yellow-200 rounded-lg mb-3">
+                                <p className="text-yellow-800 text-xs md:text-sm">
                                   {selectedPlayer} chose <strong>{truthDareChoice.choice}</strong>. 
                                   Please send a {truthDareChoice.choice.toLowerCase()} prompt.
                                 </p>
@@ -1469,7 +1596,7 @@ export default function TruthOrDare({ currentUser }) {
                                 <Button 
                                   onClick={sendPrompt} 
                                   disabled={!promptText.trim() || promptType !== truthDareChoice.choice.toLowerCase()}
-                                  className={`py-2 md:py-3 px-3 md:px-6 text-sm md:text-base ${
+                                  className={`py-2 md:py-3 px-2 md:px-6 text-sm md:text-base ${
                                     promptType === "truth" 
                                       ? "bg-purple-600 hover:bg-purple-700" 
                                       : "bg-red-600 hover:bg-red-700"
@@ -1479,7 +1606,7 @@ export default function TruthOrDare({ currentUser }) {
                                 </Button>
                               </div>
                               {promptType !== truthDareChoice.choice.toLowerCase() && (
-                                <p className="text-red-500 text-sm text-center">
+                                <p className="text-red-500 text-xs md:text-sm text-center">
                                   ❌ You can only send {truthDareChoice.choice.toLowerCase()} prompts for {selectedPlayer}
                                 </p>
                               )}
@@ -1490,15 +1617,15 @@ export default function TruthOrDare({ currentUser }) {
 
                       {/* Prompts List */}
                       {prompts.length > 0 && (
-                        <Card className="p-4 md:p-6 bg-gray-50 border-2 border-gray-200">
+                        <Card className="p-3 md:p-6 bg-gray-50 border-2 border-gray-200">
                           <h4 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">
                             Suggested Prompts ({prompts.length})
                           </h4>
-                          <div className="space-y-2 md:space-y-3 max-h-40 md:max-h-60 overflow-y-auto">
+                          <div className="space-y-2 md:space-y-3 max-h-32 md:max-h-60 overflow-y-auto">
                             {prompts.map(pr => (
                               <div 
                                 key={pr.id} 
-                                className={`p-3 md:p-4 rounded-xl border-2 transition-all duration-300 ${
+                                className={`p-2 md:p-4 rounded-xl border-2 transition-all duration-300 ${
                                   chosenPrompt?.id === pr.id
                                     ? "border-green-500 bg-green-50 shadow-md"
                                     : "border-gray-200 bg-white hover:border-gray-300"
@@ -1535,10 +1662,10 @@ export default function TruthOrDare({ currentUser }) {
 
                       {/* Chosen Prompt */}
                       {chosenPrompt && (
-                        <Card className="p-4 md:p-6 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 shadow-lg">
+                        <Card className="p-3 md:p-6 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 shadow-lg">
                           <div className="text-center">
                             <div className="text-xs md:text-sm text-gray-600 mb-2">Chosen Prompt</div>
-                            <div className="text-xl md:text-2xl font-bold text-gray-900 mb-3 md:mb-4">{chosenPrompt.text}</div>
+                            <div className="text-lg md:text-2xl font-bold text-gray-900 mb-3 md:mb-4">{chosenPrompt.text}</div>
                             <div className="flex items-center justify-center space-x-2 md:space-x-4 text-xs md:text-sm text-gray-600">
                               <Badge variant={chosenPrompt.type === "truth" ? "default" : "destructive"}>
                                 {chosenPrompt.type}
@@ -1551,7 +1678,7 @@ export default function TruthOrDare({ currentUser }) {
 
                       {/* Admin Notice */}
                       {isHost && selectedPlayer && (
-                        <Card className={`p-3 md:p-4 text-center ${
+                        <Card className={`p-2 md:p-4 text-center ${
                           proofUploaded 
                             ? "bg-green-50 border-2 border-green-200" 
                             : "bg-yellow-50 border-2 border-yellow-200"
@@ -1574,11 +1701,11 @@ export default function TruthOrDare({ currentUser }) {
 
               {/* RIGHT COLUMN - CHAT */}
               {showChat && (
-                <div className="space-y-4 md:space-y-6">
-                  <Card className="h-[400px] md:h-[600px] flex flex-col bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
-                    <div className="p-3 md:p-4 border-b border-gray-200">
+                <div className="space-y-3 md:space-y-6">
+                  <Card className="h-[300px] md:h-[600px] flex flex-col bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
+                    <div className="p-2 md:p-4 border-b border-gray-200">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-base md:text-lg font-semibold text-gray-900 flex items-center">
+                        <h3 className="text-sm md:text-lg font-semibold text-gray-900 flex items-center">
                           <MessageCircle className="w-4 h-4 md:w-5 md:h-5 mr-2 text-blue-600" />
                           Game Chat
                         </h3>
@@ -1598,12 +1725,12 @@ export default function TruthOrDare({ currentUser }) {
                     {/* Chat Messages */}
                     <div 
                       ref={chatContainerRef}
-                      className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 md:space-y-3"
+                      className="flex-1 overflow-y-auto p-2 md:p-4 space-y-2 md:space-y-3"
                     >
                       {chatMessages.length === 0 ? (
                         <div className="text-center text-gray-500 mt-4 md:mt-8">
-                          <MessageCircle className="w-8 h-8 md:w-12 md:h-12 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">No messages yet</p>
+                          <MessageCircle className="w-6 h-6 md:w-12 md:h-12 mx-auto mb-2 opacity-50" />
+                          <p className="text-xs md:text-sm">No messages yet</p>
                           <p className="text-xs">Start the conversation!</p>
                         </div>
                       ) : (
@@ -1637,7 +1764,7 @@ export default function TruthOrDare({ currentUser }) {
                     </div>
 
                     {/* Chat Input */}
-                    <div className="p-3 md:p-4 border-t border-gray-200">
+                    <div className="p-2 md:p-4 border-t border-gray-200">
                       <div className="flex gap-2">
                         <Input
                           value={chatInput}
@@ -1665,7 +1792,7 @@ export default function TruthOrDare({ currentUser }) {
           {showProofModal && (
             <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-3 md:p-4">
               <Card className="max-w-md md:max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0">
-                <div className="p-4 md:p-6">
+                <div className="p-3 md:p-6">
                   <div className="flex justify-between items-center mb-3 md:mb-4">
                     <h3 className="text-lg md:text-xl font-bold text-gray-900">Proof Submission</h3>
                     <Button
@@ -1687,21 +1814,21 @@ export default function TruthOrDare({ currentUser }) {
                         <img
                           src={currentProof}
                           alt="Proof submission"
-                          className="max-w-full h-48 md:h-96 object-contain rounded-lg border-2 border-gray-200 mx-auto"
+                          className="max-w-full h-32 md:h-96 object-contain rounded-lg border-2 border-gray-200 mx-auto"
                         />
                         <p className="text-xs md:text-sm text-gray-500">
                           This is the proof submitted by the player for their dare
                         </p>
                       </div>
                     ) : (
-                      <div className="py-8 md:py-12 text-gray-500">
-                        <Camera className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-3 md:mb-4 opacity-50" />
-                        <p>Proof not available</p>
+                      <div className="py-6 md:py-12 text-gray-500">
+                        <Camera className="w-8 h-8 md:w-16 md:h-16 mx-auto mb-2 md:mb-4 opacity-50" />
+                        <p className="text-sm md:text-base">Proof not available</p>
                       </div>
                     )}
                   </div>
                   
-                  <div className="flex justify-end mt-4 md:mt-6">
+                  <div className="flex justify-end mt-3 md:mt-6">
                     <Button
                       onClick={() => {
                         setShowProofModal(false);
@@ -1763,7 +1890,7 @@ function SpinnerWheel({ players, selectedPlayer, spinning, soundEnabled }) {
   if (players.length === 0) return null;
 
   return (
-    <div className="relative w-64 h-64 md:w-80 md:h-80 mx-auto">
+    <div className="relative w-48 h-48 md:w-80 md:h-80 mx-auto">
       <div
         ref={wheelRef}
         className="w-full h-full rounded-full border-4 md:border-8 border-white relative flex items-center justify-center bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 shadow-2xl"
@@ -1772,9 +1899,9 @@ function SpinnerWheel({ players, selectedPlayer, spinning, soundEnabled }) {
         }}
       >
         {/* Center circle */}
-        <div className="absolute w-16 h-16 md:w-20 md:h-20 bg-white rounded-full shadow-inner flex items-center justify-center">
-          <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-            <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-white" />
+        <div className="absolute w-12 h-12 md:w-20 md:h-20 bg-white rounded-full shadow-inner flex items-center justify-center">
+          <div className="w-10 h-10 md:w-16 md:h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+            <Sparkles className="w-5 h-5 md:w-8 md:h-8 text-white" />
           </div>
         </div>
 
@@ -1792,14 +1919,14 @@ function SpinnerWheel({ players, selectedPlayer, spinning, soundEnabled }) {
                 isWinner 
                   ? "scale-125 text-yellow-300 drop-shadow-xl z-10 animate-bounce" 
                   : "text-white drop-shadow-md"
-              } ${isLargeSegment ? 'text-sm md:text-lg w-32 md:w-40' : 'text-xs md:text-sm w-28 md:w-36'}`}
+              } ${isLargeSegment ? 'text-xs md:text-lg w-24 md:w-40' : 'text-xs md:text-sm w-20 md:w-36'}`}
               style={{ 
-                transform: `rotate(${angle}deg) translate(0, -110px) rotate(-${angle}deg)`,
+                transform: `rotate(${angle}deg) translate(0, -80px) rotate(-${angle}deg)`,
                 transformOrigin: 'center center'
               }}
             >
               <div className={`
-                px-2 py-1 md:px-3 md:py-1 rounded-full backdrop-blur-sm
+                px-1 py-0.5 md:px-3 md:py-1 rounded-full backdrop-blur-sm
                 ${isWinner 
                   ? 'bg-yellow-500/20 border-2 border-yellow-300' 
                   : 'bg-black/20'
@@ -1814,8 +1941,8 @@ function SpinnerWheel({ players, selectedPlayer, spinning, soundEnabled }) {
       
       {/* Pointer */}
       <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-2">
-        <div className="w-4 h-6 md:w-6 md:h-8 bg-yellow-400 rounded-t-lg shadow-lg" />
-        <div className="w-3 h-3 md:w-4 md:h-4 bg-yellow-400 transform rotate-45 mx-auto -mt-1 md:-mt-2 shadow-lg" />
+        <div className="w-3 h-4 md:w-6 md:h-8 bg-yellow-400 rounded-t-lg shadow-lg" />
+        <div className="w-2 h-2 md:w-4 md:h-4 bg-yellow-400 transform rotate-45 mx-auto -mt-1 md:-mt-2 shadow-lg" />
       </div>
     </div>
   );
@@ -1829,7 +1956,7 @@ function ToastContainer({ toasts }) {
         <div 
           key={t.id} 
           className={`
-            p-3 md:p-4 rounded-xl shadow-2xl backdrop-blur-sm border transform transition-all duration-500 animate-in slide-in-from-right-80
+            p-2 md:p-4 rounded-xl shadow-2xl backdrop-blur-sm border transform transition-all duration-500 animate-in slide-in-from-right-80
             ${t.type === 'error' 
               ? 'bg-red-500/90 text-white border-red-600' 
               : t.type === 'success'
@@ -1839,9 +1966,9 @@ function ToastContainer({ toasts }) {
           `}
         >
           <div className="flex items-center space-x-2 md:space-x-3">
-            {t.type === 'success' && <Sparkles className="w-4 h-4 md:w-5 md:h-5" />}
-            {t.type === 'error' && <div className="w-4 h-4 md:w-5 md:h-5">⚠️</div>}
-            <span className="font-medium text-sm md:text-base">{t.message}</span>
+            {t.type === 'success' && <Sparkles className="w-3 h-3 md:w-5 md:h-5" />}
+            {t.type === 'error' && <div className="w-3 h-3 md:w-5 md:h-5">⚠️</div>}
+            <span className="font-medium text-xs md:text-base">{t.message}</span>
           </div>
         </div>
       ))}

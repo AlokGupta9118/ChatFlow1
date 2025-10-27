@@ -3,7 +3,7 @@ import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Paperclip, Send, Info, X, Smile, Mic, Image, File, User, Eye } from "lucide-react";
+import { Paperclip, Send, Info, X, Smile, Mic, Image, File, User, Eye, MoreVertical } from "lucide-react";
 import { getToken } from "@/utils/getToken";
 import { io } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
@@ -22,11 +22,27 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [viewedProfile, setViewedProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [userRole, setUserRole] = useState(null);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [showMenu, setShowMenu] = useState(false);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
+  const menuRef = useRef(null);
 
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -53,6 +69,41 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
     }
   };
 
+  // Fetch group members and user role
+  const fetchGroupMembers = async () => {
+    if (!selectedChat?._id || !isGroup) return;
+
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const res = await axios.get(
+        `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/members`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const members = res.data.members || [];
+      setGroupMembers(members);
+
+      // Find current user's role
+      const currentUserMember = members.find(m => 
+        m.user?._id === userId || m.user === userId
+      );
+      
+      if (currentUserMember) {
+        setUserRole(currentUserMember.role);
+        setCanSendMessage(true);
+      } else {
+        setUserRole(null);
+        setCanSendMessage(false);
+      }
+
+    } catch (err) {
+      console.error("Error fetching group members:", err);
+      setCanSendMessage(false);
+    }
+  };
+
   // View profile handler
   const handleViewProfile = (userData) => {
     if (!userData?._id) return;
@@ -68,35 +119,15 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
     }
   };
 
+  // Check if user is admin/owner
+  const isUserAdmin = () => {
+    return userRole === 'admin' || userRole === 'owner';
+  };
+
   useEffect(() => {
-    if (!selectedChat?._id || !isGroup) return;
-
-    const fetchMembers = async () => {
-      const token = getToken();
-      if (!token) return;
-
-      try {
-        const res = await axios.get(
-          `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/members`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        const members = res.data.members || [];
-        const isAllowed = members.some(
-          (m) =>
-            m.user._id === userId ||
-            m.role === "admin" ||
-            m.role === "owner"
-        );
-
-        setCanSendMessage(isAllowed);
-      } catch (err) {
-        console.error("Error fetching group members:", err);
-        setCanSendMessage(false);
-      }
-    };
-
-    fetchMembers();
+    if (isGroup) {
+      fetchGroupMembers();
+    }
   }, [selectedChat?._id, isGroup, userId]);
 
   useEffect(() => {
@@ -246,15 +277,83 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
               <User className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </motion.button>
           )}
+          
+          {/* Three-dot menu for group admins */}
           {isGroup && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowAdminPanel(true)}
-              className="p-3 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-200/50 dark:border-gray-700/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition-all duration-200 shadow-sm"
-            >
-              <Info className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-            </motion.button>
+            <div className="relative" ref={menuRef}>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowMenu(!showMenu)}
+                className="p-3 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-200/50 dark:border-gray-700/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition-all duration-200 shadow-sm"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+              </motion.button>
+              
+              {/* Dropdown Menu */}
+              <AnimatePresence>
+                {showMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                    className="absolute right-0 top-full mt-2 w-48 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 py-2 z-50"
+                  >
+                    {/* Always show Group Info option */}
+                    <button
+                      onClick={() => {
+                        setShowAdminPanel(true);
+                        setShowMenu(false);
+                      }}
+                      className="w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-3"
+                    >
+                      <Info className="w-4 h-4" />
+                      Group Info
+                    </button>
+                    
+                    {/* Show admin options only if user is admin/owner */}
+                    {isUserAdmin() && (
+                      <>
+                        <div className="border-t border-gray-200/50 dark:border-gray-700/50 my-1"></div>
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                          Admin Actions
+                        </div>
+                        <button
+                          onClick={() => {
+                            setShowAdminPanel(true);
+                            setShowMenu(false);
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-3"
+                        >
+                          <User className="w-4 h-4" />
+                          Manage Members
+                        </button>
+                        <button
+                          onClick={() => {
+                            // Add your settings action here
+                            setShowMenu(false);
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-3"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          Group Settings
+                        </button>
+                      </>
+                    )}
+                    
+                    {/* Show user role badge */}
+                    <div className="border-t border-gray-200/50 dark:border-gray-700/50 mt-2 pt-2 px-4">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Your role: <span className="font-semibold text-indigo-600 dark:text-indigo-400 capitalize">{userRole || 'member'}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           )}
         </div>
       </div>
@@ -539,7 +638,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
                 <GroupChatAdminPanel
                   group={selectedChat}
                   currentUser={currentUser}
-                  refreshGroup={() => {}}
+                  refreshGroup={fetchGroupMembers}
                 />
               </div>
             </motion.div>

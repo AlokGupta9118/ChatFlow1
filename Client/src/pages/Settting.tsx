@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getToken } from "@/utils/getToken";
 import axios from "axios";
 import {
@@ -17,6 +20,25 @@ import {
   Bot,
   Clock,
   ArrowLeft,
+  User,
+  Palette,
+  Shield,
+  Bell,
+  Download,
+  Eye,
+  EyeOff,
+  Key,
+  LogOut,
+  Smartphone,
+  Globe,
+  Zap,
+  Sparkles,
+  CheckCircle2,
+  Camera,
+  Image,
+  Sun,
+  Moon,
+  Laptop
 } from "lucide-react";
 
 const SettingsPanel = ({ currentUser }) => {
@@ -28,6 +50,8 @@ const SettingsPanel = ({ currentUser }) => {
 
   const [darkMode, setDarkMode] = useState(systemPrefersDark);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("profile");
+  const [showPassword, setShowPassword] = useState(false);
   const [preview, setPreview] = useState({
     profile: "/default-avatar.png",
     cover: "/default-cover.jpg",
@@ -45,6 +69,9 @@ const SettingsPanel = ({ currentUser }) => {
     profilePicture: "",
     coverPhoto: "",
     status: "online",
+    notifications: true,
+    soundEnabled: true,
+    messagePreview: true,
   });
 
   // Fetch user settings
@@ -99,14 +126,6 @@ const SettingsPanel = ({ currentUser }) => {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
-  // Auto system theme changes
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e) => settings.theme === "system" && setDarkMode(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, [settings.theme]);
-
   const handleChange = (key, val) =>
     setSettings((prev) => ({ ...prev, [key]: val }));
 
@@ -121,11 +140,18 @@ const SettingsPanel = ({ currentUser }) => {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-      alert("✅ Settings updated successfully!");
+      
+      // Show success animation
+      const saveBtn = document.getElementById('save-btn');
+      if (saveBtn) {
+        saveBtn.innerHTML = '<CheckCircle2 className="w-5 h-5 mx-auto" />';
+        setTimeout(() => {
+          setSaving(false);
+        }, 2000);
+      }
     } catch (err) {
       console.error(err);
       alert("❌ Failed to update settings.");
-    } finally {
       setSaving(false);
     }
   };
@@ -154,241 +180,539 @@ const SettingsPanel = ({ currentUser }) => {
         ? res.data.url
         : `${import.meta.env.VITE_API_URL}${res.data.url.startsWith("/") ? "" : "/"}${res.data.url}`;
 
-      // Update preview AND settings state
       setPreview((prev) => ({ ...prev, [type]: url }));
       if (type === "profile") handleChange("profilePicture", url);
       else if (type === "cover") handleChange("coverPhoto", url);
 
-      alert(`✅ ${type === "profile" ? "Profile" : "Cover"} image updated!`);
     } catch (err) {
       console.error("Upload failed:", err);
       alert("❌ Upload failed!");
     }
   };
 
-  // UI classes
-  const base = darkMode
-    ? "bg-gradient-to-br from-gray-900 via-slate-900 to-black text-white"
-    : "bg-gradient-to-br from-gray-700 via-gray-600 to-gray-800 text-white";
-
-  const card =
-    "bg-white/10 dark:bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 p-4 md:p-6 transition hover:shadow-lg hover:shadow-blue-500/20";
+  const tabConfig = [
+    { id: "profile", label: "Profile", icon: User, color: "text-blue-400" },
+    { id: "appearance", label: "Appearance", icon: Palette, color: "text-purple-400" },
+    { id: "notifications", label: "Notifications", icon: Bell, color: "text-green-400" },
+    { id: "security", label: "Security", icon: Shield, color: "text-yellow-400" },
+    { id: "privacy", label: "Privacy", icon: Lock, color: "text-orange-400" },
+  ];
 
   return (
-    <div className={`min-h-screen py-8 md:py-12 px-4 md:px-6 transition-colors ${base}`}>
-      {/* Back Button */}
-      <div className="absolute top-4 left-4 z-20">
-        <button
-          onClick={() => navigate('/chat')}
-          className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/30 transition-all border border-white/30"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span className="text-sm font-medium">Back to Chat</span>
-        </button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-purple-900/20">
+      {/* Header */}
+      <div className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate('/chat')}
+                className="flex items-center gap-2 px-4 py-2 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl text-gray-700 dark:text-gray-300 hover:bg-white/80 dark:hover:bg-gray-700/50 transition-all border border-gray-200/50 dark:border-gray-600/50"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-sm font-medium hidden sm:block">Back to Chat</span>
+              </button>
+              
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl shadow-lg">
+                  <Settings2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 dark:from-gray-100 dark:to-gray-300 bg-clip-text text-transparent">
+                    Settings
+                  </h1>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
+                    Manage your account preferences
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <Badge variant="secondary" className="hidden sm:flex">
+              <Sparkles className="w-3 h-3 mr-1" />
+              Pro
+            </Badge>
+          </div>
+        </div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 25 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-5xl mx-auto p-6 md:p-10 rounded-3xl shadow-2xl bg-white/5 dark:bg-white/10 backdrop-blur-2xl border border-white/10 mt-16 md:mt-0"
-      >
-        <h2 className="text-2xl md:text-4xl font-bold mb-6 md:mb-10 flex items-center gap-3">
-          <Settings2 className="text-blue-400" size={24} /> Settings & Preferences
-        </h2>
+      <div className="max-w-7xl mx-auto p-4 lg:p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Sidebar Navigation */}
+          <div className="lg:col-span-1">
+            <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/50 shadow-lg sticky top-24">
+              <CardContent className="p-4">
+                <TabsList className="grid grid-cols-2 lg:grid-cols-1 gap-2 w-full">
+                  {tabConfig.map((tab) => (
+                    <TabsTrigger
+                      key={tab.id}
+                      value={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
+                        activeTab === tab.id
+                          ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg"
+                          : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                      }`}
+                    >
+                      <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-white' : tab.color}`} />
+                      <span className="text-sm font-medium">{tab.label}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
 
-        {/* PROFILE */}
-        <section className={`${card} mb-6 md:mb-10`}>
-          <h3 className="text-xl md:text-2xl font-semibold mb-4">Profile</h3>
-          <div className="relative w-full h-32 md:h-48 rounded-xl overflow-hidden mb-4 md:mb-6">
-            <img
-              src={preview.cover}
-              alt="Cover"
-              className="object-cover w-full h-full"
-            />
-            <label className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition cursor-pointer">
-              <Upload size={20} />
-              <input
-                type="file"
-                className="hidden"
-                onChange={(e) => handleFileUpload(e, "cover")}
-              />
-            </label>
+                {/* Quick Actions */}
+                <div className="mt-6 pt-6 border-t border-gray-200/50 dark:border-gray-700/50">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-3 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 mb-3"
+                    onClick={() => alert("Export data")}
+                  >
+                    <Download className="w-4 h-4" />
+                    Export Data
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-3 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                    onClick={() => alert("Logout")}
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 mb-4 md:mb-6">
-            <div className="relative">
-              <img
-                src={preview.profile}
-                alt="Profile"
-                className="w-16 h-16 md:w-24 md:h-24 rounded-full border-4 border-blue-400 object-cover shadow-lg"
-              />
-              <label className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 rounded-full cursor-pointer transition">
-                <Upload size={16} />
-                <input
-                  type="file"
-                  className="hidden"
-                  onChange={(e) => handleFileUpload(e, "profile")}
-                />
-              </label>
-            </div>
-            <div className="flex-1 w-full">
-              <Input
-                value={settings.name}
-                onChange={(e) => handleChange("name", e.target.value)}
-                placeholder="Display Name"
-                className="mb-3 bg-white/10 border-none text-white text-sm md:text-base"
-              />
-              <Textarea
-                value={settings.bio}
-                onChange={(e) => handleChange("bio", e.target.value)}
-                placeholder="Bio"
-                className="bg-white/10 border-none text-white text-sm md:text-base min-h-[80px]"
-              />
-            </div>
+          {/* Main Content */}
+          <div className="lg:col-span-3">
+            <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/50 shadow-xl">
+              <CardContent className="p-6">
+                <AnimatePresence mode="wait">
+                  {/* PROFILE TAB */}
+                  {activeTab === "profile" && (
+                    <motion.div
+                      key="profile"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-6"
+                    >
+                      <div className="flex items-center gap-3 mb-6">
+                        <User className="w-6 h-6 text-blue-500" />
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                          Profile Settings
+                        </h2>
+                      </div>
+
+                      {/* Cover Photo */}
+                      <div className="relative rounded-2xl overflow-hidden group">
+                        <img
+                          src={preview.cover}
+                          alt="Cover"
+                          className="w-full h-48 object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <label className="bg-white/20 backdrop-blur-sm text-white px-4 py-2 rounded-lg cursor-pointer flex items-center gap-2 hover:bg-white/30 transition-colors">
+                            <Camera className="w-4 h-4" />
+                            Change Cover
+                            <input
+                              type="file"
+                              className="hidden"
+                              onChange={(e) => handleFileUpload(e, "cover")}
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Profile Picture & Basic Info */}
+                      <div className="flex flex-col md:flex-row items-start gap-6">
+                        <div className="relative group">
+                          <div className="w-24 h-24 rounded-2xl overflow-hidden border-4 border-white dark:border-gray-800 shadow-2xl">
+                            <img
+                              src={preview.profile}
+                              alt="Profile"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <label className="absolute inset-0 bg-black/40 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                            <Camera className="w-6 h-6 text-white" />
+                            <input
+                              type="file"
+                              className="hidden"
+                              onChange={(e) => handleFileUpload(e, "profile")}
+                            />
+                          </label>
+                        </div>
+
+                        <div className="flex-1 space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Display Name
+                              </label>
+                              <Input
+                                value={settings.name}
+                                onChange={(e) => handleChange("name", e.target.value)}
+                                className="bg-white/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600"
+                                placeholder="Your name"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Email Address
+                              </label>
+                              <Input
+                                value={settings.email}
+                                onChange={(e) => handleChange("email", e.target.value)}
+                                className="bg-white/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600"
+                                type="email"
+                                placeholder="your@email.com"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              Bio
+                            </label>
+                            <Textarea
+                              value={settings.bio}
+                              onChange={(e) => handleChange("bio", e.target.value)}
+                              className="bg-white/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 min-h-[100px]"
+                              placeholder="Tell us about yourself..."
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* APPEARANCE TAB */}
+                  {activeTab === "appearance" && (
+                    <motion.div
+                      key="appearance"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-6"
+                    >
+                      <div className="flex items-center gap-3 mb-6">
+                        <Palette className="w-6 h-6 text-purple-500" />
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                          Appearance
+                        </h2>
+                      </div>
+
+                      {/* Theme Selection */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        {[
+                          { id: "light", label: "Light", icon: Sun, description: "Clean and bright" },
+                          { id: "dark", label: "Dark", icon: Moon, description: "Easy on the eyes" },
+                          { id: "system", label: "System", icon: Laptop, description: "Follows your device" },
+                        ].map((theme) => (
+                          <div
+                            key={theme.id}
+                            onClick={() => {
+                              handleChange("theme", theme.id);
+                              if (theme.id === "dark") setDarkMode(true);
+                              else if (theme.id === "light") setDarkMode(false);
+                            }}
+                            className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                              settings.theme === theme.id
+                                ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
+                                : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500"
+                            }`}
+                          >
+                            <theme.icon className={`w-8 h-8 mb-2 ${
+                              settings.theme === theme.id ? "text-purple-500" : "text-gray-400"
+                            }`} />
+                            <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                              {theme.label}
+                            </h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {theme.description}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 rounded-xl bg-white/50 dark:bg-gray-700/50">
+                          <div className="flex items-center gap-3">
+                            <Bot className="w-5 h-5 text-green-500" />
+                            <div>
+                              <div className="font-medium text-gray-900 dark:text-gray-100">
+                                AI Theme Personalization
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">
+                                Let AI customize your theme based on usage
+                              </div>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={settings.aiThemeEnabled}
+                            onCheckedChange={(val) => handleChange("aiThemeEnabled", val)}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 rounded-xl bg-white/50 dark:bg-gray-700/50">
+                          <div className="flex items-center gap-3">
+                            <Zap className="w-5 h-5 text-blue-500" />
+                            <div>
+                              <div className="font-medium text-gray-900 dark:text-gray-100">
+                                Performance Mode
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">
+                                Optimize for better performance
+                              </div>
+                            </div>
+                          </div>
+                          <Switch defaultChecked />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* NOTIFICATIONS TAB */}
+                  {activeTab === "notifications" && (
+                    <motion.div
+                      key="notifications"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-6"
+                    >
+                      <div className="flex items-center gap-3 mb-6">
+                        <Bell className="w-6 h-6 text-green-500" />
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                          Notifications
+                        </h2>
+                      </div>
+
+                      <div className="space-y-4">
+                        {[
+                          {
+                            label: "Push Notifications",
+                            description: "Receive notifications on your device",
+                            checked: settings.notifications,
+                            onChange: (val) => handleChange("notifications", val),
+                            icon: Bell
+                          },
+                          {
+                            label: "Sound Effects",
+                            description: "Play sounds for new messages",
+                            checked: settings.soundEnabled,
+                            onChange: (val) => handleChange("soundEnabled", val),
+                            icon: Volume2
+                          },
+                          {
+                            label: "Message Previews",
+                            description: "Show message content in notifications",
+                            checked: settings.messagePreview,
+                            onChange: (val) => handleChange("messagePreview", val),
+                            icon: Eye
+                          },
+                          {
+                            label: "Email Notifications",
+                            description: "Receive important updates via email",
+                            checked: true,
+                            onChange: () => {},
+                            icon: Download
+                          }
+                        ].map((item, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-4 rounded-xl bg-white/50 dark:bg-gray-700/50"
+                          >
+                            <div className="flex items-center gap-3">
+                              <item.icon className="w-5 h-5 text-blue-500" />
+                              <div>
+                                <div className="font-medium text-gray-900 dark:text-gray-100">
+                                  {item.label}
+                                </div>
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                  {item.description}
+                                </div>
+                              </div>
+                            </div>
+                            <Switch
+                              checked={item.checked}
+                              onCheckedChange={item.onChange}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* SECURITY TAB */}
+                  {activeTab === "security" && (
+                    <motion.div
+                      key="security"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-6"
+                    >
+                      <div className="flex items-center gap-3 mb-6">
+                        <Shield className="w-6 h-6 text-yellow-500" />
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                          Security
+                        </h2>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 rounded-xl bg-white/50 dark:bg-gray-700/50">
+                          <div className="flex items-center gap-3">
+                            <Key className="w-5 h-5 text-green-500" />
+                            <div>
+                              <div className="font-medium text-gray-900 dark:text-gray-100">
+                                Two-Factor Authentication
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">
+                                Add an extra layer of security to your account
+                              </div>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={settings.isTwoFactorEnabled}
+                            onCheckedChange={(val) => handleChange("isTwoFactorEnabled", val)}
+                          />
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-white/50 dark:bg-gray-700/50">
+                          <div className="flex items-center gap-3 mb-4">
+                            <Lock className="w-5 h-5 text-blue-500" />
+                            <div className="font-medium text-gray-900 dark:text-gray-100">
+                              Change Password
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <Input
+                              type={showPassword ? "text" : "password"}
+                              placeholder="Current Password"
+                              className="bg-white dark:bg-gray-600"
+                            />
+                            <Input
+                              type={showPassword ? "text" : "password"}
+                              placeholder="New Password"
+                              className="bg-white dark:bg-gray-600"
+                            />
+                            <Input
+                              type={showPassword ? "text" : "password"}
+                              placeholder="Confirm New Password"
+                              className="bg-white dark:bg-gray-600"
+                            />
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={showPassword}
+                                onCheckedChange={setShowPassword}
+                              />
+                              <span className="text-sm text-gray-500 dark:text-gray-400">
+                                Show passwords
+                              </span>
+                            </div>
+                          </div>
+                          <Button className="w-full mt-4 bg-gradient-to-r from-blue-500 to-purple-500">
+                            Update Password
+                          </Button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* PRIVACY TAB */}
+                  {activeTab === "privacy" && (
+                    <motion.div
+                      key="privacy"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-6"
+                    >
+                      <div className="flex items-center gap-3 mb-6">
+                        <Lock className="w-6 h-6 text-orange-500" />
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                          Privacy & Data
+                        </h2>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="p-4 rounded-xl bg-white/50 dark:bg-gray-700/50">
+                          <div className="flex items-center gap-3 mb-4">
+                            <Database className="w-5 h-5 text-purple-500" />
+                            <div className="font-medium text-gray-900 dark:text-gray-100">
+                              Data Management
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start gap-3"
+                              onClick={() => alert("Export data")}
+                            >
+                              <Download className="w-4 h-4" />
+                              Export Chat Data
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="w-full justify-start gap-3"
+                              onClick={() => alert("Clear data")}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Clear Chat History
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Danger Zone */}
+                        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                          <div className="flex items-center gap-3 mb-4">
+                            <Trash2 className="w-5 h-5 text-red-500" />
+                            <div className="font-medium text-red-900 dark:text-red-100">
+                              Danger Zone
+                            </div>
+                          </div>
+                          <p className="text-sm text-red-700 dark:text-red-300 mb-4">
+                            Once you delete your account, there is no going back. Please be certain.
+                          </p>
+                          <Button
+                            variant="destructive"
+                            className="w-full bg-red-600 hover:bg-red-700"
+                            onClick={() => alert("Delete account flow")}
+                          >
+                            Delete Account
+                          </Button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Save Button */}
+                <div className="mt-8 pt-6 border-t border-gray-200/50 dark:border-gray-700/50">
+                  <Button
+                    id="save-btn"
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="w-full py-3 text-base bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 shadow-lg hover:shadow-xl transition-all"
+                    size="lg"
+                  >
+                    {saving ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Saving Changes...
+                      </div>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </section>
-
-        {/* THEME & DISPLAY */}
-        <section className={`${card} mb-6 md:mb-10`}>
-          <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
-            <Monitor className="text-green-400" size={18} /> Display & Theme
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block mb-1 text-sm md:text-base">Theme</label>
-              <select
-                value={settings.theme}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  handleChange("theme", val);
-                  if (val === "dark") setDarkMode(true);
-                  else if (val === "light") setDarkMode(false);
-                  else setDarkMode(systemPrefersDark);
-                }}
-                className="w-full bg-white/10 border-none rounded-lg p-2 text-white text-sm md:text-base"
-              >
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-                <option value="system">System</option>
-              </select>
-            </div>
-            <div>
-              <label className="block mb-1 text-sm md:text-base">Language</label>
-              <select
-                value={settings.language}
-                onChange={(e) => handleChange("language", e.target.value)}
-                className="w-full bg-white/10 border-none rounded-lg p-2 text-white text-sm md:text-base"
-              >
-                <option value="English">English</option>
-                <option value="Hindi">Hindi</option>
-                <option value="Spanish">Spanish</option>
-              </select>
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-between">
-            <span className="flex items-center gap-2 text-sm md:text-base">
-              <Bot size={16} /> AI Chat Theme Personalization
-            </span>
-            <Switch
-              checked={settings.aiThemeEnabled}
-              onCheckedChange={(val) => handleChange("aiThemeEnabled", val)}
-            />
-          </div>
-        </section>
-
-        {/* STATUS & ACTIVITY */}
-        <section className={`${card} mb-6 md:mb-10`}>
-          <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
-            <Clock className="text-cyan-400" size={18} /> Status & Activity
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block mb-1 text-sm md:text-base">Status</label>
-              <select
-                value={settings.status}
-                onChange={(e) => handleChange("status", e.target.value)}
-                className="w-full bg-white/10 border-none rounded-lg p-2 text-white text-sm md:text-base"
-              >
-                <option value="online">Online</option>
-                <option value="away">Away</option>
-                <option value="busy">Busy</option>
-                <option value="offline">Offline</option>
-              </select>
-            </div>
-            <div className="flex items-center justify-between mt-4">
-              <span className="text-sm md:text-base">Auto Status (based on activity)</span>
-              <Switch
-                checked={settings.autoStatus}
-                onCheckedChange={(val) => handleChange("autoStatus", val)}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* SECURITY */}
-        <section className={`${card} mb-6 md:mb-10`}>
-          <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
-            <Lock className="text-yellow-400" size={18} /> Security
-          </h3>
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm md:text-base">Two-Factor Authentication</span>
-            <Switch
-              checked={settings.isTwoFactorEnabled}
-              onCheckedChange={(val) => handleChange("isTwoFactorEnabled", val)}
-            />
-          </div>
-          <Button
-            className="bg-white/10 mt-3 w-full text-sm md:text-base"
-            onClick={() => alert("Change Password flow")}
-          >
-            Change Password
-          </Button>
-        </section>
-
-        {/* DATA & PRIVACY */}
-        <section className={`${card} mb-6 md:mb-10`}>
-          <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2">
-            <Database className="text-purple-400" size={18} /> Data & Privacy
-          </h3>
-          <Button
-            variant="outline"
-            className="bg-white/10 w-full mb-3 text-sm md:text-base"
-            onClick={() => alert("Export data")}
-          >
-            Download Chat Data
-          </Button>
-          <Button
-            variant="outline"
-            className="bg-white/10 w-full text-sm md:text-base"
-            onClick={() => alert("View login history")}
-          >
-            View Login History
-          </Button>
-        </section>
-
-        {/* DANGER */}
-        <section className="bg-red-600/10 p-4 md:p-6 rounded-2xl border border-red-400/30 mb-6 md:mb-10">
-          <h3 className="text-lg md:text-xl font-semibold mb-4 flex items-center gap-2 text-red-400">
-            <Trash2 size={18} /> Danger Zone
-          </h3>
-          <Button
-            variant="destructive"
-            className="w-full bg-red-600 hover:bg-red-700 text-sm md:text-base"
-            onClick={() => alert("Delete account flow")}
-          >
-            Delete Account
-          </Button>
-        </section>
-
-        {/* SAVE */}
-        <Button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full py-3 text-base md:text-lg bg-blue-500 hover:bg-blue-600"
-        >
-          {saving ? "Saving..." : "Save Changes"}
-        </Button>
-      </motion.div>
+        </div>
+      </div>
     </div>
   );
 };
