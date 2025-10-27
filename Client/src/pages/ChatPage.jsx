@@ -4,14 +4,13 @@ import ChatWindow from "../components/chat/ChatWindow";
 import GroupChatAdminPanel from "../components/chat/GroupChatAdminPanel";
 import GroupChatSidebar from "../components/chat/GroupChatSidebar";
 import ChatSidebar from "../components/chat/ChatSidebar";
-import { ArrowLeft, Menu, X } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 const ChatPage = ({ currentUser }) => {
   const [selectedChat, setSelectedChat] = useState(null);
   const [isGroupView, setIsGroupView] = useState(false);
   const [isGroupSelected, setIsGroupSelected] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleSelectChat = (friend, group, groupFlag) => {
     setSelectedChat(groupFlag ? group : friend);
@@ -25,58 +24,18 @@ const ChatPage = ({ currentUser }) => {
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-black text-gray-900 dark:text-gray-200">
-      {/* TOP HEADER */}
-      <header className="fixed top-0 left-0 right-0 z-40 bg-white/20 dark:bg-gray-900/40 backdrop-blur-2xl border-b border-gray-200/10 dark:border-gray-800/40 shadow-sm flex items-center justify-between px-4 py-3">
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          className="p-2 rounded-xl bg-white/30 dark:bg-gray-800/60 hover:bg-white/50 dark:hover:bg-gray-700/60 transition-all shadow-sm"
-        >
-          {menuOpen ? (
-            <X className="w-6 h-6 text-gray-800 dark:text-gray-200" />
-          ) : (
-            <Menu className="w-6 h-6 text-gray-800 dark:text-gray-200" />
-          )}
-        </button>
+      {/* ✅ Sidebar (no extra drawer wrapper) */}
+      <ChatSidebar />
 
+      {/* ✅ Header */}
+      <header className="fixed top-0 left-0 right-0 z-20 bg-white/20 dark:bg-gray-900/40 backdrop-blur-2xl border-b border-gray-200/10 dark:border-gray-800/40 shadow-sm flex items-center justify-center px-4 py-3 lg:pl-24">
         <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent select-none">
           FlowLink Chat
         </h1>
-
-        <div className="w-8" /> {/* spacer */}
       </header>
 
-      {/* SIDE DRAWER MENU */}
-      <div
-        className={`fixed top-0 left-0 h-full w-72 sm:w-80 z-50 bg-white/90 dark:bg-gray-900/95 shadow-2xl backdrop-blur-2xl transform transition-transform duration-500 ease-in-out ${
-          menuOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="p-5 border-b border-gray-200/20 dark:border-gray-800/50 flex justify-between items-center">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-            Menu
-          </h3>
-          <button
-            onClick={() => setMenuOpen(false)}
-            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-          >
-            ✕
-          </button>
-        </div>
-        <div className="p-3 overflow-y-auto h-[calc(100%-60px)]">
-          <ChatSidebar />
-        </div>
-      </div>
-
-      {/* OVERLAY BEHIND MENU */}
-      {menuOpen && (
-        <div
-          onClick={() => setMenuOpen(false)}
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity"
-        />
-      )}
-
-      {/* MAIN SECTION */}
-      <div className="pt-16 flex flex-col h-[calc(100vh-4rem)] relative z-10">
+      {/* ✅ Main Content */}
+      <div className="pt-16 lg:pl-20 flex flex-col h-[calc(100vh-4rem)] relative z-10 transition-all">
         {!selectedChat ? (
           <>
             {/* Tabs */}
@@ -126,7 +85,7 @@ const ChatPage = ({ currentUser }) => {
           </>
         ) : (
           <>
-            {/* CHAT WINDOW */}
+            {/* Chat Header */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200/10 dark:border-gray-800/50 bg-white/40 dark:bg-gray-900/40 backdrop-blur-md">
               <button
                 onClick={handleBackToList}
@@ -141,6 +100,7 @@ const ChatPage = ({ currentUser }) => {
               </h3>
             </div>
 
+            {/* Chat Window */}
             <div className="flex-1 relative">
               <ChatWindow
                 currentUser={currentUser}
@@ -150,13 +110,17 @@ const ChatPage = ({ currentUser }) => {
               />
             </div>
 
-            {/* GROUP INFO PANEL */}
+            {/* Group Info Panel */}
             {isGroupSelected && (
               <div
                 className={`absolute top-0 right-0 h-full w-96 bg-white/95 dark:bg-gray-900/95 
                 backdrop-blur-xl shadow-2xl border-l border-gray-200/10 dark:border-gray-700/50 
                 transform transition-all duration-500 ease-in-out z-20 
-                ${showGroupInfo ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"}`}
+                ${
+                  showGroupInfo
+                    ? "translate-x-0 opacity-100"
+                    : "translate-x-full opacity-0 pointer-events-none"
+                }`}
               >
                 <div className="absolute top-4 left-4 z-30">
                   <button
