@@ -1,12 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
-
+/* components/AdvancedCompatibilityGame.css */
 .compatibility-game {
   max-width: 1200px;
   margin: 0 auto;
@@ -16,94 +8,8 @@ All colors MUST be HSL.
   color: white;
 }
 
-.home-screen {
+.waiting-room {
   text-align: center;
-  padding: 50px 20px;
-}
-
-.home-header h1 {
-  font-size: 3em;
-  margin-bottom: 20px;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-}
-
-.home-actions {
-  background: rgba(255,255,255,0.1);
-  border-radius: 20px;
-  padding: 30px;
-  margin: 30px 0;
-  backdrop-filter: blur(10px);
-}
-
-.input-section {
-  margin-bottom: 20px;
-}
-
-.name-input, .room-code-input {
-  padding: 15px;
-  border: none;
-  border-radius: 25px;
-  font-size: 1.1em;
-  width: 300px;
-  max-width: 100%;
-  margin: 10px;
-}
-
-.action-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  align-items: center;
-}
-
-.create-room-btn, .join-room-btn, .start-game-btn, .submit-btn, .exit-btn {
-  background: #4ecdc4;
-  color: white;
-  border: none;
-  padding: 15px 30px;
-  font-size: 1.1em;
-  border-radius: 25px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.create-room-btn:hover, .join-room-btn:hover, .start-game-btn:hover, .submit-btn:hover, .exit-btn:hover {
-  background: #45b7af;
-  transform: translateY(-2px);
-}
-
-.exit-btn {
-  background: #ff6b6b;
-}
-
-.exit-btn:hover {
-  background: #ff5252;
-}
-
-.game-features {
-  background: rgba(255,255,255,0.1);
-  border-radius: 15px;
-  padding: 20px;
-  margin-top: 30px;
-  backdrop-filter: blur(10px);
-}
-
-.game-features ul {
-  list-style: none;
-  text-align: left;
-  max-width: 500px;
-  margin: 0 auto;
-}
-
-.game-features li {
-  padding: 10px;
-  font-size: 1.1em;
-}
-
-.waiting-room, .playing-screen, .results-screen {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
 }
 
 .waiting-header h1 {
@@ -131,15 +37,33 @@ All colors MUST be HSL.
   border-radius: 10px;
 }
 
-.host-badge, .progress-badge {
+.host-badge {
   background: #ff6b6b;
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 0.8em;
 }
 
-.progress-badge {
+.start-game-btn {
   background: #4ecdc4;
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  font-size: 1.2em;
+  border-radius: 25px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.start-game-btn:hover {
+  background: #45b7af;
+  transform: translateY(-2px);
+}
+
+.playing-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .game-header {
@@ -238,7 +162,7 @@ All colors MUST be HSL.
   align-items: center;
 }
 
-.nav-btn {
+.nav-btn, .submit-btn {
   background: rgba(255,255,255,0.2);
   border: none;
   padding: 12px 25px;
@@ -248,7 +172,7 @@ All colors MUST be HSL.
   transition: all 0.3s ease;
 }
 
-.nav-btn:hover:not(:disabled) {
+.nav-btn:hover:not(:disabled), .submit-btn:hover {
   background: rgba(255,255,255,0.3);
   transform: translateY(-2px);
 }
@@ -256,6 +180,10 @@ All colors MUST be HSL.
 .nav-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.submit-btn {
+  background: #4ecdc4;
 }
 
 .results-screen {
@@ -420,6 +348,24 @@ All colors MUST be HSL.
   cursor: pointer;
 }
 
+.exit-btn {
+  background: #ff6b6b;
+  border: none;
+  padding: 15px 30px;
+  border-radius: 25px;
+  color: white;
+  font-size: 1.1em;
+  cursor: pointer;
+  margin-top: 20px;
+  transition: all 0.3s ease;
+}
+
+.exit-btn:hover {
+  background: #ff5252;
+  transform: translateY(-2px);
+}
+
+/* Responsive design */
 @media (max-width: 768px) {
   .compatibility-game {
     padding: 10px;
@@ -440,66 +386,5 @@ All colors MUST be HSL.
   
   .question-text {
     font-size: 1.4em;
-  }
-  
-  .home-header h1 {
-    font-size: 2em;
-  }
-}
-
-@layer base {
-  :root {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-
-    --card: 240 10% 8%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 240 10% 8%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 263 70% 50%;
-    --primary-foreground: 0 0% 98%;
-
-    --secondary: 240 5% 15%;
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 240 5% 20%;
-    --muted-foreground: 240 5% 64%;
-
-    --accent: 188 94% 50%;
-    --accent-foreground: 240 10% 3.9%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 240 5% 20%;
-    --input: 240 5% 20%;
-    --ring: 263 70% 50%;
-
-    --radius: 1rem;
-
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(263 70% 50%) 0%, hsl(240 70% 50%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(188 94% 50%) 0%, hsl(263 70% 50%) 100%);
-    --gradient-hero: linear-gradient(180deg, hsl(240 10% 3.9%) 0%, hsl(263 30% 10%) 50%, hsl(240 10% 3.9%) 100%);
-    
-    /* Glass effect */
-    --glass-bg: hsla(240, 10%, 12%, 0.6);
-    --glass-border: hsla(0, 0%, 100%, 0.1);
-    
-    /* Shadows */
-    --shadow-glow: 0 0 40px hsla(263, 70%, 50%, 0.3);
-    --shadow-card: 0 8px 32px hsla(0, 0%, 0%, 0.4);
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground;
   }
 }
