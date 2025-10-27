@@ -27,7 +27,7 @@ const ChatSidebar = () => {
   const location = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // prevent background scroll when sidebar is open
+  // Disable scroll when mobile menu open
   useEffect(() => {
     document.body.style.overflow = isMobileOpen ? "hidden" : "auto";
   }, [isMobileOpen]);
@@ -36,7 +36,7 @@ const ChatSidebar = () => {
 
   return (
     <>
-      {/* ✅ Mobile menu button */}
+      {/* ✅ Mobile Hamburger Button */}
       <button
         onClick={() => setIsMobileOpen(true)}
         className="lg:hidden fixed top-4 left-4 z-50 w-12 h-12 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg border border-gray-200/50 dark:border-gray-700/50"
@@ -44,8 +44,8 @@ const ChatSidebar = () => {
         <Menu className="w-6 h-6 text-gray-600 dark:text-gray-400" />
       </button>
 
-      {/* ✅ Desktop Sidebar */}
-      <div className="hidden lg:flex w-20 h-full bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-800/50 flex-col items-center py-6 gap-2 relative overflow-hidden shadow-xl">
+      {/* ✅ Desktop Sidebar (Always Visible) */}
+      <div className="hidden lg:flex fixed left-0 top-0 h-full w-20 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-800/50 flex-col items-center py-6 gap-2 z-30 shadow-xl">
         {/* Logo */}
         <motion.div
           initial={{ scale: 0 }}
@@ -56,15 +56,15 @@ const ChatSidebar = () => {
           <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
         </motion.div>
 
-        {/* Navigation */}
-        <nav className="flex-1 flex flex-col gap-3 z-10">
+        {/* Navigation Icons */}
+        <nav className="flex-1 flex flex-col gap-3">
           {navigation.map((item, index) => {
             const isActive = location.pathname === item.href;
             return (
               <motion.div
                 key={item.name}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
               >
                 <Link
@@ -97,7 +97,7 @@ const ChatSidebar = () => {
           })}
         </nav>
 
-        {/* New Chat Button */}
+        {/* Add New Chat Button */}
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
@@ -107,26 +107,26 @@ const ChatSidebar = () => {
         </motion.button>
       </div>
 
-      {/* ✅ Mobile Sidebar */}
+      {/* ✅ Mobile Fullscreen Sidebar */}
       <AnimatePresence>
         {isMobileOpen && (
           <>
-            {/* Backdrop */}
+            {/* Overlay */}
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              animate={{ opacity: 0.4 }}
               exit={{ opacity: 0 }}
               onClick={closeSidebar}
-              className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-black z-40"
             />
 
-            {/* Sidebar */}
+            {/* Sidebar Content */}
             <motion.div
-              initial={{ x: -280 }}
+              initial={{ x: "-100%" }}
               animate={{ x: 0 }}
-              exit={{ x: -280 }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="lg:hidden fixed left-0 top-0 h-full w-80 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-800/50 flex flex-col py-6 gap-2 z-50 shadow-2xl"
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 250 }}
+              className="fixed left-0 top-0 h-full w-72 bg-white dark:bg-gray-900 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-800/50 flex flex-col py-6 gap-2 z-50 shadow-2xl"
             >
               {/* Header */}
               <div className="flex items-center justify-between px-6 mb-6">
@@ -146,9 +146,9 @@ const ChatSidebar = () => {
                 </button>
               </div>
 
-              {/* Navigation Links */}
+              {/* Navigation (Text + Icons) */}
               <nav className="flex-1 flex flex-col gap-3 px-4">
-                {navigation.map((item, index) => {
+                {navigation.map((item) => {
                   const isActive = location.pathname === item.href;
                   return (
                     <Link
@@ -184,7 +184,7 @@ const ChatSidebar = () => {
               {/* New Chat Button */}
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                className="mx-4 flex items-center gap-4 px-4 py-4 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-500 shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all duration-300"
+                className="mx-4 mb-4 flex items-center gap-4 px-4 py-4 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-500 shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all duration-300"
               >
                 <Plus className="w-6 h-6 text-white" />
                 <span className="font-medium text-white">New Chat</span>

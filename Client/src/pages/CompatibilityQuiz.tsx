@@ -5,19 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Heart, Users, LinkIcon, Crown, Sparkles, Timer, Trophy, 
-  Gamepad2, Camera, Volume2, VolumeX, Settings, Zap, Award,
-  Star, Target, TrendingUp, Clock, CheckCircle, PartyPopper,
-  MessageCircle, ThumbsUp, Flame, Medal, Users2, Brain,
-  Smile, Frown, Meh, Laugh, HeartCrack, Loader2, Share2,
-  Download, Image, Copy, Check, MapPin, Calendar, Music,
-  Coffee, Film, BookOpen, Utensils, Mountain, Palette,
+  Gamepad2, Volume2, VolumeX, CheckCircle, PartyPopper,
+  MessageCircle, Loader2, Share2, Download, Copy, Check,
   ArrowLeft
 } from "lucide-react";
 import html2canvas from "html2canvas";
@@ -134,9 +129,8 @@ export default function EnhancedCompatibilityGame() {
     personalityTraits: [] as string[]
   });
 
-  // Mobile keyboard states
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [inputFocused, setInputFocused] = useState(false);
+  // Mobile input states
+  const [isMobile, setIsMobile] = useState(false);
 
   // Screenshot sharing states
   const [isCapturing, setIsCapturing] = useState(false);
@@ -144,66 +138,35 @@ export default function EnhancedCompatibilityGame() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // FIXED: Input refs to prevent re-renders
+  // Refs
   const playerNameInputRef = useRef<HTMLInputElement>(null);
   const roomIdInputRef = useRef<HTMLInputElement>(null);
-  
   const audioRef = useRef<HTMLAudioElement>(null);
-  const confettiRef = useRef<any>(null);
   const submitTimeoutRef = useRef<NodeJS.Timeout>();
   const screenshotRef = useRef<HTMLDivElement>(null);
-  const mainContainerRef = useRef<HTMLDivElement>(null);
 
-  // FIXED: Mobile keyboard detection
+  // Detect mobile device
   useEffect(() => {
-    const handleResize = () => {
-      const isMobile = window.innerWidth < 768;
-      const viewportHeight = window.innerHeight;
-      const screenHeight = window.screen.height;
-      
-      // If viewport is significantly smaller than screen, keyboard is likely open
-      if (isMobile && viewportHeight < screenHeight * 0.7) {
-        setKeyboardVisible(true);
-      } else {
-        setKeyboardVisible(false);
-      }
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
     };
-
-    const handleFocusIn = (e: FocusEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        setInputFocused(true);
-        // Scroll input into view on mobile
-        setTimeout(() => {
-          e.target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 300);
-      }
-    };
-
-    const handleFocusOut = () => {
-      setInputFocused(false);
-      // Small delay to ensure keyboard is fully hidden
-      setTimeout(() => setKeyboardVisible(false), 100);
-    };
-
-    window.addEventListener('resize', handleResize);
-    document.addEventListener('focusin', handleFocusIn);
-    document.addEventListener('focusout', handleFocusOut);
-
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
     return () => {
-      window.removeEventListener('resize', handleResize);
-      document.removeEventListener('focusin', handleFocusIn);
-      document.removeEventListener('focusout', handleFocusOut);
+      window.removeEventListener('resize', checkMobile);
     };
   }, []);
 
-  // FIXED: Adjust layout when keyboard is visible
-  useEffect(() => {
-    if (mainContainerRef.current && keyboardVisible) {
-      mainContainerRef.current.style.paddingBottom = '200px';
-    } else if (mainContainerRef.current) {
-      mainContainerRef.current.style.paddingBottom = '0';
-    }
-  }, [keyboardVisible]);
+  // FIXED: Simple input handlers without complex state updates
+  const handlePlayerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPlayerName(e.target.value);
+  };
+
+  const handleRoomIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRoomId(e.target.value.toUpperCase());
+  };
 
   // FIXED: Enhanced sound effects with error handling
   const playSound = (soundName: string) => {
@@ -294,13 +257,7 @@ export default function EnhancedCompatibilityGame() {
         useCORS: true,
         logging: false,
         width: screenshotRef.current.scrollWidth,
-        height: screenshotRef.current.scrollHeight,
-        onclone: (clonedDoc) => {
-          const element = clonedDoc.querySelector('[data-screenshot]');
-          if (element) {
-            (element as HTMLElement).style.transform = 'none';
-          }
-        }
+        height: screenshotRef.current.scrollHeight
       });
       
       const imageDataUrl = canvas.toDataURL('image/png', 0.9);
@@ -720,7 +677,7 @@ export default function EnhancedCompatibilityGame() {
 
   // FIXED: Additional Questions Component with proper input handling
   const AdditionalQuestions = () => (
-    <Card className="p-4 md:p-6 bg-white/10 backdrop-blur-sm border-white/20 mb-6">
+    <Card className="p-4 md:p-6 bg-white/5 border-white/20 mb-6">
       <h3 className="text-xl md:text-2xl font-bold text-white mb-4 text-center">
         Additional Compatibility Factors
       </h3>
@@ -801,7 +758,7 @@ export default function EnhancedCompatibilityGame() {
 
   // Enhanced Player Card Component
   const PlayerCard = ({ player, index }: { player: any, index: number }) => (
-    <div className="flex items-center justify-between p-3 md:p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+    <div className="flex items-center justify-between p-3 md:p-4 bg-white/5 rounded-xl border border-white/20">
       <div className="flex items-center space-x-2 md:space-x-3">
         <Avatar className="w-8 h-8 md:w-10 md:h-10 border-2 border-white/30">
           <AvatarFallback className="bg-gradient-to-br from-pink-500 to-rose-600 text-white text-xs md:text-sm">
@@ -871,7 +828,7 @@ export default function EnhancedCompatibilityGame() {
   // Share Modal Component
   const ShareModal = () => (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <Card className="max-w-md md:max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0">
+      <Card className="max-w-md md:max-w-2xl w-full bg-white shadow-2xl rounded-2xl">
         <div className="p-4 md:p-6">
           <div className="flex justify-between items-center mb-3 md:mb-4">
             <h3 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center">
@@ -980,7 +937,7 @@ export default function EnhancedCompatibilityGame() {
         
         {/* Screenshot capture area */}
         <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
-          <Card className="p-6 md:p-8 bg-white/10 backdrop-blur-sm border-white/20 text-center relative">
+          <Card className="p-6 md:p-8 bg-white/5 border-white/20 text-center relative">
             {/* Share button positioned absolutely */}
             <div className="absolute top-4 right-4">
               <ShareButton />
@@ -1004,14 +961,14 @@ export default function EnhancedCompatibilityGame() {
 
             {/* Additional Factors Summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-6 md:mb-8">
-              <div className="bg-white/10 rounded-lg p-3 md:p-4 backdrop-blur-sm">
+              <div className="bg-white/10 rounded-lg p-3 md:p-4">
                 <div className="flex items-center justify-center mb-2">
                   <MessageCircle className="w-4 h-4 md:w-5 md:h-5 mr-2 text-blue-400" />
                   <span className="font-semibold text-sm md:text-base">Communication</span>
                 </div>
                 <div className="text-base md:text-lg text-white">{additionalFactors.communication}</div>
               </div>
-              <div className="bg-white/10 rounded-lg p-3 md:p-4 backdrop-blur-sm">
+              <div className="bg-white/10 rounded-lg p-3 md:p-4">
                 <div className="flex items-center justify-center mb-2">
                   <Heart className="w-4 h-4 md:w-5 md:h-5 mr-2 text-red-400" />
                   <span className="font-semibold text-sm md:text-base">Love Languages</span>
@@ -1023,7 +980,7 @@ export default function EnhancedCompatibilityGame() {
             {/* Compatibility Breakdown */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
               {Object.entries(breakdown).map(([category, catScore]) => (
-                <div key={category} className="bg-white/10 rounded-lg p-3 md:p-4 backdrop-blur-sm">
+                <div key={category} className="bg-white/10 rounded-lg p-3 md:p-4">
                   <div className="text-xs md:text-sm text-white/70 mb-1">{category}</div>
                   <div className="text-xl md:text-2xl font-bold text-white">
                     {Math.round((catScore as number / questions.filter(q => q.category === category).length) * 100)}%
@@ -1038,7 +995,7 @@ export default function EnhancedCompatibilityGame() {
 
             {/* Personality Analysis */}
             {personalityAnalysis.commonTraits.length > 0 && (
-              <div className="bg-white/10 rounded-xl p-4 md:p-6 mb-4 md:mb-6 backdrop-blur-sm">
+              <div className="bg-white/10 rounded-xl p-4 md:p-6 mb-4 md:mb-6">
                 <h3 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center justify-center">
                   <Brain className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-400" />
                   Shared Personality Traits
@@ -1054,7 +1011,7 @@ export default function EnhancedCompatibilityGame() {
             )}
 
             {/* Insights */}
-            <div className="bg-white/10 rounded-xl p-4 md:p-6 mb-6 md:mb-8 backdrop-blur-sm">
+            <div className="bg-white/10 rounded-xl p-4 md:p-6 mb-6 md:mb-8">
               <h3 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center justify-center">
                 <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2 text-yellow-400" />
                 Relationship Insights
@@ -1132,7 +1089,7 @@ export default function EnhancedCompatibilityGame() {
       
       {/* Screenshot capture area */}
       <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-2xl">
-        <Card className="p-6 md:p-8 bg-white/10 backdrop-blur-sm border-white/20 text-center relative">
+        <Card className="p-6 md:p-8 bg-white/5 border-white/20 text-center relative">
           {/* Share button */}
           <div className="absolute top-4 right-4">
             <ShareButton />
@@ -1154,7 +1111,7 @@ export default function EnhancedCompatibilityGame() {
             <p className="text-white/80 mb-3 md:mb-4 text-sm md:text-base">Share this code with your partner to begin the journey!</p>
             <Button 
               onClick={() => navigator.clipboard?.writeText(roomId)}
-              className="bg-white/20 hover:bg-white/30 border-white/30 text-sm md:text-base"
+              className="bg-white/10 hover:bg-white/20 border-white/20 text-sm md:text-base"
             >
               <LinkIcon className="w-3 h-3 md:w-4 md:h-4 mr-2" />
               Copy Code
@@ -1180,7 +1137,7 @@ export default function EnhancedCompatibilityGame() {
             <Button 
               onClick={startGame} 
               disabled={players.length < 2}
-              className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
               Start Compatibility Test {players.length < 2 && `(Need ${2 - players.length} more)`}
@@ -1206,7 +1163,6 @@ export default function EnhancedCompatibilityGame() {
     
     // FIXED: Handle option selection directly
     const handleOptionSelect = (option: string) => {
-      console.log("Option selected:", option);
       setCurrentAnswer(option);
       playSound("select");
     };
@@ -1240,7 +1196,7 @@ export default function EnhancedCompatibilityGame() {
         <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
           {/* Header */}
           <div className="mb-4 md:mb-6 relative">
-            <div className="flex justify-between items-center p-3 md:p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
+            <div className="flex justify-between items-center p-3 md:p-4 bg-white/5 rounded-xl border border-white/20">
               <div>
                 <h2 className="text-lg md:text-xl font-bold">Room: {roomId}</h2>
                 <div className="text-white/70 flex items-center space-x-2 text-sm">
@@ -1282,7 +1238,7 @@ export default function EnhancedCompatibilityGame() {
           {/* Player Progress Bars */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-4 md:mb-6">
             {players.map((player) => (
-              <div key={player.name} className="bg-white/10 backdrop-blur-sm rounded-lg p-3 md:p-4 border border-white/20">
+              <div key={player.name} className="bg-white/5 rounded-lg p-3 md:p-4 border border-white/20">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center space-x-2">
                     <Avatar className="w-6 h-6 md:w-8 md:h-8">
@@ -1305,7 +1261,7 @@ export default function EnhancedCompatibilityGame() {
           </div>
 
           {/* Question Card */}
-          <Card className="p-4 md:p-8 bg-white/10 backdrop-blur-sm border-white/20 mb-4 md:mb-6">
+          <Card className="p-4 md:p-8 bg-white/5 border-white/20 mb-4 md:mb-6">
             <div className="text-center mb-4 md:mb-6">
               <Badge className="mb-2 bg-pink-500/20 text-pink-300 border-pink-400/30 text-xs">
                 {currentQ.category} • Weight: {currentQ.weight}x
@@ -1420,26 +1376,10 @@ export default function EnhancedCompatibilityGame() {
     );
   };
 
-  // FIXED: Join/Create Screen Component with better input handling and mobile keyboard support
+  // FIXED: Join/Create Screen Component - SIMPLIFIED for mobile input
   const JoinCreateScreen = () => {
-    // FIXED: Proper input change handlers for mobile
-    const handlePlayerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
-      setPlayerName(value);
-    };
-
-    const handleRoomIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value.toUpperCase();
-      setRoomId(value);
-    };
-
     return (
-      <div 
-        ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6 transition-all duration-300 ${
-          keyboardVisible ? 'pb-40' : ''
-        }`}
-      >
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-800 to-rose-900 text-white p-4 md:p-6">
         <ConnectionStatus />
         
         {/* Back Button */}
@@ -1454,7 +1394,8 @@ export default function EnhancedCompatibilityGame() {
           </Button>
         </div>
         
-        <Card className="p-6 md:p-8 max-w-md w-full bg-white/10 backdrop-blur-sm border-white/20 text-center relative">
+        {/* FIXED: SIMPLE Card without complex backdrop effects */}
+        <Card className="p-6 md:p-8 max-w-md w-full bg-white/5 border border-white/20 text-center">
           <div className="flex justify-center mb-4 md:mb-6">
             <div className="relative">
               <Heart className="w-12 h-12 md:w-16 md:h-16 text-pink-400" />
@@ -1472,6 +1413,7 @@ export default function EnhancedCompatibilityGame() {
               <Label htmlFor="playerName" className="text-white font-medium mb-2 block">
                 Your Name
               </Label>
+              {/* FIXED: SIMPLE Input without complex styling */}
               <Input
                 id="playerName"
                 ref={playerNameInputRef}
@@ -1479,7 +1421,7 @@ export default function EnhancedCompatibilityGame() {
                 value={playerName}
                 onChange={handlePlayerNameChange}
                 autoComplete="name"
-                className="bg-white/10 border-white/20 text-white placeholder-white/50 text-sm md:text-base"
+                className="bg-white/10 border-white/20 text-white placeholder-white/50 text-base"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
                     joinRoom();
@@ -1487,8 +1429,6 @@ export default function EnhancedCompatibilityGame() {
                     createRoom();
                   }
                 }}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
               />
             </div>
             
@@ -1496,21 +1436,20 @@ export default function EnhancedCompatibilityGame() {
               <Label htmlFor="roomId" className="text-white font-medium mb-2 block">
                 Room Code (optional)
               </Label>
+              {/* FIXED: SIMPLE Input without complex styling */}
               <Input
                 id="roomId"
                 ref={roomIdInputRef}
                 placeholder="Enter room code to join"
                 value={roomId}
                 onChange={handleRoomIdChange}
-                className="bg-white/10 border-white/20 text-white placeholder-white/50 text-sm md:text-base"
+                className="bg-white/10 border-white/20 text-white placeholder-white/50 text-base"
                 autoComplete="off"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
                     joinRoom();
                   }
                 }}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
               />
             </div>
           </div>
