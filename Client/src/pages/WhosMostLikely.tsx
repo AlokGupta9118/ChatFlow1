@@ -86,20 +86,20 @@ const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
   }, []);
 
   return (
-    <div className="flex gap-2 p-3 bg-white/95 border-t border-gray-200">
+    <div className="flex gap-2 p-3 bg-white/95 border-t border-gray-200 safe-area-inset-bottom">
       <Input
         ref={inputRef}
         value={inputValue}
         onChange={handleChange}
         onKeyPress={handleKeyPress}
         placeholder="Type a message..."
-        className="flex-1 bg-white border-gray-300 min-h-[44px]"
+        className="flex-1 bg-white border-gray-300 min-h-[44px] text-sm"
         disabled={disabled}
       />
       <Button
         onClick={handleSubmit}
         disabled={!inputValue.trim() || disabled}
-        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white flex-shrink-0 min-w-[60px] min-h-[44px]"
+        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white flex-shrink-0 min-w-[60px] min-h-[44px] shadow-lg"
         size="sm"
       >
         <Send className="w-4 h-4" />
@@ -126,15 +126,21 @@ const ChatPanel = React.memo(({
     });
   };
 
-  useEffect(() => {
+  // Improved scroll to bottom function
+  const scrollToBottom = useCallback(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      const container = chatContainerRef.current;
+      container.scrollTop = container.scrollHeight;
     }
-  }, [chatMessages]);
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatMessages, scrollToBottom]);
 
   return (
     <Card className="h-full flex flex-col bg-white/95 backdrop-blur-sm shadow-xl rounded-xl border border-gray-200">
-      <div className="p-3 border-b border-gray-200 bg-white/80">
+      <div className="p-3 border-b border-gray-200 bg-white/80 flex-shrink-0">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold text-gray-900 flex items-center">
             <MessageCircle className="w-4 h-4 mr-2 text-blue-600" />
@@ -155,7 +161,7 @@ const ChatPanel = React.memo(({
 
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0"
+        className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0 scroll-smooth"
         style={{ 
           WebkitOverflowScrolling: 'touch',
           overflowY: 'auto'
@@ -197,7 +203,7 @@ const ChatPanel = React.memo(({
         )}
       </div>
 
-      <div className="border-t border-gray-200">
+      <div className="border-t border-gray-200 flex-shrink-0">
         <ChatInput 
           onSendMessage={onSendMessage} 
           disabled={!isConnected}
@@ -235,35 +241,48 @@ const WhosMostLikely = () => {
 
   // Chat states
   const [chatMessages, setChatMessages] = useState([]);
-  const [showChat, setShowChat] = useState(false); // Hidden by default on mobile
+  const [showChat, setShowChat] = useState(false);
   const [typingUsers, setTypingUsers] = useState(new Set());
 
   const audioRef = useRef(null);
   const mainContainerRef = useRef(null);
 
-  // Auto-scroll to top when game state changes
+  // Improved auto-scroll with better behavior
   useEffect(() => {
     if (mainContainerRef.current) {
-      mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => {
+        mainContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
     }
   }, [gameStarted, gameFinished, roundResults, currentRound]);
 
-  // Improved scrolling on resize
+  // Enhanced scrolling fixes
   useEffect(() => {
     const handleResize = () => {
+      // Force re-calculation of scroll containers
+      document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+      
       if (mainContainerRef.current) {
-        // Force reflow to fix scrolling issues
-        mainContainerRef.current.style.overflow = 'hidden';
+        const container = mainContainerRef.current;
+        container.style.overflow = 'hidden';
         setTimeout(() => {
-          if (mainContainerRef.current) {
-            mainContainerRef.current.style.overflow = 'auto';
+          if (container) {
+            container.style.overflow = 'auto';
           }
         }, 50);
       }
     };
 
+    // Set initial viewport height
+    handleResize();
+    
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, []);
 
   // Sound effects
@@ -537,11 +556,12 @@ const WhosMostLikely = () => {
     </div>
   );
 
-  // Mobile Chat Toggle Button - FIXED POSITION
+  // Enhanced Mobile Chat Toggle Button
   const MobileChatToggle = () => (
     <Button
       onClick={() => setShowChat(!showChat)}
-      className="fixed bottom-20 right-4 z-40 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-2xl rounded-full w-14 h-14"
+      className="fixed bottom-24 right-4 z-50 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-2xl rounded-full w-14 h-14 border-2 border-white/20 safe-area-inset-bottom"
+      style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
     >
       {showChat ? <ChevronDown className="w-5 h-5" /> : <MessageCircle className="w-5 h-5" />}
     </Button>
@@ -554,7 +574,7 @@ const WhosMostLikely = () => {
         <ConnectionStatus />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-2xl mx-auto relative z-10 min-h-screen flex flex-col justify-center overflow-auto">
+        <div ref={mainContainerRef} className="max-w-2xl mx-auto relative z-10 min-h-screen flex flex-col justify-center overflow-auto scroll-smooth">
           <Link to="/Games" className="mb-4">
             <Button variant="ghost" className="text-white hover:bg-white/20 backdrop-blur-sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -562,7 +582,7 @@ const WhosMostLikely = () => {
             </Button>
           </Link>
 
-          <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl">
+          <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl mx-2">
             <h1 className="text-3xl md:text-5xl font-bold mb-6 text-center bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               Who's Most Likely?
             </h1>
@@ -599,7 +619,7 @@ const WhosMostLikely = () => {
               <Button
                 onClick={createRoom}
                 disabled={!playerName.trim()}
-                className="w-full py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                className="w-full py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg"
               >
                 <Crown className="w-4 h-4 mr-2" />
                 Create New Room
@@ -608,7 +628,7 @@ const WhosMostLikely = () => {
               <Button
                 onClick={joinRoom}
                 disabled={!playerName.trim() || !roomId.trim()}
-                className="w-full py-4 text-base bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                className="w-full py-4 text-base bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg"
               >
                 <Users className="w-4 h-4 mr-2" />
                 Join Existing Room
@@ -646,7 +666,7 @@ const WhosMostLikely = () => {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
         <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 px-2">
             <Button
               variant="ghost"
               onClick={() => window.location.reload()}
@@ -660,10 +680,10 @@ const WhosMostLikely = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 px-2 pb-4">
             {/* Main Content */}
             <div className="lg:col-span-2 flex flex-col min-h-0">
-              <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl flex-1 flex flex-col min-h-0">
+              <Card className="p-4 sm:p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl flex-1 flex flex-col min-h-0">
                 <div className="text-center mb-6">
                   <div className="flex justify-center mb-4">
                     <div className="relative">
@@ -689,7 +709,7 @@ const WhosMostLikely = () => {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto min-h-0 mb-6 space-y-2" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6 space-y-2 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
                   {players.map((player, index) => (
                     <PlayerCard key={player.name} player={player} index={index} />
                   ))}
@@ -752,10 +772,10 @@ const WhosMostLikely = () => {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
         <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 px-2 pb-4">
             {/* Main Content */}
             <div className="lg:col-span-2 flex flex-col min-h-0">
-              <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl flex-1 flex flex-col min-h-0">
+              <Card className="p-4 sm:p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl flex-1 flex flex-col min-h-0">
                 <div className="text-center mb-6">
                   <Target className="w-16 h-16 text-purple-400 mx-auto mb-4" />
                   <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
@@ -766,7 +786,7 @@ const WhosMostLikely = () => {
                   </p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto min-h-0 mb-6 space-y-3" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6 space-y-3 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
                   {finalResults?.rankings?.map((player, index) => (
                     <Card key={player.name} className={`p-4 text-center backdrop-blur-sm border-0 ${
                       index === 0 
@@ -833,10 +853,10 @@ const WhosMostLikely = () => {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
         <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 px-2 pb-4">
             {/* Main Content */}
             <div className="lg:col-span-2 flex flex-col min-h-0">
-              <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl flex-1 flex flex-col min-h-0">
+              <Card className="p-4 sm:p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl flex-1 flex flex-col min-h-0">
                 <div className="text-center mb-6">
                   <div className="flex justify-center mb-4">
                     <Sparkles className="w-12 h-12 text-yellow-400 animate-bounce" />
@@ -853,7 +873,7 @@ const WhosMostLikely = () => {
                   </Card>
                 </div>
 
-                <div className="flex-1 overflow-y-auto min-h-0 mb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
                   <h3 className="text-lg font-bold text-white mb-4 text-center">
                     Voting Results
                   </h3>
@@ -930,7 +950,7 @@ const WhosMostLikely = () => {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
       
       <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 px-2 pb-4">
           {/* Main Game Content */}
           <div className="lg:col-span-2 flex flex-col min-h-0">
             {/* Header */}
@@ -1001,7 +1021,7 @@ const WhosMostLikely = () => {
 
               {/* Player Selection Grid */}
               {!hasVoted && (
-                <div className="flex-1 overflow-y-auto min-h-0 mb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
                   <div className="grid grid-cols-1 gap-3">
                     {players
                       .filter(player => player.name !== playerName) // Can't vote for yourself
@@ -1037,7 +1057,7 @@ const WhosMostLikely = () => {
                 <Button
                   onClick={submitVote}
                   disabled={!selectedPlayer}
-                  className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                  className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg"
                 >
                   <Target className="w-4 h-4 mr-2" />
                   Submit Your Vote

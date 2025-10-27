@@ -145,7 +145,7 @@ export default function TruthOrDare({ currentUser }) {
     }
   }, [selectedPlayer, chosenPrompt, roomId, localName]);
 
-  // 🔌 Socket initialization with CHAT HANDLERS
+  // 🔌 Socket initialization with CHAT HANDLERS - FIXED SPINNER ISSUES
   useEffect(() => {
     const sock = io(DEFAULT_SOCKET_URL, { autoConnect: true });
 
@@ -200,7 +200,25 @@ export default function TruthOrDare({ currentUser }) {
       addToast("Game started! Get ready to play!", 2000, "success");
     });
 
+    // FIXED: New socket event for spinner start - shows spinner on ALL screens
+    sock.on("spinner-started", () => {
+      console.log("🎡 Spinner started on all screens");
+      setSpinning(true);
+      setSelectedPlayer(null);
+      setPrompts([]);
+      setChosenPrompt(null);
+      setTruthDareChoice(null);
+      setIsChoicePending(false);
+      setTimeLeft(null);
+      setProofImage(null);
+      setProofUploaded(false);
+      setTruthCompletionText("");
+      playSound("spin");
+    });
+
+    // FIXED: Player selection after spinner completes
     sock.on("player-selected", (player) => {
+      console.log("🎯 Player selected:", player);
       setSelectedPlayer(player.name || player);
       setSpinning(false);
       setPrompts([]);
@@ -263,6 +281,7 @@ export default function TruthOrDare({ currentUser }) {
       setProofImage(null);
       setProofUploaded(false);
       setTruthCompletionText("");
+      setSpinning(false); // Ensure spinner is stopped
     });
 
     // Existing game handlers...
@@ -499,18 +518,39 @@ export default function TruthOrDare({ currentUser }) {
     setProofs({});
     setChatMessages([]);
     setNextRoundLoading(false);
+    setSpinning(false); // Ensure spinner stops
 
     if (socket && roomId) socket.emit("leave-room", roomId);
     addToast("Left the room", 2000);
   };
 
-  // 🎲 Spin player
+  // 🎲 Spin player - FIXED: Now broadcasts spinner to all players
   const startSpin = () => {
     if (!socket || spinning || players.length === 0) return;
+    
+    console.log("🎡 Starting spin from host");
+    
+    // Show spinner immediately on host screen
     setSpinning(true);
+    setSelectedPlayer(null);
+    setPrompts([]);
+    setChosenPrompt(null);
+    setTruthDareChoice(null);
+    setIsChoicePending(false);
     setTimeLeft(null);
+    setProofImage(null);
+    setProofUploaded(false);
+    setTruthCompletionText("");
+    
     playSound("spin");
-    socket.emit("spin-player", { roomId });
+    
+    // Broadcast spinner start to all players
+    socket.emit("start-spinner", { roomId });
+    
+    // Then trigger the actual player selection after a delay
+    setTimeout(() => {
+      socket.emit("spin-player", { roomId });
+    }, 1000);
   };
 
   // 🎭 Send prompt - FIXED: Send correct prompt type
@@ -1045,24 +1085,23 @@ export default function TruthOrDare({ currentUser }) {
                       </Button>
                     )}
                     
-                    {stage === "playing" && !selectedPlayer && !nextRoundLoading && (
+                    {stage === "playing" && !selectedPlayer && !spinning && !nextRoundLoading && (
                       <Button 
                         onClick={startSpin} 
                         disabled={spinning || players.length === 0} 
                         className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg transition-all duration-300"
                       >
-                        {spinning ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 md:h-5 md:w-5 border-b-2 border-white mr-2"></div>
-                            Spinning...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                            Spin the Wheel
-                          </>
-                        )}
+                        <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                        Spin the Wheel
                       </Button>
+                    )}
+
+                    {/* Show spinning state for all players */}
+                    {stage === "playing" && spinning && (
+                      <div className="w-full py-4 md:py-6 text-center bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg shadow-lg">
+                        <div className="animate-spin rounded-full h-6 w-6 md:h-8 md:w-8 border-b-2 border-white mx-auto mb-2"></div>
+                        <div className="text-base md:text-lg font-semibold">Spinning the wheel...</div>
+                      </div>
                     )}
 
                     {/* FIXED: Next Round button shows when appropriate */}
@@ -1135,7 +1174,7 @@ export default function TruthOrDare({ currentUser }) {
 
               {/* Middle Column - Game Area */}
               <div className={`space-y-4 md:space-y-6 ${showChat ? 'lg:col-span-2' : 'lg:col-span-2'}`}>
-                {/* Spinner Wheel */}
+                {/* Spinner Wheel - FIXED: Now shows for all players during spin */}
                 {stage === "playing" && !nextRoundLoading && (
                   <Card className="p-4 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0 text-center">
                     <SpinnerWheel 
@@ -1144,6 +1183,18 @@ export default function TruthOrDare({ currentUser }) {
                       spinning={spinning} 
                       soundEnabled={gameSettings.soundEnabled}
                     />
+                    
+                    {/* Show spinning status for all players */}
+                    {spinning && (
+                      <div className="mt-4 md:mt-6">
+                        <div className="text-lg md:text-xl font-bold text-gray-900 mb-2">
+                          🎡 Spinning the wheel...
+                        </div>
+                        <div className="text-sm md:text-base text-gray-600">
+                          Wait to see who gets selected!
+                        </div>
+                      </div>
+                    )}
                   </Card>
                 )}
 
@@ -1694,9 +1745,6 @@ function SpinnerWheel({ players, selectedPlayer, spinning, soundEnabled }) {
 }
 
 // Enhanced Toast component - Mobile Responsive
-// Enhanced Toast component - Mobile Responsive
-
-// Enhanced Toast component - Mobile Responsive
 function ToastContainer({ toasts }) {
   return (
     <div className="fixed top-2 right-2 md:top-4 md:right-4 flex flex-col gap-2 md:gap-3 z-50 max-w-xs md:max-w-sm">
@@ -1723,4 +1771,3 @@ function ToastContainer({ toasts }) {
     </div>
   );
 }
-

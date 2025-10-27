@@ -50,8 +50,6 @@ export default function gameSocket(io) {
       }
     });
 
-
-
     // 🔥 NEW: Typing indicators
     socket.on("typing", ({ roomId, isTyping }) => {
       const room = rooms[roomId];
@@ -64,6 +62,34 @@ export default function gameSocket(io) {
           isTyping 
         });
       }
+    });
+
+    // ✅ FIXED: New socket event to start spinner for all players
+    socket.on("start-spinner", ({ roomId }) => {
+      const room = rooms[roomId];
+      if (!room || room.gameType !== "truth-or-dare") return;
+
+      console.log(`🎡 Starting spinner broadcast in room ${roomId}`);
+      
+      // Broadcast spinner start to ALL players in the room
+      io.to(roomId).emit("spinner-started");
+    });
+
+    // ✅ FIXED: New socket events for next round synchronization
+    socket.on("next-round-starting", ({ roomId }) => {
+      const room = rooms[roomId];
+      if (!room || room.gameType !== "truth-or-dare") return;
+
+      console.log(`🔄 Next round starting broadcast in room ${roomId}`);
+      io.to(roomId).emit("next-round-starting");
+    });
+
+    socket.on("next-round-started", ({ roomId }) => {
+      const room = rooms[roomId];
+      if (!room || room.gameType !== "truth-or-dare") return;
+
+      console.log(`🔄 Next round started broadcast in room ${roomId}`);
+      io.to(roomId).emit("next-round-started");
     });
 
     // ✅ Create a new room - ENHANCED with chat
@@ -152,7 +178,6 @@ export default function gameSocket(io) {
         existing.socketId = socket.id;
       }
 
-
       socket.join(roomId);
       socket.emit("room-joined", room);
       io.to(roomId).emit("update-players", room.players);
@@ -179,118 +204,6 @@ export default function gameSocket(io) {
       socket.emit("game-state-update", gameState);
       console.log(`👥 ${player.name} joined ${roomId} (${room.gameType})`);
     });
-
-     // Host starts next round
-    socket.on('next-round-starting', (data) => {
-      const { roomId } = data;
-      const room = gameRooms.get(roomId);
-      
-      if (room) {
-        // Set loading state for all players
-        room.gameState = 'loading-next-round';
-        
-        // Notify all players that next round is starting
-        io.to(roomId).emit('next-round-loading', {
-          message: 'Next round starting...',
-          roomId
-        });
-        
-        console.log(`Next round loading for room: ${roomId}`);
-      }
-    });
-
-    // Host confirms next round has started
-    socket.on('next-round-started', (data) => {
-      const { roomId } = data;
-      const room = gameRooms.get(roomId);
-      
-      if (room) {
-        // Reset game state for new round
-        room.gameState = 'playing';
-        room.selectedPlayer = null;
-        room.isSpinning = false;
-        room.currentRound += 1;
-        
-        // Reset player-specific states
-        room.players.forEach(player => {
-          player.isReady = false;
-        });
-
-        // Notify all players that next round has started
-        io.to(roomId).emit('next-round-started', {
-          round: room.currentRound,
-          players: room.players,
-          roomId,
-          message: `Round ${room.currentRound} started!`
-        });
-        
-        console.log(`Next round started for room: ${roomId}, Round: ${room.currentRound}`);
-      }
-    });
-
-    // Player is ready for next round
-    socket.on('player-ready', (data) => {
-      const { roomId, playerId } = data;
-      const room = gameRooms.get(roomId);
-      
-      if (room) {
-        const player = room.players.find(p => p.id === playerId);
-        if (player) {
-          player.isReady = true;
-        }
-        
-        // Check if all players are ready
-        const allReady = room.players.every(p => p.isReady);
-        
-        io.to(roomId).emit('player-ready-update', {
-          playerId,
-          players: room.players,
-          allReady
-        });
-        
-        if (allReady && room.gameState === 'waiting') {
-          // Auto-start if all players are ready
-          io.to(roomId).emit('all-players-ready', {
-            roomId,
-            message: 'All players ready! Starting next round...'
-          });
-        }
-      }
-    });
-
-    // Spin the wheel for player selection
-    socket.on('spin-player', (data) => {
-      const { roomId } = data;
-      const room = gameRooms.get(roomId);
-      
-      if (room && room.players.length > 0) {
-        room.isSpinning = true;
-        
-        // Notify all players that spinning started
-        io.to(roomId).emit('spinning-started', {
-          roomId,
-          message: 'Spinning the wheel...'
-        });
-        
-        // Simulate spinning delay
-        setTimeout(() => {
-          const randomIndex = Math.floor(Math.random() * room.players.length);
-          const selectedPlayer = room.players[randomIndex];
-          room.selectedPlayer = selectedPlayer;
-          room.isSpinning = false;
-          
-          // Notify all players about the selected player
-          io.to(roomId).emit('player-selected', {
-            player: selectedPlayer,
-            roomId,
-            round: room.currentRound
-          });
-          
-          console.log(`Player selected: ${selectedPlayer.name} in room: ${roomId}`);
-        }, 3000);
-      }
-    });
-
 
     // ✅ Rejoin after refresh - ENHANCED with chat
     socket.on("rejoin-room", ({ roomId, name }) => {
@@ -443,7 +356,7 @@ export default function gameSocket(io) {
       io.to(roomId).emit("time-sync", time);
     });
 
-    // ✅ Random spin to select player (Truth or Dare only)
+    // ✅ FIXED: Random spin to select player (Truth or Dare only) - Now properly synchronized
     socket.on("spin-player", async ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.players.length === 0 || room.gameType !== "truth-or-dare") return;
@@ -458,12 +371,12 @@ export default function gameSocket(io) {
       const spinCount = 15 + Math.floor(Math.random() * 10);
       let spinIndex = 0;
 
-      for (let i = 0; i < spinCount; i++) {
-        const current = candidatePlayers[spinIndex % candidatePlayers.length];
-        io.to(roomId).emit("player-spinning", current);
-        spinIndex++;
-        await new Promise(res => setTimeout(res, 100 + i * 20));
-      }
+      // FIXED: Remove the spinning animation from server side
+      // Instead, let the client handle the visual spinning
+      // We'll just select the player after a delay to simulate spinning time
+      
+      // Wait for 3 seconds to simulate spinning animation on clients
+      await new Promise(res => setTimeout(res, 3000));
 
       const selectedPlayer = candidatePlayers[Math.floor(Math.random() * candidatePlayers.length)];
       room.currentPlayer = selectedPlayer;
@@ -476,13 +389,14 @@ export default function gameSocket(io) {
         room.playerStats[selectedPlayer.name].timesSelected++;
       }
 
+      // FIXED: Emit player selection to ALL players
       io.to(roomId).emit("player-selected", selectedPlayer);
       io.to(roomId).emit("player-stats-update", room.playerStats);
 
       // Send Truth/Dare options only to selected player
       io.to(selectedPlayer.socketId).emit("choose-truth-dare", ["Truth", "Dare"]);
 
-      console.log(`🎯 Selected player: ${selectedPlayer.name}`);
+      console.log(`🎯 Selected player: ${selectedPlayer.name} in room ${roomId}`);
     });
 
     // ✅ Selected player submits their choice (Truth or Dare only)
@@ -583,6 +497,29 @@ export default function gameSocket(io) {
     socket.on("share-proof-data-response", ({ proofData, requestor }) => {
       console.log(`📨 Sending proof data to ${requestor}`);
       io.to(requestor).emit("proof-data-received", { proofData });
+    });
+
+    // ✅ NEW: Truth completion handler
+    socket.on("truth-completed", ({ roomId, player, completionText }) => {
+      const room = rooms[roomId];
+      if (!room || room.gameType !== "truth-or-dare") return;
+
+      console.log(`✅ ${player} completed truth in ${roomId}: ${completionText}`);
+      
+      // Mark as proof uploaded for truth completion
+      room.proofUploaded = true;
+      
+      // Notify all players
+      io.to(roomId).emit("truth-completed", {
+        player,
+        completionText
+      });
+      
+      // Notify host
+      const host = room.players.find(p => p.isHost);
+      if (host) {
+        io.to(host.socketId).emit("proof-ready-for-review", { player });
+      }
     });
 
     // ✅ Prompt completed (Truth or Dare only)
@@ -751,8 +688,6 @@ export default function gameSocket(io) {
         }
       }
     });
-
-    // Add these new socket events to your existing gameSocket.js file
 
     // ✅ Create room for Who's Most Likely - NEW with chat
     socket.on("create-mostlikely-room", ({ player }) => {
@@ -974,6 +909,7 @@ export default function gameSocket(io) {
       return room.scenarios[randomIndex];
     }
 
+    // ✅ Helper function to calculate round results - NEW
     function calculateRoundResults(room) {
       const voteCounts = {};
       
@@ -1056,6 +992,10 @@ export default function gameSocket(io) {
           } else if (room.gameType === "compatibility") {
             delete room.playerProgress[disconnectedPlayer.name];
             delete room.answers[disconnectedPlayer.name];
+          } else if (room.gameType === "most-likely") {
+            delete room.scores[disconnectedPlayer.name];
+            delete room.playerStats[disconnectedPlayer.name];
+            delete room.votes[disconnectedPlayer.name];
           }
           
           if (disconnectedPlayer.isHost && room.players.length > 0) {
@@ -1071,6 +1011,8 @@ export default function gameSocket(io) {
             updateRoomPlayers(roomId);
             if (room.gameType === "truth-or-dare") {
               io.to(roomId).emit("scores-update", room.scores);
+            } else if (room.gameType === "most-likely") {
+              io.to(roomId).emit("mostlikely-update-players", room.players);
             }
           }
         }
