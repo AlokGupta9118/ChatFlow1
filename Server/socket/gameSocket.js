@@ -50,6 +50,8 @@ export default function gameSocket(io) {
       }
     });
 
+
+
     // 🔥 NEW: Typing indicators
     socket.on("typing", ({ roomId, isTyping }) => {
       const room = rooms[roomId];
@@ -150,6 +152,7 @@ export default function gameSocket(io) {
         existing.socketId = socket.id;
       }
 
+
       socket.join(roomId);
       socket.emit("room-joined", room);
       io.to(roomId).emit("update-players", room.players);
@@ -176,6 +179,118 @@ export default function gameSocket(io) {
       socket.emit("game-state-update", gameState);
       console.log(`👥 ${player.name} joined ${roomId} (${room.gameType})`);
     });
+
+     // Host starts next round
+    socket.on('next-round-starting', (data) => {
+      const { roomId } = data;
+      const room = gameRooms.get(roomId);
+      
+      if (room) {
+        // Set loading state for all players
+        room.gameState = 'loading-next-round';
+        
+        // Notify all players that next round is starting
+        io.to(roomId).emit('next-round-loading', {
+          message: 'Next round starting...',
+          roomId
+        });
+        
+        console.log(`Next round loading for room: ${roomId}`);
+      }
+    });
+
+    // Host confirms next round has started
+    socket.on('next-round-started', (data) => {
+      const { roomId } = data;
+      const room = gameRooms.get(roomId);
+      
+      if (room) {
+        // Reset game state for new round
+        room.gameState = 'playing';
+        room.selectedPlayer = null;
+        room.isSpinning = false;
+        room.currentRound += 1;
+        
+        // Reset player-specific states
+        room.players.forEach(player => {
+          player.isReady = false;
+        });
+
+        // Notify all players that next round has started
+        io.to(roomId).emit('next-round-started', {
+          round: room.currentRound,
+          players: room.players,
+          roomId,
+          message: `Round ${room.currentRound} started!`
+        });
+        
+        console.log(`Next round started for room: ${roomId}, Round: ${room.currentRound}`);
+      }
+    });
+
+    // Player is ready for next round
+    socket.on('player-ready', (data) => {
+      const { roomId, playerId } = data;
+      const room = gameRooms.get(roomId);
+      
+      if (room) {
+        const player = room.players.find(p => p.id === playerId);
+        if (player) {
+          player.isReady = true;
+        }
+        
+        // Check if all players are ready
+        const allReady = room.players.every(p => p.isReady);
+        
+        io.to(roomId).emit('player-ready-update', {
+          playerId,
+          players: room.players,
+          allReady
+        });
+        
+        if (allReady && room.gameState === 'waiting') {
+          // Auto-start if all players are ready
+          io.to(roomId).emit('all-players-ready', {
+            roomId,
+            message: 'All players ready! Starting next round...'
+          });
+        }
+      }
+    });
+
+    // Spin the wheel for player selection
+    socket.on('spin-player', (data) => {
+      const { roomId } = data;
+      const room = gameRooms.get(roomId);
+      
+      if (room && room.players.length > 0) {
+        room.isSpinning = true;
+        
+        // Notify all players that spinning started
+        io.to(roomId).emit('spinning-started', {
+          roomId,
+          message: 'Spinning the wheel...'
+        });
+        
+        // Simulate spinning delay
+        setTimeout(() => {
+          const randomIndex = Math.floor(Math.random() * room.players.length);
+          const selectedPlayer = room.players[randomIndex];
+          room.selectedPlayer = selectedPlayer;
+          room.isSpinning = false;
+          
+          // Notify all players about the selected player
+          io.to(roomId).emit('player-selected', {
+            player: selectedPlayer,
+            roomId,
+            round: room.currentRound
+          });
+          
+          console.log(`Player selected: ${selectedPlayer.name} in room: ${roomId}`);
+        }, 3000);
+      }
+    });
+
 
     // ✅ Rejoin after refresh - ENHANCED with chat
     socket.on("rejoin-room", ({ roomId, name }) => {
