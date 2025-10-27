@@ -86,20 +86,20 @@ const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
   }, []);
 
   return (
-    <div className="flex gap-2 p-3 bg-white/95 border-t border-gray-200">
+    <div className="flex gap-2 p-2 bg-white/95">
       <Input
         ref={inputRef}
         value={inputValue}
         onChange={handleChange}
         onKeyPress={handleKeyPress}
         placeholder="Type a message..."
-        className="flex-1 bg-white border-gray-300 min-h-[44px]"
+        className="flex-1 bg-white border-gray-300"
         disabled={disabled}
       />
       <Button
         onClick={handleSubmit}
         disabled={!inputValue.trim() || disabled}
-        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white flex-shrink-0 min-w-[60px] min-h-[44px]"
+        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white flex-shrink-0"
         size="sm"
       >
         <Send className="w-4 h-4" />
@@ -156,10 +156,6 @@ const ChatPanel = React.memo(({
       <div 
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0"
-        style={{ 
-          WebkitOverflowScrolling: 'touch',
-          overflowY: 'auto'
-        }}
       >
         {chatMessages.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
@@ -247,24 +243,6 @@ const WhosMostLikely = () => {
       mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [gameStarted, gameFinished, roundResults, currentRound]);
-
-  // Improved scrolling on resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (mainContainerRef.current) {
-        // Force reflow to fix scrolling issues
-        mainContainerRef.current.style.overflow = 'hidden';
-        setTimeout(() => {
-          if (mainContainerRef.current) {
-            mainContainerRef.current.style.overflow = 'auto';
-          }
-        }, 50);
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // Sound effects
   const playSound = (soundName) => {
@@ -537,11 +515,11 @@ const WhosMostLikely = () => {
     </div>
   );
 
-  // Mobile Chat Toggle Button - FIXED POSITION
+  // Mobile Chat Toggle Button
   const MobileChatToggle = () => (
     <Button
       onClick={() => setShowChat(!showChat)}
-      className="fixed bottom-20 right-4 z-40 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-2xl rounded-full w-14 h-14"
+      className="fixed bottom-4 right-4 z-40 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-2xl rounded-full w-14 h-14"
     >
       {showChat ? <ChevronDown className="w-5 h-5" /> : <MessageCircle className="w-5 h-5" />}
     </Button>
@@ -554,7 +532,7 @@ const WhosMostLikely = () => {
         <ConnectionStatus />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-2xl mx-auto relative z-10 min-h-screen flex flex-col justify-center overflow-auto">
+        <div ref={mainContainerRef} className="max-w-2xl mx-auto relative z-10 min-h-screen flex flex-col justify-center">
           <Link to="/Games" className="mb-4">
             <Button variant="ghost" className="text-white hover:bg-white/20 backdrop-blur-sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -645,7 +623,7 @@ const WhosMostLikely = () => {
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col overflow-hidden">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
             <Button
               variant="ghost"
@@ -689,10 +667,12 @@ const WhosMostLikely = () => {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto min-h-0 mb-6 space-y-2" style={{ WebkitOverflowScrolling: 'touch' }}>
-                  {players.map((player, index) => (
-                    <PlayerCard key={player.name} player={player} index={index} />
-                  ))}
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6">
+                  <div className="space-y-2">
+                    {players.map((player, index) => (
+                      <PlayerCard key={player.name} player={player} index={index} />
+                    ))}
+                  </div>
                 </div>
 
                 {players.length === 1 && (
@@ -751,7 +731,7 @@ const WhosMostLikely = () => {
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col overflow-hidden">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
             {/* Main Content */}
             <div className="lg:col-span-2 flex flex-col min-h-0">
@@ -766,7 +746,7 @@ const WhosMostLikely = () => {
                   </p>
                 </div>
 
-                <div className="flex-1 overflow-y-auto min-h-0 mb-6 space-y-3" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6 space-y-3">
                   {finalResults?.rankings?.map((player, index) => (
                     <Card key={player.name} className={`p-4 text-center backdrop-blur-sm border-0 ${
                       index === 0 
@@ -832,7 +812,7 @@ const WhosMostLikely = () => {
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col overflow-hidden">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
             {/* Main Content */}
             <div className="lg:col-span-2 flex flex-col min-h-0">
@@ -853,7 +833,7 @@ const WhosMostLikely = () => {
                   </Card>
                 </div>
 
-                <div className="flex-1 overflow-y-auto min-h-0 mb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6">
                   <h3 className="text-lg font-bold text-white mb-4 text-center">
                     Voting Results
                   </h3>
@@ -929,7 +909,7 @@ const WhosMostLikely = () => {
       <MobileChatToggle />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
       
-      <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col overflow-hidden">
+      <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-screen flex flex-col">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
           {/* Main Game Content */}
           <div className="lg:col-span-2 flex flex-col min-h-0">
@@ -1001,7 +981,7 @@ const WhosMostLikely = () => {
 
               {/* Player Selection Grid */}
               {!hasVoted && (
-                <div className="flex-1 overflow-y-auto min-h-0 mb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex-1 overflow-y-auto min-h-0 mb-6">
                   <div className="grid grid-cols-1 gap-3">
                     {players
                       .filter(player => player.name !== playerName) // Can't vote for yourself
