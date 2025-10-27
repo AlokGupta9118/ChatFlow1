@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const socket = io(import.meta.env.VITE_API_URL);
 
-const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
+const ChatList = ({ onSelectChat, selectedChat }) => {
   const [friends, setFriends] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,17 +88,10 @@ const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
     normalize(g?.name).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleSelect = (friend, group, isGroup = false) => {
-    console.log("Selecting:", { friend, group, isGroup }); // Debug log
-    const key = isGroup ? group._id : friend._id;
+  const handleSelect = (chat, isGroup = false) => {
+    const key = chat._id;
     setUnreadCounts((prev) => ({ ...prev, [key]: 0 }));
-    
-    // Call the parent handler with correct parameters
-    if (onSelectChat) {
-      onSelectChat(friend, group, isGroup);
-    } else {
-      console.error("onSelectChat prop is not defined");
-    }
+    onSelectChat(chat, isGroup);
   };
 
   const getStatusColor = (status) => {
@@ -127,7 +120,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
 
   return (
     <div className="w-full h-full bg-transparent flex flex-col">
-      {/* Enhanced Header */}
+      {/* Header */}
       <div className="p-4 lg:p-6 pb-3 lg:pb-4 space-y-4 flex-shrink-0">
         <div className="px-1">
           <h2 className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
@@ -149,7 +142,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
           />
         </div>
 
-        {/* Enhanced Category Tabs */}
+        {/* Category Tabs */}
         <div className="flex space-x-2 bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl p-2 backdrop-blur-xl">
           {[
             { key: "all", label: "All", icon: MessageCircle },
@@ -164,6 +157,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
                   ? "bg-white dark:bg-gray-700 shadow-lg text-gray-900 dark:text-gray-100 transform scale-105"
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
               }`}
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
               <Icon className="w-4 h-4" />
               <span className="hidden xs:inline">{label}</span>
@@ -172,8 +166,8 @@ const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
         </div>
       </div>
 
-      {/* Enhanced Chat List - Fixed Scrolling Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 lg:px-6 pb-4 space-y-3">
+      {/* Chat List */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 lg:px-6 pb-4 space-y-3" style={{ WebkitOverflowScrolling: 'touch' }}>
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full space-y-4 py-8">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
@@ -182,7 +176,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
         ) : displayedItems.length > 0 ? (
           <AnimatePresence mode="popLayout">
             {displayedItems.map((item, index) => {
-              const isGroup = item.participants && Array.isArray(item.participants);
+              const isGroup = item.participants;
               const itemName = item?.name || "Unnamed";
               const isSelected = selectedChat?._id === item._id;
               const unread = unreadCounts[item._id] || 0;
@@ -210,15 +204,15 @@ const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
                     className="px-2"
                   >
                     <div
-                      onClick={() => handleSelect(null, item, true)} // Fixed: pass item as group
+                      onClick={() => handleSelect(item, true)}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
                           : "bg-white/80 dark:bg-gray-800/80 border-gray-200/50 dark:border-gray-700/50 hover:bg-white/90 dark:hover:bg-gray-800/90 hover:shadow-lg hover:scale-105"
                       }`}
+                      style={{ WebkitTapHighlightColor: 'transparent' }}
                     >
                       <div className="flex items-center gap-3 lg:gap-4">
-                        {/* Avatar Container */}
                         <div className="relative flex-shrink-0">
                           <Avatar className="w-12 h-12 lg:w-14 lg:h-14 shadow-lg border-2 border-white/80 dark:border-gray-700/80">
                             <AvatarImage src={item.avatar || "/default-avatar.png"} />
@@ -231,7 +225,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
                           </div>
                         </div>
                         
-                        {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-2">
                             <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm lg:text-base">
@@ -279,15 +272,15 @@ const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
                     className="px-2"
                   >
                     <div
-                      onClick={() => handleSelect(item, null, false)}
+                      onClick={() => handleSelect(item, false)}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
                           : "bg-white/80 dark:bg-gray-800/80 border-gray-200/50 dark:border-gray-700/50 hover:bg-white/90 dark:hover:bg-gray-800/90 hover:shadow-lg hover:scale-105"
                       }`}
+                      style={{ WebkitTapHighlightColor: 'transparent' }}
                     >
                       <div className="flex items-center gap-3 lg:gap-4">
-                        {/* Avatar Container */}
                         <div className="relative flex-shrink-0">
                           <Avatar className="w-12 h-12 lg:w-14 lg:h-14 shadow-lg border-2 border-white/80 dark:border-gray-700/80">
                             <AvatarImage src={item.profilePicture || "/default-avatar.png"} />
@@ -298,7 +291,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
                           <div className={`absolute -bottom-1 -right-1 w-3 h-3 lg:w-4 lg:h-4 rounded-full border-2 border-white dark:border-gray-900 ${getStatusColor(item.status)}`} />
                         </div>
                         
-                        {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-2">
                             <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm lg:text-base">

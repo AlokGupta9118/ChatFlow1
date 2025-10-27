@@ -91,9 +91,9 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
     }
   };
 
-  // FIXED: This function now properly handles group selection
   const handleGroupClick = (group) => {
-    console.log("Group clicked:", group); // Debug log
+    console.log("📱 Group clicked:", group);
+    
     const isMember = group?.participants?.some(
       (p) => String(p.user._id) === String(userId)
     );
@@ -103,7 +103,6 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
       return;
     }
     
-    // FIX: Call the prop function directly with the group
     if (onSelectGroup) {
       onSelectGroup(group);
     } else {
@@ -128,11 +127,11 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
 
   return (
     <div className="h-full flex flex-col bg-transparent">
-      {/* Enhanced Header */}
-      <div className="p-6 pb-4 space-y-4">
+      {/* Header */}
+      <div className="p-4 lg:p-6 pb-4 space-y-4">
         <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <h2 className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
               Groups
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -144,6 +143,7 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
             whileTap={{ scale: 0.95 }}
             onClick={() => setShowCreateModal(true)}
             className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white p-3 rounded-xl shadow-lg shadow-indigo-500/25 transition-all duration-200"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
           >
             <Plus className="w-5 h-5" />
           </motion.button>
@@ -163,7 +163,7 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
       </div>
 
       {/* Groups List */}
-      <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 lg:px-6 pb-6 space-y-3" style={{ WebkitOverflowScrolling: 'touch' }}>
         {loading ? (
           <div className="flex justify-center items-center h-32">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
@@ -171,10 +171,10 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
         ) : filteredGroups.length > 0 ? (
           <AnimatePresence>
             {filteredGroups.map((group, index) => {
-              const isMember = group.participants.some(
+              const isMember = group.participants?.some(
                 (p) => String(p.user._id) === String(userId)
               );
-              const isAdmin = group.participants.some(
+              const isAdmin = group.participants?.some(
                 (p) =>
                   String(p.user._id) === String(userId) &&
                   ["owner", "admin"].includes(p.role)
@@ -194,19 +194,24 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
                   <div
                     className={`flex items-center justify-between p-4 rounded-2xl backdrop-blur-sm border transition-all duration-300 ${
                       isMember
-                        ? "bg-white/70 dark:bg-gray-800/70 border-gray-200/50 dark:border-gray-700/50 hover:bg-white/90 dark:hover:bg-gray-800/90 hover:shadow-lg hover:scale-105 cursor-pointer"
+                        ? "bg-white/70 dark:bg-gray-800/70 border-gray-200/50 dark:border-gray-700/50 hover:bg-white/90 dark:hover:bg-gray-800/90 hover:shadow-lg hover:scale-105 cursor-pointer active:scale-95 active:bg-indigo-50 dark:active:bg-indigo-900/20"
                         : "bg-gray-100/50 dark:bg-gray-800/50 border-gray-200/30 dark:border-gray-700/30 cursor-not-allowed"
                     }`}
                     onClick={() => isMember && handleGroupClick(group)}
+                    style={{
+                      WebkitTapHighlightColor: 'transparent',
+                      touchAction: 'manipulation',
+                    }}
                   >
-                    <div
-                      className="flex items-center gap-4 flex-1"
-                    >
-                      <div className="relative">
+                    <div className="flex items-center gap-3 lg:gap-4 flex-1 min-w-0">
+                      <div className="relative flex-shrink-0">
                         <img
                           src={group.avatar || "/default-avatar.png"}
                           alt={group.name}
-                          className="w-14 h-14 rounded-2xl object-cover border-2 border-indigo-200 dark:border-indigo-600 shadow-md"
+                          className="w-12 h-12 lg:w-14 lg:h-14 rounded-2xl object-cover border-2 border-indigo-200 dark:border-indigo-600 shadow-md"
+                          onError={(e) => {
+                            e.target.src = "/default-avatar.png";
+                          }}
                         />
                         {isAdmin && (
                           <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-1 shadow-lg">
@@ -216,17 +221,17 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="font-semibold text-gray-800 dark:text-gray-100 truncate">
+                          <p className="font-semibold text-gray-800 dark:text-gray-100 truncate text-sm lg:text-base">
                             {group.name}
                           </p>
                           {isPending && (
-                            <Clock className="w-3 h-3 text-amber-500" />
+                            <Clock className="w-3 h-3 text-amber-500 flex-shrink-0" />
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                          <Users className="w-3 h-3" />
+                        <div className="flex items-center gap-2 text-xs lg:text-sm text-gray-500">
+                          <Users className="w-3 h-3 flex-shrink-0" />
                           <span>{memberCount} members</span>
-                          <span className="text-xs px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700">
+                          <span className="text-xs px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 whitespace-nowrap">
                             {isAdmin ? "Admin" : isMember ? "Member" : isPending ? "Pending" : "Join"}
                           </span>
                         </div>
@@ -238,10 +243,15 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={(e) => {
-                          e.stopPropagation(); // Prevent triggering the group click
+                          e.stopPropagation();
+                          e.preventDefault();
                           handleRequestJoin(group._id);
                         }}
-                        className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-xl text-sm font-medium shadow-lg shadow-green-500/25 transition-all duration-200"
+                        onTouchStart={(e) => e.stopPropagation()}
+                        className="px-3 py-2 lg:px-4 lg:py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-xl text-xs lg:text-sm font-medium shadow-lg shadow-green-500/25 transition-all duration-200 whitespace-nowrap"
+                        style={{
+                          WebkitTapHighlightColor: 'transparent',
+                        }}
                       >
                         Join
                       </motion.button>
@@ -256,13 +266,13 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
             <Users className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
             <p className="text-gray-500 dark:text-gray-400 text-lg">No groups found</p>
             <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
-              Create a group to get started
+              {searchQuery ? "Try different search terms" : "Create a group to get started"}
             </p>
           </div>
         )}
       </div>
 
-      {/* Enhanced Create Group Modal */}
+      {/* Create Group Modal */}
       <AnimatePresence>
         {showCreateModal && (
           <motion.div
@@ -270,12 +280,14 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={() => setShowCreateModal(false)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6"
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
@@ -284,6 +296,7 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
                 <button
                   onClick={() => setShowCreateModal(false)}
                   className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   ✕
                 </button>
@@ -325,12 +338,14 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
                     type="button"
                     onClick={() => setShowCreateModal(false)}
                     className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     className="flex-1 px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-medium hover:from-indigo-600 hover:to-purple-600 shadow-lg shadow-indigo-500/25 transition-all"
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
                     Create Group
                   </button>
