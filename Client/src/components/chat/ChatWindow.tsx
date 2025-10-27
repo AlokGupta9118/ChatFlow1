@@ -62,10 +62,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
   // View current chat profile
   const handleViewChatProfile = () => {
     if (isGroup) {
-      // For groups, show group info instead
       setShowAdminPanel(true);
     } else {
-      // For individual chats, view the other user's profile
       handleViewProfile(selectedChat);
     }
   };
@@ -136,7 +134,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
       }
     });
 
-    // Typing indicators
     socket.on("typing_start", () => setIsTyping(true));
     socket.on("typing_stop", () => setIsTyping(false));
   }, [selectedChat?._id, isGroup, userId]);
@@ -205,9 +202,9 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
     );
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-gradient-to-br from-indigo-50/30 via-white to-purple-50/30 dark:from-gray-900 dark:via-gray-800 dark:to-purple-900/20 relative">
-      {/* Enhanced Header with Profile View */}
-      <div className="h-20 flex items-center justify-between px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 shadow-sm z-10">
+    <div className="h-full flex flex-col bg-gradient-to-br from-indigo-50/30 via-white to-purple-50/30 dark:from-gray-900 dark:via-gray-800 dark:to-purple-900/20">
+      {/* Header - Fixed height */}
+      <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 shadow-sm z-10">
         <div className="flex items-center gap-4">
           <div className="relative group">
             <Avatar 
@@ -262,11 +259,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
         </div>
       </div>
 
-      {/* Enhanced Messages Area - FIXED */}
+      {/* Messages Area - Flexible height with proper scrolling */}
       <div 
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-6 space-y-4 bg-transparent min-h-0"
-        style={{ height: 'calc(100vh - 160px)' }}
       >
         <AnimatePresence>
           {messages.map((msg, idx) => {
@@ -346,59 +342,61 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Enhanced Input Area */}
-      {canSendMessage ? (
-        <div className="h-20 flex items-center gap-3 px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-t border-gray-200/50 dark:border-gray-700/50 shadow-lg">
-          <div className="flex gap-1">
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-3 text-gray-500 hover:text-indigo-500 transition-colors">
-              <Paperclip className="w-5 h-5" />
-            </motion.button>
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-3 text-gray-500 hover:text-indigo-500 transition-colors">
-              <Image className="w-5 h-5" />
-            </motion.button>
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-3 text-gray-500 hover:text-indigo-500 transition-colors">
-              <Smile className="w-5 h-5" />
-            </motion.button>
-          </div>
-          
-          <div className="flex-1 relative">
-            <Input
-              value={newMessage}
-              onChange={(e) => {
-                setNewMessage(e.target.value);
-                handleTyping();
-              }}
-              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-              placeholder="Type a message..."
-              className="w-full pl-4 pr-12 py-3 bg-white/50 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 backdrop-blur-sm"
-            />
-            <motion.button 
-              whileHover={{ scale: 1.05 }} 
+      {/* Input Area - Fixed height */}
+      <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-t border-gray-200/50 dark:border-gray-700/50 shadow-lg">
+        {canSendMessage ? (
+          <>
+            <div className="flex gap-1">
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-3 text-gray-500 hover:text-indigo-500 transition-colors">
+                <Paperclip className="w-5 h-5" />
+              </motion.button>
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-3 text-gray-500 hover:text-indigo-500 transition-colors">
+                <Image className="w-5 h-5" />
+              </motion.button>
+              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-3 text-gray-500 hover:text-indigo-500 transition-colors">
+                <Smile className="w-5 h-5" />
+              </motion.button>
+            </div>
+            
+            <div className="flex-1 relative">
+              <Input
+                value={newMessage}
+                onChange={(e) => {
+                  setNewMessage(e.target.value);
+                  handleTyping();
+                }}
+                onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                placeholder="Type a message..."
+                className="w-full pl-4 pr-12 py-3 bg-white/50 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 backdrop-blur-sm"
+              />
+              <motion.button 
+                whileHover={{ scale: 1.05 }} 
+                whileTap={{ scale: 0.95 }}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-indigo-500 transition-colors"
+              >
+                <Mic className="w-4 h-4" />
+              </motion.button>
+            </div>
+            
+            <motion.button
+              whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-indigo-500 transition-colors"
+              onClick={handleSendMessage}
+              disabled={!newMessage.trim()}
+              className="p-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl shadow-lg shadow-indigo-500/25 hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
             >
-              <Mic className="w-4 h-4" />
+              <Send className="w-5 h-5" />
             </motion.button>
+          </>
+        ) : (
+          <div className="w-full flex items-center justify-center text-gray-500 italic text-sm">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4" />
+              You are not allowed to send messages in this group
+            </div>
           </div>
-          
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleSendMessage}
-            disabled={!newMessage.trim()}
-            className="p-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl shadow-lg shadow-indigo-500/25 hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-          >
-            <Send className="w-5 h-5" />
-          </motion.button>
-        </div>
-      ) : (
-        <div className="h-20 flex items-center justify-center bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 text-gray-500 italic text-sm border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-2">
-            <Info className="w-4 h-4" />
-            You are not allowed to send messages in this group
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Profile View Modal */}
       <AnimatePresence>
