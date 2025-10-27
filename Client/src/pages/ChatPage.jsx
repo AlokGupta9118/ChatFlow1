@@ -91,11 +91,11 @@ const ChatPage = ({ currentUser }) => {
         </div>
       </div>
 
-      {/* Enhanced Chat Window Area */}
-      <div className="flex-1 flex flex-col bg-gradient-to-br from-white/40 via-blue-50/30 to-purple-50/20 dark:from-gray-900/40 dark:via-gray-800/30 dark:to-purple-900/20 backdrop-blur-sm overflow-hidden relative min-h-0">
+      {/* Enhanced Chat Window Area - FIXED LAYOUT */}
+      <div className="flex-1 flex flex-col bg-gradient-to-br from-white/40 via-blue-50/30 to-purple-50/20 dark:from-gray-900/40 dark:via-gray-800/30 dark:to-purple-900/20 backdrop-blur-sm overflow-hidden min-h-0 relative">
         {selectedChat ? (
           <>
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 z-10 relative">
               <ChatWindow
                 currentUser={currentUser}
                 selectedChat={selectedChat}
@@ -107,19 +107,19 @@ const ChatPage = ({ currentUser }) => {
             {/* Enhanced Slide-in Group Info */}
             {isGroupSelected && (
               <div
-                className={`absolute top-0 right-0 h-full w-96 bg-white/90 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl border-l border-gray-200/50 dark:border-gray-700/50 transform transition-all duration-500 ease-out ${
-                  showGroupInfo ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
+                className={`absolute top-0 right-0 h-full w-96 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl shadow-2xl border-l border-gray-200/50 dark:border-gray-700/50 transform transition-all duration-500 ease-in-out z-20 ${
+                  showGroupInfo ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"
                 }`}
               >
                 <div className="absolute top-4 left-4 z-30">
                   <button
                     onClick={() => setShowGroupInfo(false)}
-                    className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center hover:scale-110 transition-transform"
+                    className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center hover:scale-110 transition-transform shadow-md"
                   >
                     ✕
                   </button>
                 </div>
-                <div className="h-full overflow-y-auto">
+                <div className="h-full overflow-y-auto pt-4">
                   <GroupChatAdminPanel
                     group={selectedChat}
                     currentUser={currentUser}
@@ -130,7 +130,7 @@ const ChatPage = ({ currentUser }) => {
             )}
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 space-y-6 p-4">
+          <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 space-y-6 p-4 z-10 relative">
             <div className="w-32 h-32 bg-gradient-to-r from-indigo-400 to-purple-500 rounded-full flex items-center justify-center shadow-2xl">
               <div className="text-4xl">💬</div>
             </div>
