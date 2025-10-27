@@ -523,7 +523,7 @@ const AdvancedCompatibilityGame: React.FC = () => {
   const allQuestions = ADVANCED_COMPATIBILITY_GAME.getAllQuestions();
 
   useEffect(() => {
-    const newSocket = io('http://localhost:3001');
+    const newSocket = io('http://localhost:3000');
     setSocket(newSocket);
 
     // Socket event listeners
