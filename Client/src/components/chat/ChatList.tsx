@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const socket = io(import.meta.env.VITE_API_URL);
 
-const ChatList = ({ onSelectFriend, selectedFriend }) => {
+const ChatList = ({ onSelectChat, selectedChat }) => { // Fixed prop name
   const [friends, setFriends] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,9 +89,16 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
   );
 
   const handleSelect = (friend, group, isGroup = false) => {
+    console.log("Selecting:", { friend, group, isGroup }); // Debug log
     const key = isGroup ? group._id : friend._id;
     setUnreadCounts((prev) => ({ ...prev, [key]: 0 }));
-    onSelectFriend(friend, group, isGroup);
+    
+    // Call the parent handler with correct parameters
+    if (onSelectChat) {
+      onSelectChat(friend, group, isGroup);
+    } else {
+      console.error("onSelectChat prop is not defined");
+    }
   };
 
   const getStatusColor = (status) => {
@@ -175,9 +182,9 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
         ) : displayedItems.length > 0 ? (
           <AnimatePresence mode="popLayout">
             {displayedItems.map((item, index) => {
-              const isGroup = item.participants;
+              const isGroup = item.participants && Array.isArray(item.participants);
               const itemName = item?.name || "Unnamed";
-              const isSelected = selectedFriend?._id === item._id;
+              const isSelected = selectedChat?._id === item._id;
               const unread = unreadCounts[item._id] || 0;
 
               if (isGroup) {
@@ -203,7 +210,7 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
                     className="px-2"
                   >
                     <div
-                      onClick={() => handleSelect(null, { ...item, isGroup: true }, true)}
+                      onClick={() => handleSelect(null, item, true)} // Fixed: pass item as group
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
@@ -342,17 +349,6 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
             </p>
           </motion.div>
         )}
-      </div>
-
-      {/* Floating Action Button for Mobile */}
-      <div className="lg:hidden fixed bottom-6 right-6 z-10">
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          className="w-14 h-14 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl shadow-2xl shadow-indigo-500/50 flex items-center justify-center text-white"
-        >
-          <MessageCircle className="w-6 h-6" />
-        </motion.button>
       </div>
     </div>
   );
