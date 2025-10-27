@@ -86,7 +86,7 @@ const ChatPage = ({ currentUser }) => {
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden relative">
         
-        {/* Chat List/Group Sidebar - Always visible on desktop, conditionally on mobile */}
+        {/* Chat List/Group Sidebar */}
         <div className={`
           w-full lg:w-80 border-r border-gray-200/50 dark:border-gray-800/50 
           bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl flex flex-col shadow-lg 
@@ -148,13 +148,16 @@ const ChatPage = ({ currentUser }) => {
           </div>
         </div>
 
-        {/* Chat Window Area - FIXED: Proper mobile layout */}
+        {/* Chat Window Area - FIXED: Proper visibility logic */}
         <div className={`
           flex-1 flex flex-col bg-gradient-to-br from-white/40 via-blue-50/30 to-purple-50/20 
           dark:from-gray-900/40 dark:via-gray-800/30 dark:to-purple-900/20 backdrop-blur-sm 
-          overflow-hidden min-h-0
-          ${!selectedChat ? 'hidden lg:flex' : ''}
-          ${mobileView === 'chat' || mobileView === 'groupInfo' ? 'flex' : 'hidden lg:flex'}
+          overflow-hidden min-h-0 transition-transform duration-300 ease-in-out
+          ${mobileView === 'chat' || mobileView === 'groupInfo' || (window.innerWidth >= 1024 && selectedChat) 
+            ? 'translate-x-0 flex' 
+            : 'translate-x-full lg:translate-x-0 lg:flex'
+          }
+          ${!selectedChat && window.innerWidth >= 1024 ? 'lg:flex' : ''}
         `}>
           {selectedChat ? (
             <>
