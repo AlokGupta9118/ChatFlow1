@@ -81,12 +81,12 @@ export default function TruthOrDare({ currentUser }) {
 
   promptsRef.current = prompts;
 
-  // FIXED: Auto-scroll to top when game state changes
+  // FIXED 1: Improved mobile scrolling - scroll to top on major game state changes
   useEffect(() => {
     if (mainContainerRef.current) {
       mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [stage, selectedPlayer, chosenPrompt, showChat]);
+  }, [stage, selectedPlayer, chosenPrompt, showChat, truthDareChoice]);
 
   // FIXED: Scroll chat to bottom when new messages arrive
   useEffect(() => {
@@ -247,15 +247,15 @@ export default function TruthOrDare({ currentUser }) {
       }));
     });
 
-    // 🔥 NEW: Truth completion handler - shows to everyone
+    // 🔥 FIXED 2: Truth completion handler - shows to everyone with proper state update
     sock.on("truth-completed", ({ player, completionText }) => {
       console.log("✅ Truth completed by:", player, completionText);
       addToast(`${player} completed their truth!`, 3000, "success");
       
-      // Show the truth completion to everyone
+      // Update the truth completion text for everyone to see
       if (player === selectedPlayer) {
         setTruthCompletionText(completionText);
-        setProofUploaded(true);
+        setProofUploaded(true); // Mark as completed for truth as well
       }
     });
 
@@ -362,10 +362,11 @@ export default function TruthOrDare({ currentUser }) {
       addToast(`${player} uploaded proof for their dare!`, 3000, "success");
     });
 
-    sock.on("proof-ready-for-review", ({ player }) => {
+    // FIXED 3: Enhanced proof ready notification for both truth and dare
+    sock.on("proof-ready-for-review", ({ player, type = "dare" }) => {
       if (isHost && player === selectedPlayer) {
         setProofUploaded(true);
-        addToast(`${player} has uploaded proof. You can now start the next round!`, 3000, "success");
+        addToast(`${player} has completed their ${type}! You can now start the next round!`, 3000, "success");
       }
     });
 
@@ -466,7 +467,7 @@ export default function TruthOrDare({ currentUser }) {
     });
   };
 
-  // NEW: Submit truth completion - FIXED to broadcast to everyone
+  // FIXED 2: Enhanced truth completion - properly broadcasts to everyone
   const submitTruthCompletion = () => {
     if (!truthCompletionText.trim()) {
       addToast("Please write your truth completion message", 3000, "error");
@@ -479,9 +480,16 @@ export default function TruthOrDare({ currentUser }) {
         player: localName,
         completionText: truthCompletionText 
       });
+      
+      // Also notify host that proof is ready for review
+      socket.emit("notify-proof-ready", {
+        roomId,
+        player: localName,
+        type: "truth"
+      });
     }
     
-    // Don't set proofUploaded locally - wait for server broadcast
+    setProofUploaded(true);
     addToast("Truth completion submitted!", 2000, "success");
   };
 
@@ -653,7 +661,8 @@ export default function TruthOrDare({ currentUser }) {
         
         socket.emit("notify-proof-ready", {
           roomId,
-          player: localName
+          player: localName,
+          type: "dare"
         });
         
         setProofs(prev => ({
@@ -712,7 +721,7 @@ export default function TruthOrDare({ currentUser }) {
     addToast(`Kicked ${playerName} from the room`, 3000, "warning");
   };
 
-  // 🔄 Reset round - FIXED: Now shows spinner for all players
+  // 🔄 Reset round - FIXED 3: Enhanced next round logic for both truth and dare
   const resetRound = () => {
     if (!isHost || !socket) return;
     
@@ -751,6 +760,12 @@ export default function TruthOrDare({ currentUser }) {
     setGameSettings(prev => ({ ...prev, soundEnabled: !prev.soundEnabled }));
     addToast(`Sound ${!gameSettings.soundEnabled ? 'enabled' : 'disabled'}`, 2000);
   };
+
+  // FIXED 3: Enhanced condition for next round button - works for both truth and dare
+  const shouldShowNextRoundButton = isHost && selectedPlayer && (
+    (truthDareChoice?.choice === "Truth" && proofUploaded) || 
+    (truthDareChoice?.choice === "Dare" && proofUploaded)
+  );
 
   // Check if proof should be required (only for dares)
   const shouldRequireProof = chosenPrompt && chosenPrompt.type === "dare";
@@ -1130,8 +1145,8 @@ export default function TruthOrDare({ currentUser }) {
                       </div>
                     )}
 
-                    {/* FIXED: Next Round button shows when appropriate */}
-                    {isHost && selectedPlayer && (truthDareChoice?.choice === "Truth" || proofUploaded) && (
+                    {/* FIXED 3: Next Round button shows when appropriate for both truth and dare */}
+                    {shouldShowNextRoundButton && (
                       <Button 
                         onClick={resetRound} 
                         disabled={nextRoundLoading}
@@ -1354,7 +1369,7 @@ export default function TruthOrDare({ currentUser }) {
                         </Card>
                       )}
 
-                      {/* FIXED: Truth Completion Section - Shows to everyone */}
+                      {/* FIXED 2: Truth Completion Section - Shows to everyone */}
                       {chosenPrompt && !shouldRequireProof && (
                         <Card className="p-4 md:p-6 bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200">
                           <h4 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4 text-center">
@@ -1537,18 +1552,18 @@ export default function TruthOrDare({ currentUser }) {
                       {/* Admin Notice */}
                       {isHost && selectedPlayer && (
                         <Card className={`p-3 md:p-4 text-center ${
-                          (truthDareChoice?.choice === "Truth" || proofUploaded) 
+                          proofUploaded 
                             ? "bg-green-50 border-2 border-green-200" 
                             : "bg-yellow-50 border-2 border-yellow-200"
                         }`}>
                           <div className={`font-medium text-sm md:text-base ${
-                            (truthDareChoice?.choice === "Truth" || proofUploaded) 
+                            proofUploaded 
                               ? "text-green-800" 
                               : "text-yellow-800"
                           }`}>
-                            {(truthDareChoice?.choice === "Truth" || proofUploaded) 
+                            {proofUploaded 
                               ? "✅ Ready for next round!" 
-                              : `⏳ Waiting for ${selectedPlayer} to complete their task...`}
+                              : `⏳ Waiting for ${selectedPlayer} to complete their ${truthDareChoice?.choice?.toLowerCase()}...`}
                           </div>
                         </Card>
                       )}
@@ -1674,7 +1689,7 @@ export default function TruthOrDare({ currentUser }) {
                           alt="Proof submission"
                           className="max-w-full h-48 md:h-96 object-contain rounded-lg border-2 border-gray-200 mx-auto"
                         />
-                        <p className="text-xs md:text-sm text-gray-600">
+                        <p className="text-xs md:text-sm text-gray-500">
                           This is the proof submitted by the player for their dare
                         </p>
                       </div>
