@@ -121,7 +121,7 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
   return (
     <div className="w-full h-full bg-transparent flex flex-col">
       {/* Enhanced Header */}
-      <div className="p-4 lg:p-6 pb-3 lg:pb-4 space-y-4">
+      <div className="p-4 lg:p-6 pb-3 lg:pb-4 space-y-4 flex-shrink-0">
         <div className="px-1">
           <h2 className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
             Messages
@@ -165,10 +165,10 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
         </div>
       </div>
 
-      {/* Enhanced Chat List */}
-      <div className="flex-1 overflow-y-auto px-3 lg:px-6 pb-4 space-y-3">
+      {/* Enhanced Chat List - Fixed Scrolling Area */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 lg:px-6 pb-4 space-y-3">
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-48 space-y-4">
+          <div className="flex flex-col items-center justify-center h-full space-y-4 py-8">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
             <p className="text-gray-500 dark:text-gray-400">Loading conversations...</p>
           </div>
@@ -326,7 +326,7 @@ const ChatList = ({ onSelectFriend, selectedFriend }) => {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center py-16 px-8 text-center"
+            className="flex flex-col items-center justify-center py-16 px-8 text-center h-full"
           >
             <div className="w-20 h-20 lg:w-24 lg:h-24 bg-gradient-to-r from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 rounded-3xl flex items-center justify-center mb-4 shadow-lg">
               <MessageCircle className="w-8 h-8 lg:w-10 lg:h-10 text-gray-400 dark:text-gray-500" />
