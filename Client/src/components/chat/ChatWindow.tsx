@@ -90,7 +90,12 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       if (currentUserMember) {
         setUserRole(currentUserMember.role);
         setCanSendMessage(true);
-      } else {
+      } 
+      if (currentUserMember==="owner"|| currentUser==="admin" ) {
+        setUserRole(currentUserMember.role);
+        setCanSendMessage(true);
+      } 
+      else {
         setUserRole(null);
         setCanSendMessage(false);
       }
