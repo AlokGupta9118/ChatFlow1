@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { Search, Circle, Users, MessageCircle, MoreVertical } from "lucide-react";
+import { Search, Circle, Users, MessageCircle, MoreVertical, Settings } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getToken } from "@/utils/getToken";
@@ -16,6 +16,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [unreadCounts, setUnreadCounts] = useState({});
   const [activeCategory, setActiveCategory] = useState("all");
+  const [showAdminPanel, setShowAdminPanel] = useState(null);
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
   const fetchFriends = async () => {
@@ -112,6 +113,30 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     }
   };
 
+  const getUserRoleInGroup = (group) => {
+    const participant = group.participants.find(
+      (p) => String(p.user?._id || p.user) === String(currentUser._id)
+    );
+    return participant?.role || "member";
+  };
+
+  const isGroupAdmin = (group) => {
+    const role = getUserRoleInGroup(group);
+    return role === "admin" || role === "owner";
+  };
+
+  const toggleAdminPanel = (groupId, e) => {
+    e.stopPropagation();
+    setShowAdminPanel(showAdminPanel === groupId ? null : groupId);
+  };
+
+  const handleAdminAction = (action, groupId) => {
+    console.log(`Admin action: ${action} for group: ${groupId}`);
+    // Here you would implement the actual admin actions
+    // For now, just close the panel
+    setShowAdminPanel(null);
+  };
+
   const displayedItems = activeCategory === "groups" 
     ? filteredGroups 
     : activeCategory === "friends" 
@@ -187,6 +212,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                 );
                 const role = participant?.role || "Member";
                 const memberCount = item.participants?.length || 0;
+                const isAdmin = isGroupAdmin(item);
 
                 return (
                   <motion.div
@@ -230,19 +256,35 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                             <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm lg:text-base">
                               {itemName}
                             </h3>
-                            {unread > 0 && (
-                              <motion.span
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg min-w-6 text-center"
-                              >
-                                {unread}
-                              </motion.span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {unread > 0 && (
+                                <motion.span
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg min-w-6 text-center"
+                                >
+                                  {unread}
+                                </motion.span>
+                              )}
+                              {isAdmin && activeCategory === "groups" && (
+                                <button
+                                  onClick={(e) => toggleAdminPanel(item._id, e)}
+                                  className="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-200"
+                                >
+                                  <Settings className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
                           </div>
                           
                           <div className="flex items-center gap-2 text-xs lg:text-sm">
-                            <span className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 px-2 py-1 rounded-full font-medium">
+                            <span className={`px-2 py-1 rounded-full font-medium ${
+                              role === "owner" 
+                                ? "bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300"
+                                : role === "admin"
+                                ? "bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300"
+                                : "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300"
+                            }`}>
                               {role}
                             </span>
                             <span className="text-gray-400">•</span>
@@ -252,6 +294,49 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                           </div>
                         </div>
                       </div>
+
+                      {/* Admin Panel Dropdown */}
+                      {isAdmin && activeCategory === "groups" && showAdminPanel === item._id && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-4 bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-gray-200 dark:border-gray-700"
+                        >
+                          <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+                            <Settings className="w-4 h-4" />
+                            Group Administration
+                          </h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => handleAdminAction("manage_members", item._id)}
+                              className="p-2 text-sm bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                            >
+                              Manage Members
+                            </button>
+                            <button
+                              onClick={() => handleAdminAction("edit_group", item._id)}
+                              className="p-2 text-sm bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors"
+                            >
+                              Edit Group
+                            </button>
+                            <button
+                              onClick={() => handleAdminAction("group_settings", item._id)}
+                              className="p-2 text-sm bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                            >
+                              Settings
+                            </button>
+                            {role === "owner" && (
+                              <button
+                                onClick={() => handleAdminAction("delete_group", item._id)}
+                                className="p-2 text-sm bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+                              >
+                                Delete Group
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
                     </div>
                   </motion.div>
                 );
