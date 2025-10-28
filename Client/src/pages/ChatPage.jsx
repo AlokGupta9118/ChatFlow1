@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import ChatList from "../components/chat/ChatList";
-import TestChatWindow from "../components/chat/ChatWindow";
+import ChatWindow from "../components/chat/ChatWindow";
 import GroupChatAdminPanel from "../components/chat/GroupChatAdminPanel";
 import GroupChatSidebar from "../components/chat/GroupChatSidebar";
 import ChatSidebar from "../components/chat/ChatSidebar";
@@ -226,10 +226,12 @@ const ChatPage = ({ currentUser }) => {
               <div className="flex-1 overflow-hidden flex flex-col">
                 <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
 
-<TestChatWindow
+
+<ChatWindow
   currentUser={currentUser}
   selectedChat={selectedChat}
   isGroup={isGroupSelected}
+  onToggleGroupInfo={() => setShowGroupInfo((prev) => !prev)}
 />
                 </div>
               </div>
