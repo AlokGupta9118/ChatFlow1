@@ -28,49 +28,17 @@ const TruthOrDareGame = ({ roomCode, player, onLeaveGame }) => {
   const fileInputRef = useRef(null);
   const notificationRef = useRef(null);
 
-  useEffect(() => {
-    const newSocket = io(process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001');
-    setSocket(newSocket);
+  // Event Handlers - DEFINED BEFORE useEffect
+  const showNotification = (message) => {
+    setNotification(message);
+    if (notificationRef.current) {
+      clearTimeout(notificationRef.current);
+    }
+    notificationRef.current = setTimeout(() => {
+      setNotification('');
+    }, 3000);
+  };
 
-    // Game event listeners
-    newSocket.on('gameStarted', handleGameStarted);
-    newSocket.on('spinnerStart', handleSpinnerStart);
-    newSocket.on('playerSelected', handlePlayerSelected);
-    newSocket.on('chooseOption', handleChooseOption);
-    newSocket.on('optionChosen', handleOptionChosen);
-    newSocket.on('truthRevealed', handleTruthRevealed);
-    newSocket.on('dareProofReceived', handleDareProofReceived);
-    newSocket.on('votingStarted', handleVotingStarted);
-    newSocket.on('voteReceived', handleVoteReceived);
-    newSocket.on('votingResults', handleVotingResults);
-    newSocket.on('roundTimeWarning', handleRoundTimeWarning);
-    newSocket.on('timeout', handleTimeout);
-    newSocket.on('gameEnded', handleGameEnded);
-    newSocket.on('gamePaused', handleGamePaused);
-    newSocket.on('gameResumed', handleGameResumed);
-    newSocket.on('playerJoined', handlePlayerJoined);
-    newSocket.on('playerLeft', handlePlayerLeft);
-    newSocket.on('chatMessage', handleChatMessage);
-    newSocket.on('playersUpdate', handlePlayersUpdate);
-
-    // Join room
-    newSocket.emit('joinRoom', {
-      roomCode,
-      player: {
-        id: newSocket.id,
-        name: player.name,
-        avatar: player.avatar,
-        isHost: player.isHost
-      }
-    });
-
-    return () => {
-      newSocket.disconnect();
-      clearTimer();
-    };
-  }, []);
-
-  // Missing event handlers - ADD THESE
   const handleRoundTimeWarning = (data) => {
     showNotification(data.message || 'Round ending soon!');
   };
@@ -97,41 +65,6 @@ const TruthOrDareGame = ({ roomCode, player, onLeaveGame }) => {
     showNotification(`${data.playerName} left the game`);
   };
 
-  const showNotification = (message) => {
-    setNotification(message);
-    if (notificationRef.current) {
-      clearTimeout(notificationRef.current);
-    }
-    notificationRef.current = setTimeout(() => {
-      setNotification('');
-    }, 3000);
-  };
-
-  const clearTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
-  const startTimer = (duration) => {
-    clearTimer();
-    setTimeLeft(duration);
-    setTimerActive(true);
-    
-    timerRef.current = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearTimer();
-          setTimerActive(false);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  // Existing event handlers
   const handleGameStarted = (data) => {
     setGameState('playing');
     setCurrentPlayer(data.currentPlayer);
@@ -239,6 +172,31 @@ const TruthOrDareGame = ({ roomCode, player, onLeaveGame }) => {
     setChatMessages(prev => [...prev, data]);
   };
 
+  // Timer Functions
+  const clearTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const startTimer = (duration) => {
+    clearTimer();
+    setTimeLeft(duration);
+    setTimerActive(true);
+    
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearTimer();
+          setTimerActive(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   // Action Handlers
   const handleStartGame = () => {
     socket.emit('startGame', { roomCode });
@@ -299,6 +257,51 @@ const TruthOrDareGame = ({ roomCode, player, onLeaveGame }) => {
       });
     }
   };
+
+  useEffect(() => {
+    const newSocket = io(process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001');
+    setSocket(newSocket);
+
+    // Game event listeners - NOW ALL HANDLERS ARE DEFINED
+    newSocket.on('gameStarted', handleGameStarted);
+    newSocket.on('spinnerStart', handleSpinnerStart);
+    newSocket.on('playerSelected', handlePlayerSelected);
+    newSocket.on('chooseOption', handleChooseOption);
+    newSocket.on('optionChosen', handleOptionChosen);
+    newSocket.on('truthRevealed', handleTruthRevealed);
+    newSocket.on('dareProofReceived', handleDareProofReceived);
+    newSocket.on('votingStarted', handleVotingStarted);
+    newSocket.on('voteReceived', handleVoteReceived);
+    newSocket.on('votingResults', handleVotingResults);
+    newSocket.on('roundTimeWarning', handleRoundTimeWarning);
+    newSocket.on('timeout', handleTimeout);
+    newSocket.on('gameEnded', handleGameEnded);
+    newSocket.on('gamePaused', handleGamePaused);
+    newSocket.on('gameResumed', handleGameResumed);
+    newSocket.on('playerJoined', handlePlayerJoined);
+    newSocket.on('playerLeft', handlePlayerLeft);
+    newSocket.on('chatMessage', handleChatMessage);
+    newSocket.on('playersUpdate', handlePlayersUpdate);
+
+    // Join room
+    newSocket.emit('joinRoom', {
+      roomCode,
+      player: {
+        id: newSocket.id,
+        name: player.name,
+        avatar: player.avatar,
+        isHost: player.isHost
+      }
+    });
+
+    return () => {
+      newSocket.disconnect();
+      clearTimer();
+      if (notificationRef.current) {
+        clearTimeout(notificationRef.current);
+      }
+    };
+  }, []);
 
   const isCurrentPlayer = currentPlayer && currentPlayer.id === socket?.id;
   const isHost = player.isHost;
