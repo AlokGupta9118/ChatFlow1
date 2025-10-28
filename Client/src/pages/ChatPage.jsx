@@ -14,7 +14,12 @@ const ChatPage = ({ currentUser }) => {
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
   const handleSelectChat = (chat, isGroup = false) => {
-    console.log("Selected chat:", { chat, isGroup });
+    console.log("🔄 ChatPage: Selected chat:", { 
+      chat: chat?.name, 
+      isGroup,
+      chatType: isGroup ? "GROUP" : "PRIVATE"
+    });
+    
     setSelectedChat(chat);
     setIsGroupSelected(isGroup);
     setShowGroupInfo(false);
@@ -52,6 +57,16 @@ const ChatPage = ({ currentUser }) => {
       document.removeEventListener('touchstart', handleClickOutside);
     };
   }, [showMobileSidebar]);
+
+  // Debug: Log when selectedChat changes
+  useEffect(() => {
+    console.log("🔄 ChatPage: selectedChat updated", {
+      selectedChat: selectedChat?.name,
+      isGroupSelected,
+      hasParticipants: selectedChat?.participants,
+      participantsCount: selectedChat?.participants?.length
+    });
+  }, [selectedChat, isGroupSelected]);
 
   return (
     <div className="h-screen w-full flex overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-black text-gray-900 dark:text-gray-200">
@@ -151,12 +166,23 @@ const ChatPage = ({ currentUser }) => {
                 {isGroupView ? (
                   <GroupChatSidebar
                     currentUser={currentUser}
-                    onSelectGroup={(group) => handleSelectChat(group, true)}
+                    onSelectGroup={(group) => {
+                      console.log("🎯 Group selected from GroupChatSidebar:", group?.name);
+                      handleSelectChat(group, true); // Force isGroup to true
+                    }}
                   />
                 ) : (
+                  // FIXED: Make sure ChatList passes the isGroup parameter correctly
                   <ChatList
                     currentUser={currentUser}
-                    onSelectChat={(chat) => handleSelectChat(chat, false)}
+                    onSelectChat={(chat, isGroup = false) => {
+                      console.log("🎯 Chat selected from ChatList:", { 
+                        chat: chat?.name, 
+                        isGroup,
+                        hasParticipants: chat?.participants 
+                      });
+                      handleSelectChat(chat, isGroup);
+                    }}
                     selectedChat={selectedChat}
                   />
                 )}
@@ -179,6 +205,11 @@ const ChatPage = ({ currentUser }) => {
                   {selectedChat?.name}
                 </h3>
                 
+                {/* Debug info */}
+                <div className="text-xs text-gray-500 bg-white/50 px-2 py-1 rounded">
+                  {isGroupSelected ? "GROUP" : "PRIVATE"}
+                </div>
+                
                 {/* Mobile hamburger in chat view */}
                 <button
                   onClick={toggleMobileSidebar}
@@ -191,13 +222,13 @@ const ChatPage = ({ currentUser }) => {
                 </button>
               </div>
 
-              {/* Chat Window - FIXED: Make sure isGroup prop is passed correctly */}
+              {/* Chat Window - Make sure isGroup prop is passed correctly */}
               <div className="flex-1 overflow-hidden flex flex-col">
                 <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
                   <ChatWindow
                     currentUser={currentUser}
                     selectedChat={selectedChat}
-                    isGroup={isGroupSelected} // Make sure this is passed
+                    isGroup={isGroupSelected} // This should be true for groups
                     onToggleGroupInfo={() => setShowGroupInfo((prev) => !prev)}
                   />
                 </div>

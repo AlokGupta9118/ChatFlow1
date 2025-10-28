@@ -13,13 +13,21 @@ import { toast } from "sonner";
 
 const socket = io(import.meta.env.VITE_API_URL);
 
+// In your ChatWindow component, add this auto-detection:
 const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupInfo }) => {
-  console.log("🚀 ChatWindow DEBUG - Props received:", { 
-    selectedChat, 
-    isGroup, 
-    currentUser: currentUser?._id,
-    selectedChatName: selectedChat?.name 
+  // Auto-detect if it's a group if the prop is wrong
+  const detectedIsGroup = isGroup || (Array.isArray(selectedChat?.participants) && selectedChat.participants.length > 0);
+  
+  console.log("🚀 ChatWindow DEBUG - Props:", { 
+    selectedChat: selectedChat?.name, 
+    isGroupProp: isGroup,
+    detectedIsGroup,
+    hasParticipants: !!selectedChat?.participants 
   });
+
+  // Use detectedIsGroup instead of isGroup in your component
+  // ... rest of your component
+
 
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
