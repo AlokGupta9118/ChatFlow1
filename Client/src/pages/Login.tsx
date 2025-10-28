@@ -5,13 +5,16 @@ import { Label } from "@/components/ui/label";
 import { MessageCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { io } from "socket.io-client";
 
+  
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,6 +41,12 @@ const Login = () => {
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
       // ✅ Redirect to chat
+      const socket = io(import.meta.env.VITE_API_URL, {
+  withCredentials: true,
+  transports: ["websocket"],
+});
+
+       socket.emit("user-online");
       navigate("/chat");
       window.location.reload(); // ensures full context refresh
     } catch (err) {

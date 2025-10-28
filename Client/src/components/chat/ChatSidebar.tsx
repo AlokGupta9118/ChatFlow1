@@ -107,7 +107,7 @@ const ChatSidebar = () => {
                   to={item.href}
                   onClick={() => {
                     if (item.name === "Home") {
-                      socket.emit("userlogout"); // ✅ emit logout event
+                      socket.emit("user-logout"); // ✅ emit logout event
                     }
                   }}
                   className={cn(
