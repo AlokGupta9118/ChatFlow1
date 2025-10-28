@@ -38,7 +38,8 @@ import {
   Image,
   Sun,
   Moon,
-  Laptop
+  Laptop,
+  Volume2 // ✅ ADDED MISSING IMPORT
 } from "lucide-react";
 
 const SettingsPanel = ({ currentUser }) => {
@@ -503,7 +504,7 @@ const SettingsPanel = ({ currentUser }) => {
                             description: "Play sounds for new messages",
                             checked: settings.soundEnabled,
                             onChange: (val) => handleChange("soundEnabled", val),
-                            icon: Volume2
+                            icon: Volume2 // ✅ NOW THIS WILL WORK
                           },
                           {
                             label: "Message Previews",

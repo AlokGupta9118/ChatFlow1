@@ -23,9 +23,11 @@ import {
   Video,
   Smile,
   MapPin,
-  GripVertical
+  GripVertical,
+  ArrowLeft // Added ArrowLeft icon
 } from "lucide-react";
 import { motion, AnimatePresence, PanInfo } from "framer-motion";
+import { useNavigate } from "react-router-dom"; // Added useNavigate hook
 
 const API_URL = import.meta.env.VITE_API_URL || "${import.meta.env.VITE_API_URL}";
 
@@ -62,6 +64,7 @@ interface FriendStories {
 }
 
 const Status = () => {
+  const navigate = useNavigate(); // Initialize navigate hook
   const [myStories, setMyStories] = useState<Story[]>([]);
   const [friendsStories, setFriendsStories] = useState<FriendStories[]>([]);
   const [file, setFile] = useState<File | null>(null);
@@ -84,6 +87,11 @@ const Status = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout>();
   const token = getToken();
+
+  // Handle back button click
+  const handleBackClick = () => {
+    navigate(-1); // Go back to previous page
+  };
 
   // Fetch all stories
   const fetchStories = async () => {
@@ -290,6 +298,15 @@ const Status = () => {
         <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
+              {/* Back Button */}
+              <button
+                onClick={handleBackClick}
+                className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200"
+                aria-label="Go back"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              </button>
+              
               <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                 Stories
               </h1>

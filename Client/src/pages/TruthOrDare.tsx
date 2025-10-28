@@ -17,7 +17,7 @@ import {
 
 const DEFAULT_SOCKET_URL = `${import.meta.env.VITE_API_URL}`;
 
-// 🔥 NEW: Enhanced localStorage management
+// 🔥 FIXED: Enhanced localStorage management with proper cleanup
 const useGamePersistence = () => {
   const saveGameState = (key, data) => {
     try {
@@ -38,8 +38,12 @@ const useGamePersistence = () => {
   };
 
   const clearGameState = () => {
-    const keys = Object.keys(localStorage).filter(key => key.startsWith('truthDare_'));
-    keys.forEach(key => localStorage.removeItem(key));
+    try {
+      const keys = Object.keys(localStorage).filter(key => key.startsWith('truthDare_'));
+      keys.forEach(key => localStorage.removeItem(key));
+    } catch (error) {
+      console.warn("Failed to clear game state:", error);
+    }
   };
 
   return { saveGameState, loadGameState, clearGameState };
@@ -55,7 +59,6 @@ export default function TruthOrDare({ currentUser }) {
   const [roomId, setRoomId] = useState(params.roomId || loadGameState("roomId", ""));
   const [localName, setLocalName] = useState(currentUser?.name || loadGameState("localName", ""));
   const [players, setPlayers] = useState(loadGameState("players", []));
-  const [prevPlayers, setPrevPlayers] = useState(players);
   const [isHost, setIsHost] = useState(loadGameState("isHost", false));
 
   // Game state
@@ -80,7 +83,6 @@ export default function TruthOrDare({ currentUser }) {
   const [timeLeft, setTimeLeft] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [playerStats, setPlayerStats] = useState(loadGameState("playerStats", {}));
-  const [achievements, setAchievements] = useState(loadGameState("achievements", []));
   
   // Proof system
   const [proofImage, setProofImage] = useState(null);
@@ -100,7 +102,6 @@ export default function TruthOrDare({ currentUser }) {
   // FIXED: New state for next round loading
   const [nextRoundLoading, setNextRoundLoading] = useState(false);
 
-  const promptsRef = useRef([]);
   const timerRef = useRef(null);
   const audioRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -108,89 +109,48 @@ export default function TruthOrDare({ currentUser }) {
   const typingTimeoutRef = useRef(null);
   const mainContainerRef = useRef(null);
 
-  promptsRef.current = prompts;
-
-  // 🔥 NEW: Enhanced persistence - save state on changes
+  // 🔥 FIXED: Enhanced persistence - save state on changes
   useEffect(() => {
     saveGameState("stage", stage);
-  }, [stage]);
-
-  useEffect(() => {
     saveGameState("roomId", roomId);
-  }, [roomId]);
-
-  useEffect(() => {
     saveGameState("localName", localName);
-  }, [localName]);
-
-  useEffect(() => {
     saveGameState("players", players);
-  }, [players]);
-
-  useEffect(() => {
     saveGameState("isHost", isHost);
-  }, [isHost]);
-
-  useEffect(() => {
     saveGameState("selectedPlayer", selectedPlayer);
-  }, [selectedPlayer]);
-
-  useEffect(() => {
     saveGameState("prompts", prompts);
-  }, [prompts]);
-
-  useEffect(() => {
     saveGameState("chosenPrompt", chosenPrompt);
-  }, [chosenPrompt]);
-
-  useEffect(() => {
     saveGameState("truthDareChoice", truthDareChoice);
-  }, [truthDareChoice]);
-
-  useEffect(() => {
     saveGameState("scores", scores);
-  }, [scores]);
-
-  useEffect(() => {
     saveGameState("gameSettings", gameSettings);
-  }, [gameSettings]);
-
-  useEffect(() => {
     saveGameState("playerStats", playerStats);
-  }, [playerStats]);
-
-  useEffect(() => {
-    saveGameState("achievements", achievements);
-  }, [achievements]);
-
-  useEffect(() => {
     saveGameState("proofs", proofs);
-  }, [proofs]);
-
-  useEffect(() => {
     saveGameState("chatMessages", chatMessages);
-  }, [chatMessages]);
+  }, [stage, roomId, localName, players, isHost, selectedPlayer, prompts, chosenPrompt, truthDareChoice, scores, gameSettings, playerStats, proofs, chatMessages]);
 
   // FIXED 1: Improved mobile scrolling
   useEffect(() => {
     if (mainContainerRef.current) {
-      mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => {
+        mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
     }
   }, [stage, selectedPlayer, chosenPrompt, showChat, truthDareChoice]);
 
   // FIXED: Scroll chat to bottom when new messages arrive
   useEffect(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      setTimeout(() => {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }, 100);
     }
   }, [chatMessages]);
 
-  // NEW: Automatically set prompt type based on selected player's choice
+  // FIXED: Automatically set prompt type based on selected player's choice
   useEffect(() => {
-    if (truthDareChoice && selectedPlayer !== localName) {
+    if (truthDareChoice && selectedPlayer) {
       setPromptType(truthDareChoice.choice.toLowerCase());
     }
-  }, [truthDareChoice, selectedPlayer, localName]);
+  }, [truthDareChoice, selectedPlayer]);
 
   // Sound effects
   const playSound = (soundName) => {
@@ -227,155 +187,151 @@ export default function TruthOrDare({ currentUser }) {
     return () => clearTimeout(timerRef.current);
   }, [timeLeft, isChoicePending]);
 
-  // Check proof status when selected player changes
+  // 🔌 Socket initialization with CHAT HANDLERS - COMPLETELY FIXED
   useEffect(() => {
-    if (selectedPlayer === localName && chosenPrompt) {
-      const proofKey = `proof_${roomId}_${localName}_${Date.now()}`;
-      const existingProof = localStorage.getItem(proofKey);
-      if (existingProof) {
-        setProofImage(existingProof);
-        setProofUploaded(true);
-      } else {
-        setProofImage(null);
-        setProofUploaded(false);
-      }
-    }
-  }, [selectedPlayer, chosenPrompt, roomId, localName]);
-
-  // 🔌 Socket initialization with CHAT HANDLERS - FIXED SPINNER ISSUES
-  useEffect(() => {
-    const sock = io(DEFAULT_SOCKET_URL, { autoConnect: true });
+    const sock = io(DEFAULT_SOCKET_URL, { 
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
+    });
 
     sock.on("connect", () => {
       console.log("✅ Socket connected:", sock.id);
       addToast("Connected to game server", 2000);
       
-      // 🔥 NEW: Enhanced reconnection logic
+      // 🔥 FIXED: Enhanced reconnection logic
       if (roomId && localName) {
+        console.log("🔄 Attempting to rejoin room:", roomId, "as", localName);
         sock.emit("rejoin-room", { 
           roomId, 
-          name: localName,
-          gameState: {
-            stage,
-            players,
-            selectedPlayer,
-            chosenPrompt,
-            truthDareChoice,
-            scores,
-            proofs,
-            chatMessages
-          }
+          name: localName
         });
       }
     });
 
     sock.on("room-created", (room) => {
+      console.log("🆕 Room created:", room);
       setRoomId(room.roomId);
-      setPlayers(room.players);
-      setPrevPlayers(room.players);
+      setPlayers(room.players || []);
       setIsHost(true);
       setStage("waiting");
-
-      saveGameState("roomId", room.roomId);
-      saveGameState("isHost", true);
+      setScores(room.scores || {});
+      setPlayerStats(room.playerStats || {});
       playSound("success");
     });
 
     sock.on("room-joined", (room) => {
+      console.log("👥 Room joined:", room);
       setRoomId(room.roomId);
-      setPlayers(room.players);
-      setPrevPlayers(room.players);
+      setPlayers(room.players || []);
       setIsHost(false);
       setStage("waiting");
-
-      saveGameState("roomId", room.roomId);
-      saveGameState("isHost", false);
+      setScores(room.scores || {});
+      setPlayerStats(room.playerStats || {});
       playSound("success");
     });
 
-    sock.on("join-error", (msg) => addToast(`Join failed: ${msg}`, 3000, "error"));
-    sock.on("create-error", (msg) => addToast(`Create failed: ${msg}`, 3000, "error"));
+    sock.on("join-error", (msg) => {
+      console.error("❌ Join error:", msg);
+      addToast(`Join failed: ${msg}`, 3000, "error");
+      setStage("lobby");
+    });
+
+    sock.on("create-error", (msg) => {
+      console.error("❌ Create error:", msg);
+      addToast(`Create failed: ${msg}`, 3000, "error");
+    });
 
     sock.on("update-players", (playersList) => {
-      const newPlayers = playersList.filter(p => !prevPlayers.some(prev => prev.name === p.name));
-      newPlayers.forEach(p => {
-        addToast(`${p.name} joined the game!`, 2000, "success");
-        playSound("notification");
-      });
-
+      console.log("🔄 Players updated:", playersList);
       setPlayers(playersList);
-      setPrevPlayers(playersList);
-      saveGameState("players", playersList);
     });
 
     sock.on("game-started", () => {
+      console.log("🚀 Game started");
       setStage("playing");
       playSound("success");
       addToast("Game started! Get ready to play!", 2000, "success");
     });
 
-    // FIXED: New socket event for spinner start - shows spinner on ALL screens
-    sock.on("spinner-started", () => {
-      console.log("🎡 Spinner started on all screens");
-      setSpinning(true);
-      setSelectedPlayer(null);
-      setPrompts([]);
-      setChosenPrompt(null);
-      setTruthDareChoice(null);
-      setIsChoicePending(false);
-      setTimeLeft(null);
-      setProofImage(null);
-      setProofUploaded(false);
-      setTruthCompletionText("");
-      playSound("spin");
-    });
-
-    // FIXED: Player selection after spinner completes
+    // FIXED: Player selection handler
     sock.on("player-selected", (player) => {
       console.log("🎯 Player selected:", player);
-      setSelectedPlayer(player.name || player);
+      const playerName = player.name || player;
+      setSelectedPlayer(playerName);
       setSpinning(false);
       setPrompts([]);
       setChosenPrompt(null);
       setTruthDareChoice(null);
-      setIsChoicePending(player.name === localName);
-      setTimeLeft(gameSettings.timerDuration);
+      setIsChoicePending(playerName === localName);
+      setTimeLeft(playerName === localName ? gameSettings.timerDuration : null);
       setProofImage(null);
       setProofUploaded(false);
       setTruthCompletionText("");
       playSound("select");
-      
-      setPlayerStats(prev => ({
-        ...prev,
-        [player.name]: {
-          ...prev[player.name],
-          timesSelected: (prev[player.name]?.timesSelected || 0) + 1
-        }
-      }));
     });
 
-    // 🔥 FIXED 2: Enhanced truth completion handler - shows to everyone with proper state update
-    sock.on("truth-completed", ({ player, completionText }) => {
-      console.log("✅ Truth completed by:", player, completionText);
-      addToast(`${player} completed their truth!`, 3000, "success");
+    // FIXED: Spinner handler
+    sock.on("player-spinning", (player) => {
+      console.log("🎡 Player spinning:", player);
+      setSpinning(true);
+    });
+
+    // FIXED: Truth/Dare choice handler
+    sock.on("choose-truth-dare", () => {
+      console.log("❓ Choose truth or dare");
+      setIsChoicePending(true);
+      setTimeLeft(gameSettings.timerDuration);
+    });
+
+    sock.on("truth-dare-chosen", ({ player, choice }) => {
+      console.log("🟣 Truth/Dare chosen:", player, choice);
+      setTruthDareChoice({ player, choice });
+      setIsChoicePending(false);
+      setTimeLeft(null);
       
-      // Update the truth completion text for everyone to see
-      if (player === selectedPlayer) {
-        setTruthCompletionText(completionText);
-        setProofUploaded(true); // Mark as completed for truth as well
-        
-        // 🔥 NEW: Save proof for truth completion
-        const truthProofKey = `truth_${roomId}_${player}_${Date.now()}`;
-        localStorage.setItem(truthProofKey, completionText);
-        setProofs(prev => ({
+      if (gameSettings.enableScoring) {
+        setScores(prev => ({
           ...prev,
-          [player]: truthProofKey
+          [player]: (prev[player] || 0) + 10
         }));
       }
     });
 
-    // 🔥 CHAT SOCKET HANDLERS
+    // FIXED: Prompt handler
+    sock.on("receive-prompt", ({ prompt, askedBy, type }) => {
+      console.log("💬 Received prompt:", prompt, "from:", askedBy, "type:", type);
+      setPrompts(prev => [...prev, { 
+        id: Date.now(), 
+        text: prompt, 
+        from: askedBy, 
+        type: type
+      }]);
+      playSound("notification");
+    });
+
+    // FIXED: Proof handlers
+    sock.on("proof-uploaded-notification", ({ player, proofKey }) => {
+      console.log("📸 Proof uploaded:", player, proofKey);
+      setProofs(prev => ({
+        ...prev,
+        [player]: proofKey
+      }));
+      addToast(`${player} uploaded proof for their dare!`, 3000, "success");
+    });
+
+    sock.on("proof-ready-for-review", ({ player }) => {
+      console.log("📢 Proof ready for review:", player);
+      if (isHost && player === selectedPlayer) {
+        setProofUploaded(true);
+        addToast(`${player} has completed their task! You can now start the next round!`, 3000, "success");
+      }
+    });
+
+    // FIXED: Chat handlers
     sock.on("receive-chat-message", (message) => {
+      console.log("💬 Chat message received:", message);
       setChatMessages(prev => [...prev, message]);
       if (message.sender !== localName) {
         playSound("message");
@@ -395,136 +351,25 @@ export default function TruthOrDare({ currentUser }) {
     });
 
     sock.on("chat-history", (messages) => {
+      console.log("📜 Chat history loaded:", messages.length, "messages");
       setChatMessages(messages);
     });
 
-    // FIXED: New socket event for next round loading
-    sock.on("next-round-starting", () => {
-      setNextRoundLoading(true);
-      addToast("Next round starting...", 2000);
+    // FIXED: Game state updates
+    sock.on("scores-update", (newScores) => {
+      console.log("📊 Scores updated:", newScores);
+      setScores(newScores);
     });
 
-    sock.on("next-round-started", () => {
-      setNextRoundLoading(false);
-      setSelectedPlayer(null);
-      setPrompts([]);
-      setChosenPrompt(null);
-      setTruthDareChoice(null);
-      setIsChoicePending(false);
-      setTimeLeft(null);
-      setProofImage(null);
-      setProofUploaded(false);
-      setTruthCompletionText("");
-      setSpinning(false); // Ensure spinner is stopped
+    sock.on("player-stats-update", (newStats) => {
+      console.log("📈 Player stats updated:", newStats);
+      setPlayerStats(newStats);
     });
 
-    // Existing game handlers...
-    sock.on("choose-truth-dare", () => {
-      setIsChoicePending(true);
-      setTimeLeft(gameSettings.timerDuration);
-    });
-
-    sock.on("truth-dare-chosen", ({ player, choice }) => {
-      setTruthDareChoice({ player, choice });
-      setIsChoicePending(false);
-      setTimeLeft(null);
-      
-      if (gameSettings.enableScoring) {
-        setScores(prev => ({
-          ...prev,
-          [player]: (prev[player] || 0) + 10
-        }));
-      }
-    });
-
-    // FIXED: Correct prompt type handling
-    sock.on("receive-prompt", ({ prompt, askedBy, type }) => {
-      setPrompts(prev => [...prev, { 
-        id: Date.now(), 
-        text: prompt, 
-        from: askedBy, 
-        type: type // Use the type from server
-      }]);
-      playSound("notification");
-    });
-
-    sock.on("prompt-completed", ({ player, prompt }) => {
-      if (gameSettings.enableScoring) {
-        setScores(prev => ({
-          ...prev,
-          [player]: (prev[player] || 0) + 25
-        }));
-      }
-      
-      addToast(`${player} completed their ${prompt.type}! +25 points`, 3000, "success");
-      checkAchievements(player);
-    });
-
-    sock.on("player-kicked", ({ playerName, kickedBy }) => {
-      if (playerName === localName) {
-        addToast(`You were kicked from the room by ${kickedBy}`, 4000, "error");
-        leaveRoom();
-      } else {
-        addToast(`${playerName} was kicked from the room`, 3000, "warning");
-      }
-    });
-
-    sock.on("proof-uploaded-notification", ({ player, proofKey }) => {
-      setProofs(prev => ({
-        ...prev,
-        [player]: proofKey
-      }));
-      addToast(`${player} uploaded proof for their dare!`, 3000, "success");
-    });
-
-    // FIXED 3: Enhanced proof ready notification for both truth and dare
-    sock.on("proof-ready-for-review", ({ player, type = "dare" }) => {
-      console.log(`📢 Proof ready for ${player} - type: ${type}`);
-      if (isHost && player === selectedPlayer) {
-        setProofUploaded(true);
-        addToast(`${player} has completed their ${type}! You can now start the next round!`, 3000, "success");
-      }
-    });
-
-    sock.on("proof-view-request", ({ proofKey }) => {
-      const proofImage = localStorage.getItem(proofKey);
-      if (proofImage) {
-        setCurrentProof(proofImage);
-        setShowProofModal(true);
-      }
-    });
-
-    sock.on("share-proof-data", async ({ proofKey, requestor }) => {
-      console.log("📤 Sharing proof data for key:", proofKey);
-      const proofData = localStorage.getItem(proofKey);
-      if (proofData && sock) {
-        sock.emit("share-proof-data-response", { 
-          proofData, 
-          requestor 
-        });
-        console.log("✅ Proof data shared successfully");
-      }
-    });
-
-    sock.on("proof-data-received", ({ proofData }) => {
-      console.log("📥 Received proof data");
-      if (proofData) {
-        setCurrentProof(proofData);
-        setShowProofModal(true);
-        addToast("Proof loaded successfully!", 2000, "success");
-      }
-    });
-
-    sock.on("disconnect", () => {
-      console.log("🔴 Socket disconnected");
-      addToast("Disconnected from server", 3000, "error");
-    });
-
-    // 🔥 NEW: Handle reconnection with game state
+    // FIXED: Rejoin success handler
     sock.on("rejoin-success", (gameState) => {
-      console.log("🔄 Rejoined game successfully");
+      console.log("🔄 Rejoined game successfully:", gameState);
       if (gameState) {
-        // Restore game state from server
         setStage(gameState.stage || "waiting");
         setPlayers(gameState.players || []);
         setSelectedPlayer(gameState.selectedPlayer || null);
@@ -536,13 +381,30 @@ export default function TruthOrDare({ currentUser }) {
       }
     });
 
-    setSocket(sock);
-    return () => sock.disconnect();
-  }, []);
+    sock.on("disconnect", () => {
+      console.log("🔴 Socket disconnected");
+      addToast("Disconnected from server", 3000, "error");
+    });
 
-  // 🔥 CHAT FUNCTIONS
+    sock.on("error", (error) => {
+      console.error("❌ Socket error:", error);
+      addToast(`Connection error: ${error}`, 3000, "error");
+    });
+
+    setSocket(sock);
+
+    return () => {
+      console.log("🧹 Cleaning up socket");
+      sock.disconnect();
+    };
+  }, [roomId, localName]);
+
+  // 🔥 FIXED: Enhanced chat functions
   const sendChatMessage = () => {
-    if (!chatInput.trim() || !socket) return;
+    if (!chatInput.trim() || !socket || !roomId) {
+      console.log("❌ Cannot send message:", { hasSocket: !!socket, hasRoom: !!roomId, hasInput: !!chatInput.trim() });
+      return;
+    }
 
     const message = {
       id: Date.now(),
@@ -552,6 +414,7 @@ export default function TruthOrDare({ currentUser }) {
       type: "text"
     };
 
+    console.log("📤 Sending chat message:", message);
     socket.emit("send-chat-message", { roomId, message });
     setChatInput("");
     
@@ -559,6 +422,7 @@ export default function TruthOrDare({ currentUser }) {
     socket.emit("typing", { roomId, isTyping: false });
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
     }
   };
 
@@ -566,7 +430,7 @@ export default function TruthOrDare({ currentUser }) {
     setChatInput(e.target.value);
     
     // Typing indicators
-    if (!typingTimeoutRef.current) {
+    if (!typingTimeoutRef.current && socket && roomId) {
       socket.emit("typing", { roomId, isTyping: true });
     }
     
@@ -575,7 +439,9 @@ export default function TruthOrDare({ currentUser }) {
     }
     
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("typing", { roomId, isTyping: false });
+      if (socket && roomId) {
+        socket.emit("typing", { roomId, isTyping: false });
+      }
       typingTimeoutRef.current = null;
     }, 1000);
   };
@@ -594,69 +460,49 @@ export default function TruthOrDare({ currentUser }) {
     });
   };
 
-  // FIXED 2: Enhanced truth completion - properly broadcasts to everyone
-  const submitTruthCompletion = () => {
-    if (!truthCompletionText.trim()) {
-      addToast("Please write your truth completion message", 3000, "error");
+  // 🎮 FIXED: Room actions
+  const createRoom = () => {
+    if (!socket) {
+      addToast("Not connected to server", 3000, "error");
       return;
     }
-
-    if (socket) {
-      socket.emit("truth-completed", { 
-        roomId, 
-        player: localName,
-        completionText: truthCompletionText 
-      });
-      
-      // Also notify host that proof is ready for review
-      socket.emit("notify-proof-ready", {
-        roomId,
-        player: localName,
-        type: "truth"
-      });
+    if (!localName.trim()) {
+      addToast("Please enter your name", 3000, "error");
+      return;
     }
-    
-    setProofUploaded(true);
-    addToast("Truth completion submitted!", 2000, "success");
-  };
-
-  // Achievement system
-  const checkAchievements = (player) => {
-    const stats = playerStats[player] || {};
-    const newAchievements = [];
-    
-    if (stats.timesSelected >= 5 && !achievements.includes(`${player}-veteran`)) {
-      newAchievements.push(`${player}-veteran`);
-      addToast(`🏆 ${player} unlocked: Game Veteran!`, 4000, "success");
-    }
-    
-    if (stats.truthsCompleted >= 3 && !achievements.includes(`${player}-truth-seeker`)) {
-      newAchievements.push(`${player}-truth-seeker`);
-      addToast(`🏆 ${player} unlocked: Truth Seeker!`, 4000, "success");
-    }
-    
-    if (newAchievements.length > 0) {
-      setAchievements(prev => [...prev, ...newAchievements]);
-    }
-  };
-
-  // 🎮 Room actions
-  const createRoom = () => {
-    if (!socket || !localName.trim()) return addToast("Please enter your name", 3000, "error");
-    socket.emit("create-room", { player: { name: localName } });
+    console.log("🆕 Creating room as:", localName);
+    socket.emit("create-room", { 
+      player: { name: localName },
+      gameType: "truth-or-dare"
+    });
   };
 
   const joinRoom = () => {
-    if (!socket || !roomId.trim() || !localName.trim()) return addToast("Please enter name and room ID", 3000, "error");
-    socket.emit("join-room", { roomId, player: { name: localName } });
+    if (!socket) {
+      addToast("Not connected to server", 3000, "error");
+      return;
+    }
+    if (!roomId.trim() || !localName.trim()) {
+      addToast("Please enter name and room ID", 3000, "error");
+      return;
+    }
+    console.log("👥 Joining room:", roomId, "as:", localName);
+    socket.emit("join-room", { 
+      roomId: roomId.toUpperCase(), 
+      player: { name: localName } 
+    });
   };
 
   const leaveRoom = () => {
+    console.log("🚪 Leaving room");
     clearGameState();
+    
+    if (socket && roomId) {
+      socket.emit("leave-room", roomId);
+    }
     
     setRoomId("");
     setPlayers([]);
-    setPrevPlayers([]);
     setStage("lobby");
     setIsHost(false);
     setSelectedPlayer(null);
@@ -672,17 +518,17 @@ export default function TruthOrDare({ currentUser }) {
     setNextRoundLoading(false);
     setSpinning(false);
 
-    if (socket && roomId) socket.emit("leave-room", roomId);
     addToast("Left the room", 2000);
   };
 
-  // 🎲 Spin player - FIXED: Now broadcasts spinner to all players
+  // 🎲 FIXED: Spin player
   const startSpin = () => {
-    if (!socket || spinning || players.length === 0) return;
+    if (!socket || !roomId || spinning || players.length === 0) {
+      console.log("❌ Cannot spin:", { hasSocket: !!socket, hasRoom: !!roomId, spinning, players: players.length });
+      return;
+    }
     
-    console.log("🎡 Starting spin from host");
-    
-    // Show spinner immediately on host screen
+    console.log("🎡 Starting spin");
     setSpinning(true);
     setSelectedPlayer(null);
     setPrompts([]);
@@ -695,55 +541,60 @@ export default function TruthOrDare({ currentUser }) {
     setTruthCompletionText("");
     
     playSound("spin");
-    
-    // Broadcast spinner start to all players
-    socket.emit("start-spinner", { roomId });
-    
-    // Then trigger the actual player selection after a delay
-    setTimeout(() => {
-      socket.emit("spin-player", { roomId });
-    }, 1000);
+    socket.emit("spin-player", { roomId });
   };
 
-  // 🎭 Send prompt - FIXED: Send correct prompt type
+  // 🎭 FIXED: Send prompt
   const sendPrompt = () => {
-    if (!socket || !promptText.trim()) return;
+    if (!socket || !roomId || !promptText.trim()) {
+      console.log("❌ Cannot send prompt:", { hasSocket: !!socket, hasRoom: !!roomId, hasPrompt: !!promptText.trim() });
+      return;
+    }
     
-    // Check if we're sending the correct type based on player's choice
+    // Validate prompt type matches player's choice
     if (truthDareChoice && promptType !== truthDareChoice.choice.toLowerCase()) {
       addToast(`You can only send ${truthDareChoice.choice.toLowerCase()} prompts for ${selectedPlayer}`, 3000, "error");
       return;
     }
     
+    console.log("📤 Sending prompt:", promptText, "type:", promptType);
     socket.emit("send-prompt", { 
       roomId, 
       prompt: promptText, 
       askedBy: localName, 
-      type: promptType // Send the actual selected type
+      type: promptType
     });
     setPromptText("");
     addToast("Prompt sent!", 2000);
   };
 
-  // ✅ Choose prompt
+  // ✅ FIXED: Choose prompt
   const choosePrompt = (pr) => {
-    if (!socket) return;
-    socket.emit("choose-option", { roomId, choice: pr.text, type: pr.type });
+    if (!socket || !roomId) return;
+    
+    console.log("✅ Choosing prompt:", pr);
     setChosenPrompt(pr);
     playSound("select");
     
-    setPlayerStats(prev => ({
-      ...prev,
-      [localName]: {
-        ...prev[localName],
-        [`${pr.type}sCompleted`]: (prev[localName]?.[`${pr.type}sCompleted`] || 0) + 1
-      }
-    }));
+    // For truth, automatically mark as completed when chosen
+    if (pr.type === "truth" && selectedPlayer === localName) {
+      setProofUploaded(true);
+      socket.emit("notify-proof-ready", {
+        roomId,
+        player: localName,
+        type: "truth"
+      });
+    }
   };
 
-  // ✅ Submit Truth/Dare
+  // ✅ FIXED: Submit Truth/Dare
   const submitTruthDare = (choice) => {
-    if (!socket || !selectedPlayer) return;
+    if (!socket || !roomId || !selectedPlayer) {
+      console.log("❌ Cannot submit choice:", { hasSocket: !!socket, hasRoom: !!roomId, selectedPlayer });
+      return;
+    }
+    
+    console.log("🟣 Submitting choice:", choice);
     socket.emit("submit-truth-dare", { roomId, choice });
     setTruthDareChoice({ player: localName, choice });
     setIsChoicePending(false);
@@ -751,7 +602,7 @@ export default function TruthOrDare({ currentUser }) {
     playSound("select");
   };
 
-  // 📸 Handle proof image upload - ONLY FOR DARES
+  // 📸 FIXED: Handle proof image upload
   const handleProofUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -777,7 +628,7 @@ export default function TruthOrDare({ currentUser }) {
       setProofUploaded(true);
       addToast("Proof uploaded successfully!", 2000, "success");
       
-      if (socket) {
+      if (socket && roomId) {
         socket.emit("proof-uploaded", { 
           roomId, 
           player: localName, 
@@ -802,7 +653,7 @@ export default function TruthOrDare({ currentUser }) {
     reader.readAsDataURL(file);
   };
 
-  // 👀 View player proof
+  // 👀 FIXED: View player proof
   const viewPlayerProof = (playerName) => {
     const proofKey = proofs[playerName];
     console.log("🔍 Viewing proof for:", playerName, "Key:", proofKey);
@@ -817,7 +668,7 @@ export default function TruthOrDare({ currentUser }) {
         }
       }
       
-      if (socket) {
+      if (socket && roomId) {
         console.log("📨 Requesting proof data from server...");
         socket.emit("request-proof-data", { 
           roomId, 
@@ -840,22 +691,21 @@ export default function TruthOrDare({ currentUser }) {
 
   // 👢 Kick player
   const kickPlayer = (playerName) => {
-    if (!socket || !isHost) return;
+    if (!socket || !isHost || !roomId) return;
     socket.emit("kick-player", { roomId, playerName, kickedBy: localName });
     setShowKickMenu(false);
     addToast(`Kicked ${playerName} from the room`, 3000, "warning");
   };
 
-  // 🔄 Reset round - FIXED 3: Enhanced next round logic for both truth and dare
+  // 🔄 FIXED: Reset round
   const resetRound = () => {
-    if (!isHost || !socket) return;
+    if (!isHost || !socket || !roomId) return;
     
-    // Show loading for all players
+    console.log("🔄 Resetting round");
     setNextRoundLoading(true);
-    socket.emit("next-round-starting", { roomId });
     
-    // Reset game state after a short delay
     setTimeout(() => {
+      socket.emit("reset-round", { roomId });
       setSelectedPlayer(null);
       setPrompts([]);
       setChosenPrompt(null);
@@ -868,9 +718,8 @@ export default function TruthOrDare({ currentUser }) {
       setTruthCompletionText("");
       setNextRoundLoading(false);
       
-      socket.emit("next-round-started", { roomId });
       addToast("Next round started!", 2000);
-    }, 2000);
+    }, 1000);
   };
 
   // 🧩 Toast management
@@ -886,11 +735,8 @@ export default function TruthOrDare({ currentUser }) {
     addToast(`Sound ${!gameSettings.soundEnabled ? 'enabled' : 'disabled'}`, 2000);
   };
 
-  // FIXED 3: Enhanced condition for next round button - works for both truth and dare
-  const shouldShowNextRoundButton = isHost && selectedPlayer && (
-    (truthDareChoice?.choice === "Truth" && proofUploaded) || 
-    (truthDareChoice?.choice === "Dare" && proofUploaded)
-  );
+  // FIXED: Condition for next round button
+  const shouldShowNextRoundButton = isHost && selectedPlayer && proofUploaded;
 
   // Check if proof should be required (only for dares)
   const shouldRequireProof = chosenPrompt && chosenPrompt.type === "dare";
@@ -971,23 +817,13 @@ export default function TruthOrDare({ currentUser }) {
                   </div>
                 </div>
 
-                {/* Features showcase */}
-                <div className="mt-6 md:mt-8 grid grid-cols-2 gap-2 md:gap-4 text-xs">
-                  <div className="flex items-center text-gray-600">
-                    <Trophy className="w-3 h-3 md:w-4 md:h-4 mr-2 text-yellow-500" />
-                    Scoring
-                  </div>
-                  <div className="flex items-center text-gray-600">
-                    <Timer className="w-3 h-3 md:w-4 md:h-4 mr-2 text-blue-500" />
-                    Timer
-                  </div>
-                  <div className="flex items-center text-gray-600">
-                    <Crown className="w-3 h-3 md:w-4 md:h-4 mr-2 text-purple-500" />
-                    Achievements
-                  </div>
-                  <div className="flex items-center text-gray-600">
-                    <Volume2 className="w-3 h-3 md:w-4 md:h-4 mr-2 text-green-500" />
-                    Sound
+                {/* Connection status */}
+                <div className="mt-4 text-center">
+                  <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs ${
+                    socket?.connected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }`}>
+                    <div className={`w-2 h-2 rounded-full mr-2 ${socket?.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    {socket?.connected ? 'Connected' : 'Disconnected'}
                   </div>
                 </div>
               </Card>
@@ -1060,6 +896,14 @@ export default function TruthOrDare({ currentUser }) {
               </div>
 
               <div className="flex items-center justify-between md:justify-end space-x-1 md:space-x-3 mt-2 md:mt-0">
+                {/* Connection status */}
+                <div className={`flex items-center px-2 py-1 rounded-full text-xs ${
+                  socket?.connected ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
+                }`}>
+                  <div className={`w-2 h-2 rounded-full mr-1 ${socket?.connected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                  {socket?.connected ? 'Online' : 'Offline'}
+                </div>
+
                 {/* CHAT TOGGLE BUTTON */}
                 <TooltipProvider>
                   <Tooltip>
@@ -1272,7 +1116,7 @@ export default function TruthOrDare({ currentUser }) {
                       </div>
                     )}
 
-                    {/* FIXED 3: Next Round button shows when appropriate for both truth and dare */}
+                    {/* FIXED: Next Round button shows when appropriate */}
                     {shouldShowNextRoundButton && (
                       <Button 
                         onClick={resetRound} 
@@ -1342,7 +1186,7 @@ export default function TruthOrDare({ currentUser }) {
 
               {/* Middle Column - Game Area */}
               <div className={`space-y-3 md:space-y-6 ${showChat ? 'lg:col-span-2' : 'lg:col-span-2'}`}>
-                {/* Spinner Wheel - FIXED: Now shows for all players during spin */}
+                {/* Spinner Wheel - Shows for all players */}
                 {stage === "playing" && !nextRoundLoading && (
                   <Card className="p-3 md:p-6 bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0 text-center">
                     <SpinnerWheel 
@@ -1496,7 +1340,7 @@ export default function TruthOrDare({ currentUser }) {
                         </Card>
                       )}
 
-                      {/* FIXED 2: Truth Completion Section - Shows to everyone */}
+                      {/* Truth Completion Section */}
                       {chosenPrompt && !shouldRequireProof && (
                         <Card className="p-3 md:p-6 bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200">
                           <h4 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4 text-center">
@@ -1508,17 +1352,6 @@ export default function TruthOrDare({ currentUser }) {
                                 <div className="text-green-600 font-semibold mb-3 md:mb-4 text-sm md:text-base">
                                   ✅ {selectedPlayer} completed their truth!
                                 </div>
-                                <Card className="p-2 md:p-4 bg-white border border-gray-200 text-left">
-                                  <div className="flex items-center space-x-2 mb-2">
-                                    <Avatar className="w-6 h-6">
-                                      <AvatarFallback className="bg-purple-500 text-white text-xs">
-                                        {selectedPlayer.charAt(0).toUpperCase()}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                    <span className="font-semibold text-gray-900 text-sm">{selectedPlayer}:</span>
-                                  </div>
-                                  <p className="text-gray-900 text-sm md:text-base pl-8">{truthCompletionText}</p>
-                                </Card>
                                 <p className="text-xs md:text-sm text-gray-600 mt-2">
                                   {isHost ? "You can start the next round!" : "Waiting for host to start next round..."}
                                 </p>
@@ -1526,22 +1359,10 @@ export default function TruthOrDare({ currentUser }) {
                             ) : selectedPlayer === localName ? (
                               <>
                                 <p className="text-gray-600 mb-3 md:mb-4 text-sm md:text-base">
-                                  Share your truth completion message:
+                                  Complete your truth by choosing a prompt below!
                                 </p>
-                                <div className="space-y-3 md:space-y-4">
-                                  <Input
-                                    value={truthCompletionText}
-                                    onChange={(e) => setTruthCompletionText(e.target.value)}
-                                    placeholder="Write your truth completion message..."
-                                    className="text-sm md:text-base py-2 md:py-3"
-                                  />
-                                  <Button
-                                    onClick={submitTruthCompletion}
-                                    disabled={!truthCompletionText.trim()}
-                                    className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-2 md:py-3 px-3 md:px-6 text-sm md:text-base"
-                                  >
-                                    Submit Truth Completion
-                                  </Button>
+                                <div className="text-yellow-600 text-sm md:text-base">
+                                  ⚠️ Choose a prompt to complete your truth
                                 </div>
                               </>
                             ) : (
@@ -1561,28 +1382,16 @@ export default function TruthOrDare({ currentUser }) {
                               <TabsTrigger 
                                 value="truth" 
                                 className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-xs md:text-sm"
-                                disabled={truthDareChoice.choice !== "Truth"}
                               >
                                 💬 Truth
                               </TabsTrigger>
                               <TabsTrigger 
                                 value="dare" 
                                 className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-xs md:text-sm"
-                                disabled={truthDareChoice.choice !== "Dare"}
                               >
                                 ⚡ Dare
                               </TabsTrigger>
                             </TabsList>
-                            
-                            {/* Show message if trying to send wrong type */}
-                            {promptType !== truthDareChoice.choice.toLowerCase() && (
-                              <div className="text-center p-2 bg-yellow-50 border border-yellow-200 rounded-lg mb-3">
-                                <p className="text-yellow-800 text-xs md:text-sm">
-                                  {selectedPlayer} chose <strong>{truthDareChoice.choice}</strong>. 
-                                  Please send a {truthDareChoice.choice.toLowerCase()} prompt.
-                                </p>
-                              </div>
-                            )}
                             
                             <TabsContent value={promptType} className="space-y-3 md:space-y-4">
                               <div className="flex gap-2 md:gap-3">
@@ -1595,7 +1404,7 @@ export default function TruthOrDare({ currentUser }) {
                                 />
                                 <Button 
                                   onClick={sendPrompt} 
-                                  disabled={!promptText.trim() || promptType !== truthDareChoice.choice.toLowerCase()}
+                                  disabled={!promptText.trim()}
                                   className={`py-2 md:py-3 px-2 md:px-6 text-sm md:text-base ${
                                     promptType === "truth" 
                                       ? "bg-purple-600 hover:bg-purple-700" 
@@ -1605,11 +1414,6 @@ export default function TruthOrDare({ currentUser }) {
                                   Send
                                 </Button>
                               </div>
-                              {promptType !== truthDareChoice.choice.toLowerCase() && (
-                                <p className="text-red-500 text-xs md:text-sm text-center">
-                                  ❌ You can only send {truthDareChoice.choice.toLowerCase()} prompts for {selectedPlayer}
-                                </p>
-                              )}
                             </TabsContent>
                           </Tabs>
                         </Card>
