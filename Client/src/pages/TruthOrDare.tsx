@@ -210,7 +210,7 @@ export default function TruthOrDare({ currentUser }) {
       }
     });
 
-    sock.on("room-created", (room) => {
+    sock.on("create-room", (room) => {
       console.log("🆕 Room created:", room);
       setRoomId(room.roomId);
       setPlayers(room.players || []);
