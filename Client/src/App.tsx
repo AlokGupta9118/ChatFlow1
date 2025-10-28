@@ -40,7 +40,13 @@ const App = () => (
   element={<SettingPanel currentUser={JSON.parse(localStorage.getItem("user"))} />}
 />
            <Route path="/Games" element={<IndexGames />} />
-          <Route path="/truth-or-dare" element={<TruthOrDare />} />
+          <Route path="/truth-or-dare" element={<TruthOrDare  roomCode="ABC123"
+      player={{
+        name: "Player Name",
+        avatar: "avatar-url",
+        isHost: true
+      }}
+      onLeaveGame={() => console.log('Leave game')}/>} />
           <Route path="/compatibility-quiz" element={<CompatibilityQuiz />} />
           <Route path="/whos-most-likely" element={<WhosMostLikely />} />
           <Route path="user/status" element={<Status/>}/>
