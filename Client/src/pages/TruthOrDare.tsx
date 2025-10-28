@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { io } from "socket.io-client";
 import { Button } from "@/components/ui/button";
@@ -122,7 +122,7 @@ const ChatInput = ({ onSendMessage, disabled, onTyping, chatInput, setChatInput 
   );
 };
 
-// Updated ChatPanel component with game-level styling
+// Updated ChatPanel component with fixed scrolling
 const ChatPanel = React.memo(({ 
   chatMessages, 
   playerName, 
@@ -144,23 +144,37 @@ const ChatPanel = React.memo(({
   };
 
   // Improved scroll to bottom function
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (chatContainerRef.current) {
       const container = chatContainerRef.current;
-      requestAnimationFrame(() => {
+      // Use setTimeout to ensure DOM is updated
+      setTimeout(() => {
         container.scrollTop = container.scrollHeight;
-      });
+      }, 100);
     }
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [chatMessages]);
+  }, [chatMessages, scrollToBottom]);
+
+  // Auto-scroll when new messages arrive
+  useEffect(() => {
+    const observer = new MutationObserver(scrollToBottom);
+    if (chatContainerRef.current) {
+      observer.observe(chatContainerRef.current, {
+        childList: true,
+        subtree: true
+      });
+    }
+    
+    return () => observer.disconnect();
+  }, [scrollToBottom]);
 
   return (
-    <Card className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm shadow-2xl rounded-xl border-2 border-purple-500/30">
+    <Card className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm shadow-2xl rounded-xl border-2 border-purple-500/30 chat-container-fix">
       {/* Chat Header */}
-      <div className="p-4 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-xl">
+      <div className="p-4 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-xl flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="relative">
@@ -210,10 +224,10 @@ const ChatPanel = React.memo(({
         )}
       </div>
 
-      {/* Chat Messages */}
+      {/* Chat Messages - FIXED SCROLLING */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scroll-smooth bg-gradient-to-b from-gray-800/50 to-gray-900/50 custom-scrollbar"
+        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 chat-messages-fix custom-scrollbar"
         style={{ 
           WebkitOverflowScrolling: 'touch',
           overflowY: 'auto'
@@ -274,8 +288,8 @@ const ChatPanel = React.memo(({
         )}
       </div>
 
-      {/* Chat Input */}
-      <div className="border-t border-purple-500/30 bg-gradient-to-r from-gray-800 to-gray-900 rounded-b-xl">
+      {/* Chat Input - FIXED POSITIONING */}
+      <div className="border-t border-purple-500/30 bg-gradient-to-r from-gray-800 to-gray-900 rounded-b-xl flex-shrink-0 safe-area-inset-bottom">
         <ChatInput 
           onSendMessage={onSendMessage}
           disabled={!isConnected}
@@ -356,9 +370,47 @@ export default function TruthOrDare({ currentUser }) {
 
   promptsRef.current = prompts;
 
-  // Add CSS for custom scrollbar
+  // Add CSS for mobile scrolling and chat container fixes
   useEffect(() => {
     const styles = `
+      /* Fix mobile scrolling and viewport height */
+      .mobile-viewport-fix {
+        height: 100vh;
+        height: calc(var(--vh, 1vh) * 100);
+        overflow: hidden;
+      }
+      
+      .mobile-scroll-container {
+        height: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+      }
+      
+      .chat-container-fix {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+      }
+      
+      .chat-messages-fix {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      .safe-area-padding {
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      
+      .safe-area-inset-bottom {
+        margin-bottom: env(safe-area-inset-bottom);
+      }
+
       .custom-scrollbar {
         scrollbar-width: thin;
         scrollbar-color: rgba(168, 85, 247, 0.5) transparent;
@@ -381,18 +433,14 @@ export default function TruthOrDare({ currentUser }) {
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
         background: linear-gradient(to bottom, #7c3aed, #2563eb);
       }
-
-      .safe-area-padding {
-        padding-left: env(safe-area-inset-left);
-        padding-right: env(safe-area-inset-right);
-        padding-bottom: env(safe-area-inset-bottom);
-      }
       
-      .safe-area-inset-bottom {
-        margin-bottom: env(safe-area-inset-bottom);
-      }
-      
-      @media (max-width: 1024px) {
+      /* Fix for mobile address bar */
+      @media (max-width: 768px) {
+        .mobile-viewport-fix {
+          height: 100vh;
+          height: -webkit-fill-available;
+        }
+        
         .safe-area-padding {
           padding-left: max(1rem, env(safe-area-inset-left));
           padding-right: max(1rem, env(safe-area-inset-right));
@@ -404,8 +452,20 @@ export default function TruthOrDare({ currentUser }) {
     styleSheet.innerText = styles;
     document.head.appendChild(styleSheet);
     
+    // Update viewport height for mobile
+    const updateViewportHeight = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    };
+    
+    updateViewportHeight();
+    window.addEventListener('resize', updateViewportHeight);
+    window.addEventListener('orientationchange', updateViewportHeight);
+    
     return () => {
       document.head.removeChild(styleSheet);
+      window.removeEventListener('resize', updateViewportHeight);
+      window.removeEventListener('orientationchange', updateViewportHeight);
     };
   }, []);
 
@@ -910,7 +970,6 @@ export default function TruthOrDare({ currentUser }) {
     if (!socket || !roomId.trim() || !localName.trim()) return addToast("Please enter name and room ID", 3000, "error");
     socket.emit("join-room", { roomId, player: { name: localName } });
   };
-
   const leaveRoom = () => {
     // Clear all game-related localStorage
     localStorage.removeItem("roomId");
