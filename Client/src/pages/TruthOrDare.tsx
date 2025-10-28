@@ -1,6 +1,6 @@
 // components/games/TruthOrDareGame.jsx
 import React, { useState } from 'react';
-import { useGameSocket } from '../../hooks/useGameSocket';
+import {useGamSocket} from "../hooks/useGameSocket"
 
 const TruthOrDareGame = ({ roomCode, playerName }) => {
   const {
