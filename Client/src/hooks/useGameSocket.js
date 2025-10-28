@@ -11,7 +11,7 @@ export const useGameSocket = () => {
   const [currentRoom, setCurrentRoom] = useState(null);
 
   useEffect(() => {
-    socketRef.current = io(process.env.REACT_APP_SOCKET_URL, {
+    socketRef.current = io(import.meta.env.VITE_API_URL, {
       transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
