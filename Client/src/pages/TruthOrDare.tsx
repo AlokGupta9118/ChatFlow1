@@ -259,7 +259,7 @@ const TruthOrDareGame = ({ roomCode, player, onLeaveGame }) => {
   };
 
   useEffect(() => {
-    const newSocket = io(process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001');
+    const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:3001');
     setSocket(newSocket);
 
     // Game event listeners - NOW ALL HANDLERS ARE DEFINED
