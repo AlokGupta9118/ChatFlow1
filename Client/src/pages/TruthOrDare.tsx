@@ -341,7 +341,7 @@ export default function TruthOrDare({ currentUser }) {
         }));
       }
       
-      addToast(`${player} completed their ${prompt.type}! +25 points`, 3000, "success");
+      addToast(`${player} completed their ${prompt.type}! +15 points`, 3000, "success");
       checkAchievements(player);
     });
 
@@ -628,8 +628,8 @@ export default function TruthOrDare({ currentUser }) {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      addToast("Image size should be less than 2MB", 3000, "error");
+    if (file.size > 25 * 1024 * 1024) {
+      addToast("Image size should be less than 25MB", 3000, "error");
       return;
     }
 
@@ -1131,7 +1131,7 @@ export default function TruthOrDare({ currentUser }) {
                     )}
 
                     {/* FIXED: Next Round button shows when appropriate */}
-                    {isHost && selectedPlayer && (truthDareChoice?.choice === "Truth" || proofUploaded) && (
+                    {isHost && selectedPlayer && (truthDareChoice?.choice === "Truth" || "Dare") && (
                       <Button 
                         onClick={resetRound} 
                         disabled={nextRoundLoading}
