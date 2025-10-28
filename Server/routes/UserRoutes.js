@@ -45,7 +45,7 @@ router.delete("/:id", protect, deleteUser);
 router.post("/profile-image", protect, upload.single("image"), updateProfile);
 
 
-router.get("/profile", protect, getProfile);
+router.get("/profile", getProfile);
 router.put("/profile",protect, updateProfile);
 
 

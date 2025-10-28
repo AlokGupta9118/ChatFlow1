@@ -76,7 +76,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     setProfileLoading(true);
     try {
       const res = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/profile/${userId}`,
+        `${import.meta.env.VITE_API_URL}/api/user/profile`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setViewedProfile(res.data.user);
