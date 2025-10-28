@@ -541,7 +541,7 @@ const WhosMostLikely = () => {
     </div>
   );
 
-  // Fixed Mobile Chat Toggle Button - Won't hide send button
+  // Fixed Mobile Chat Toggle Button
   const MobileChatToggle = () => (
     <Button
       onClick={() => setShowChat(!showChat)}
@@ -559,7 +559,7 @@ const WhosMostLikely = () => {
         <ConnectionStatus />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-2xl mx-auto relative z-10 h-full flex flex-col justify-center overflow-y-auto">
+        <div ref={mainContainerRef} className="max-w-2xl mx-auto relative z-10 h-full flex flex-col justify-center overflow-y-auto safe-area-padding">
           <Link to="/Games" className="mb-4">
             <Button variant="ghost" className="text-white hover:bg-white/20 backdrop-blur-sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -582,7 +582,7 @@ const WhosMostLikely = () => {
                   placeholder="Enter your name"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
-                  className="bg-white/10 border-white/20 text-white placeholder-white/50"
+                  className="bg-white/10 border-white/20 text-white placeholder-white/50 h-12 text-base"
                 />
               </div>
 
@@ -595,7 +595,7 @@ const WhosMostLikely = () => {
                   placeholder="Enter room code to join"
                   value={roomId}
                   onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                  className="bg-white/10 border-white/20 text-white placeholder-white/50"
+                  className="bg-white/10 border-white/20 text-white placeholder-white/50 h-12 text-base"
                 />
               </div>
             </div>
@@ -604,7 +604,7 @@ const WhosMostLikely = () => {
               <Button
                 onClick={createRoom}
                 disabled={!playerName.trim()}
-                className="w-full py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg"
+                className="w-full py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg h-14"
               >
                 <Crown className="w-4 h-4 mr-2" />
                 Create New Room
@@ -613,7 +613,7 @@ const WhosMostLikely = () => {
               <Button
                 onClick={joinRoom}
                 disabled={!playerName.trim() || !roomId.trim()}
-                className="w-full py-4 text-base bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg"
+                className="w-full py-4 text-base bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg h-14"
               >
                 <Users className="w-4 h-4 mr-2" />
                 Join Existing Room
@@ -650,17 +650,17 @@ const WhosMostLikely = () => {
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col safe-area-padding">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 px-2 pt-4">
             <Button
               variant="ghost"
               onClick={() => window.location.reload()}
-              className="text-white hover:bg-white/20 backdrop-blur-sm self-start"
+              className="text-white hover:bg-white/20 backdrop-blur-sm self-start h-10"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Leave Room
             </Button>
-            <div className="text-white font-medium bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm text-center">
+            <div className="text-white font-medium bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm text-center text-sm">
               Room: {roomId}
             </div>
           </div>
@@ -686,7 +686,7 @@ const WhosMostLikely = () => {
                     <h3 className="text-lg font-bold text-white mb-2">Room Code: {roomId}</h3>
                     <Button 
                       onClick={() => navigator.clipboard?.writeText(roomId)}
-                      className="bg-white/20 hover:bg-white/30 border-white/30 text-sm"
+                      className="bg-white/20 hover:bg-white/30 border-white/30 text-sm h-9"
                       size="sm"
                     >
                       Copy Code
@@ -713,7 +713,7 @@ const WhosMostLikely = () => {
                   <Button 
                     onClick={startGame} 
                     disabled={players.length < 2}
-                    className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-2xl"
+                    className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-2xl h-14"
                   >
                     <Gamepad2 className="w-4 h-4 mr-2" />
                     Start Game ({players.length} players ready)
@@ -756,7 +756,7 @@ const WhosMostLikely = () => {
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col safe-area-padding">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 px-2 pb-6">
             {/* Main Content */}
             <div className="lg:col-span-2 flex flex-col min-h-0">
@@ -794,14 +794,14 @@ const WhosMostLikely = () => {
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Button 
                     onClick={restartGame}
-                    className="flex-1 py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                    className="flex-1 py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-14"
                   >
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Play Again
                   </Button>
                   <Button 
                     onClick={() => window.location.reload()}
-                    className="flex-1 py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                    className="flex-1 py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white h-14"
                   >
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Main Menu
@@ -837,7 +837,7 @@ const WhosMostLikely = () => {
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col safe-area-padding">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 px-2 pb-6">
             {/* Main Content */}
             <div className="lg:col-span-2 flex flex-col min-h-0">
@@ -890,7 +890,7 @@ const WhosMostLikely = () => {
                 {isHost && (
                   <Button
                     onClick={nextRound}
-                    className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                    className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-14"
                   >
                     <Sparkles className="w-4 h-4 mr-2" />
                     {currentRound < totalRounds ? "Next Round" : "See Final Results"}
@@ -934,7 +934,7 @@ const WhosMostLikely = () => {
       <MobileChatToggle />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
       
-      <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col">
+      <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col safe-area-padding">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 px-2 pb-6">
           {/* Main Game Content */}
           <div className="lg:col-span-2 flex flex-col min-h-0">
@@ -966,7 +966,7 @@ const WhosMostLikely = () => {
                 <Button
                   variant="outline"
                   onClick={() => setSoundEnabled(!soundEnabled)}
-                  className="border-white/20 text-white hover:bg-white/10 p-2"
+                  className="border-white/20 text-white hover:bg-white/10 p-2 h-9"
                   size="sm"
                 >
                   {soundEnabled ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
@@ -1042,7 +1042,7 @@ const WhosMostLikely = () => {
                 <Button
                   onClick={submitVote}
                   disabled={!selectedPlayer}
-                  className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg"
+                  className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg h-14"
                 >
                   <Target className="w-4 h-4 mr-2" />
                   Submit Your Vote
@@ -1077,6 +1077,44 @@ const WhosMostLikely = () => {
       </div>
 
       <audio ref={audioRef} preload="auto" />
+      
+      {/* Add CSS for safe areas */}
+      <style jsx>{`
+        .safe-area-padding {
+          padding-left: env(safe-area-inset-left);
+          padding-right: env(safe-area-inset-right);
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+        
+        .safe-area-inset-bottom {
+          margin-bottom: env(safe-area-inset-bottom);
+        }
+        
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: rgba(255, 255, 255, 0.3);
+          border-radius: 20px;
+        }
+        
+        @media (max-width: 1024px) {
+          .safe-area-padding {
+            padding-left: max(1rem, env(safe-area-inset-left));
+            padding-right: max(1rem, env(safe-area-inset-right));
+          }
+        }
+      `}</style>
     </div>
   );
 };
