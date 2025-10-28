@@ -1639,11 +1639,7 @@ export default function AdvancedCompatibilityGame() {
                 placeholder="Enter room code to join"
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
-                    joinRoom();
-                  }
-                }}
+               
                 className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
                 autoComplete="off"
               />
