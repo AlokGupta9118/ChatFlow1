@@ -13,7 +13,7 @@ import AddFriends from "./pages/Friends";
 import ChatPage from "@/pages/ChatPage";
 import SettingPanel from "./pages/Settting";
 import IndexGames from "./pages/IndexGame";
-import TruthOrDare from "./components/games/TruthOrDare.jsx"
+import TruthOrDare from "./pages/TruthOrDare";
 import CompatibilityQuiz from "./components/games/CompatibilityQuiz.jsx"
 import WhosMostLikely from "./components/games/WhoMostLikely.jsx"
 import Index from "./pages/Index";
