@@ -200,14 +200,7 @@ export default function TruthOrDare({ currentUser }) {
       console.log("✅ Socket connected:", sock.id);
       addToast("Connected to game server", 2000);
       
-      // 🔥 FIXED: Enhanced reconnection logic
-      if (roomId && localName) {
-        console.log("🔄 Attempting to rejoin room:", roomId, "as", localName);
-        sock.emit("rejoin-room", { 
-          roomId, 
-          name: localName
-        });
-      }
+  
     });
 
     sock.on("create-room", (room) => {
