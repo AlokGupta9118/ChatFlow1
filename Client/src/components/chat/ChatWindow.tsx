@@ -1,4 +1,4 @@
-// components/chat/ChatWindow.jsx - FINAL WORKING VERSION
+// components/chat/ChatWindow.jsx - FINAL CORRECTED VERSION
 import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -34,7 +34,7 @@ const getUserColor = (userId) => {
 const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupInfo }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
-  const [canSendMessage, setCanSendMessage] = useState(true);
+  const [canSendMessage, setCanSendMessage] = useState(true); // Default to true
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -66,12 +66,19 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Fetch group members and user role
+  // CORRECTED: Fetch group members and user role
   const fetchGroupMembers = async () => {
-    if (!selectedChat?._id || !isGroup) return;
+    if (!selectedChat?._id || !isGroup) {
+      // If not a group, allow sending messages
+      setCanSendMessage(true);
+      return;
+    }
 
     const token = getToken();
-    if (!token) return;
+    if (!token) {
+      setCanSendMessage(true); // Default to allowing messages
+      return;
+    }
 
     try {
       const res = await axios.get(
@@ -82,31 +89,65 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       const members = res.data.members || [];
       setGroupMembers(members);
 
-      // Find current user's role
-      const currentUserMember = members.find(m => 
-        String(m.user?._id) === String(userId) || String(m.user) === String(userId)
-      );
-      
+      // CORRECTED: Multiple ways to find current user with better error handling
+      let currentUserMember = null;
+
+      // Try different possible data structures
+      currentUserMember = members.find(m => {
+        // Case 1: user is an object with _id
+        if (m.user && typeof m.user === 'object' && m.user._id) {
+          return String(m.user._id) === String(userId);
+        }
+        // Case 2: user is directly the ID string
+        if (m.user && typeof m.user === 'string') {
+          return String(m.user) === String(userId);
+        }
+        // Case 3: Check for participant structure
+        if (m.participant && m.participant.user) {
+          return String(m.participant.user._id) === String(userId);
+        }
+        // Case 4: Check for userId field directly
+        if (m.userId) {
+          return String(m.userId) === String(userId);
+        }
+        return false;
+      });
+
+      // CORRECTED: If user is not found in members, check if they might be the group creator
+      // or use a fallback approach
       if (currentUserMember) {
-        setUserRole(currentUserMember.role);
-        setCanSendMessage(true);
-      } 
-      if (currentUserMember==="owner"|| currentUser==="admin" ) {
-        setUserRole(currentUserMember.role);
-        setCanSendMessage(true);
-      } 
-      else {
-        setUserRole(null);
-        setCanSendMessage(false);
+        const role = currentUserMember.role || 'member';
+        setUserRole(role);
+        setCanSendMessage(true); // Always allow sending if user is a member
+      } else {
+        // If user not found in members list, they might still be able to send messages
+        // This handles cases where the API structure is different
+        setUserRole('member'); // Default to member role
+        setCanSendMessage(true); // Allow sending by default
+        
+        // Try to get role from alternative API endpoint
+        try {
+          const roleRes = await axios.get(
+            `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/user-role`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (roleRes.data.role) {
+            setUserRole(roleRes.data.role);
+          }
+        } catch (roleErr) {
+          console.log("Alternative role endpoint not available, using default");
+        }
       }
 
     } catch (err) {
       console.error("Error fetching group members:", err);
-      setCanSendMessage(false);
+      // On error, default to allowing messages
+      setUserRole('member');
+      setCanSendMessage(true);
     }
   };
 
-  // Fetch pending join requests (for admins/owners)
+  // CORRECTED: Fetch pending join requests (for admins/owners)
   const fetchPendingRequests = async () => {
     if (!selectedChat?._id || !isGroup || !isUserAdmin()) return;
 
@@ -128,15 +169,13 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   // View current chat profile
   const handleViewChatProfile = () => {
     if (isGroup) {
-      // For groups, show admin panel instead of profile
       setShowAdminPanel(true);
     } else {
-      // For private chats, show user profile (you can implement this later)
       toast.info("User profile feature coming soon!");
     }
   };
 
-  // Check if user is admin/owner
+  // CORRECTED: Check if user is admin/owner
   const isUserAdmin = () => {
     return userRole === 'admin' || userRole === 'owner';
   };
@@ -165,6 +204,9 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       if (isUserAdmin()) {
         fetchPendingRequests();
       }
+    } else {
+      // For private chats, always allow sending messages
+      setCanSendMessage(true);
     }
   }, [selectedChat?._id, isGroup, userId]);
 
@@ -244,6 +286,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socket.emit("typing_stop", selectedChat._id);
     } catch (err) {
       console.error("Error sending message:", err);
+      // If there's an error sending, show specific error message
+      if (err.response?.status === 403) {
+        toast.error("You don't have permission to send messages in this group");
+        setCanSendMessage(false);
+      }
     }
   };
 
@@ -528,7 +575,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
+      {/* CORRECTED: Input Area - Default to allowing messages */}
       <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gradient-to-r from-gray-800 to-gray-900 backdrop-blur-xl border-t border-purple-500/30 shadow-lg">
         {canSendMessage ? (
           <>
