@@ -1,14 +1,15 @@
-// components/chat/ChatWindow.jsx - UPDATED WITH ADMIN/MEMBER DIFFERENTIATION
+// components/chat/ChatWindow.jsx - FIXED ADMIN CONTROLS
 import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Paperclip, Send, Info, X, Smile, Mic, Image, User, Eye, MoreVertical, Settings, Users, Crown, Shield } from "lucide-react";
+import { Paperclip, Send, Info, X, Smile, Mic, Image, User, Eye, MoreVertical, Settings, Users, Crown, Shield, UserCheck } from "lucide-react";
 import { getToken } from "@/utils/getToken";
 import { io } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 import GroupChatAdminPanel from "@/components/chat/GroupChatAdminPanel";
+import { toast } from "sonner"; // Make sure you have toast notifications set up
 
 const socket = io(import.meta.env.VITE_API_URL);
 
@@ -43,6 +44,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [userRole, setUserRole] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
   const [showMenu, setShowMenu] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState([]); // Added missing state
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const menuRef = useRef(null);
@@ -122,6 +124,25 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
+  // Fetch pending join requests (for admins/owners)
+  const fetchPendingRequests = async () => {
+    if (!selectedChat?._id || !isGroup || !isUserAdmin()) return;
+
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const res = await axios.get(
+        `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/pending-requests`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setPendingRequests(res.data.requests || []);
+    } catch (err) {
+      console.error("Error fetching pending requests:", err);
+      setPendingRequests([]);
+    }
+  };
+
   // View profile handler
   const handleViewProfile = (userData) => {
     if (!userData?._id) return;
@@ -171,8 +192,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   useEffect(() => {
     if (isGroup) {
       fetchGroupMembers();
+      if (isUserAdmin()) {
+        fetchPendingRequests();
+      }
     }
-  }, [selectedChat?._id, isGroup, userId]);
+  }, [selectedChat?._id, isGroup, userId, userRole]);
 
   useEffect(() => {
     if (!selectedChat?._id) return;
@@ -418,7 +442,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                         {/* Group Settings */}
                         <button
                           onClick={() => {
-                            // Add your group settings action here
                             setShowMenu(false);
                             toast.success("Group settings feature coming soon!");
                           }}
@@ -459,11 +482,13 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         </div>
       </div>
 
-      {/* Messages Area - Game-Level Styling */}
+      {/* Rest of your ChatWindow component remains the same... */}
+      {/* Messages Area */}
       <div 
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-gray-800/50 to-gray-900/50 min-h-0 custom-scrollbar"
       >
+        {/* Your existing messages rendering code... */}
         <AnimatePresence>
           {messages.map((msg, idx) => {
             const senderId = msg.sender?._id || msg.senderId;
@@ -534,7 +559,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           })}
         </AnimatePresence>
         
-        {/* Enhanced Typing Indicator */}
+        {/* Typing Indicator */}
         {isTyping && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
@@ -554,7 +579,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area - Enhanced Styling */}
+      {/* Input Area */}
       <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gradient-to-r from-gray-800 to-gray-900 backdrop-blur-xl border-t border-purple-500/30 shadow-lg">
         {canSendMessage ? (
           <>
@@ -622,140 +647,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         )}
       </div>
 
-      {/* Add custom scrollbar styles */}
-      <style jsx>{`
-        .custom-scrollbar {
-          scrollbar-width: thin;
-          scrollbar-color: rgba(168, 85, 247, 0.5) transparent;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-          border-radius: 10px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: linear-gradient(to bottom, #8b5cf6, #3b82f6);
-          border-radius: 10px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(to bottom, #7c3aed, #2563eb);
-        }
-      `}</style>
-
-      {/* Profile View Modal */}
-      <AnimatePresence>
-        {showProfileModal && viewedProfile && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-            onClick={() => setShowProfileModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-gradient-to-br from-gray-900 to-purple-900 w-full max-w-md rounded-2xl shadow-2xl border border-purple-500/30 overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between p-6 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-sm">
-                <h3 className="text-xl font-bold text-white">
-                  User Profile
-                </h3>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => setShowProfileModal(false)}
-                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
-                >
-                  <X className="w-5 h-5 text-white" />
-                </motion.button>
-              </div>
-              
-              <div className="p-6 space-y-6">
-                {/* Profile Header */}
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <Avatar className="w-24 h-24 border-4 border-purple-500/30">
-                    <AvatarImage 
-                      src={viewedProfile.profilePicture || "/default-avatar.png"} 
-                      onError={(e) => e.target.src = "/default-avatar.png"}
-                    />
-                    <AvatarFallback className={`text-2xl bg-gradient-to-r ${getUserColor(viewedProfile._id)} text-white`}>
-                      {viewedProfile.name?.[0]?.toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  
-                  <div>
-                    <h2 className="text-2xl font-bold text-white">
-                      {viewedProfile.name}
-                    </h2>
-                    <p className="text-purple-200">
-                      @{viewedProfile.name?.toLowerCase().replace(/\s+/g, '')}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Profile Details */}
-                <div className="space-y-4">
-                  {viewedProfile.bio && (
-                    <div>
-                      <h4 className="font-semibold text-purple-300 mb-1">Bio</h4>
-                      <p className="text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700">
-                        {viewedProfile.bio}
-                      </p>
-                    </div>
-                  )}
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="font-semibold text-purple-300 mb-1">Status</h4>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${viewedProfile.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                        <span className="text-sm text-gray-300 capitalize">
-                          {viewedProfile.status || 'offline'}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <h4 className="font-semibold text-purple-300 mb-1">Last Seen</h4>
-                      <p className="text-sm text-gray-300">
-                        {viewedProfile.lastSeen ? new Date(viewedProfile.lastSeen).toLocaleDateString() : 'Unknown'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {viewedProfile.email && (
-                    <div>
-                      <h4 className="font-semibold text-purple-300 mb-1">Email</h4>
-                      <p className="text-gray-300">{viewedProfile.email}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 pt-4">
-                  <Button className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white">
-                    Send Message
-                  </Button>
-                  <Button variant="outline" className="flex-1 border-purple-500 text-purple-300 hover:bg-purple-500/20">
-                    Add Friend
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Fixed Admin Panel Modal */}
+      {/* Admin Panel Modal */}
       <AnimatePresence>
         {showAdminPanel && (
           <motion.div
@@ -796,6 +688,32 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Add custom scrollbar styles */}
+      <style jsx>{`
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(168, 85, 247, 0.5) transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+          border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(to bottom, #8b5cf6, #3b82f6);
+          border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(to bottom, #7c3aed, #2563eb);
+        }
+      `}</style>
     </div>
   );
 };
