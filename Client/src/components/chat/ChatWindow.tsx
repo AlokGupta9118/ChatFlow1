@@ -1,4 +1,4 @@
-// components/chat/ChatWindow.jsx - FINAL CORRECTED VERSION
+// components/chat/ChatWindow.jsx - NO RESTRICTIONS VERSION
 import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -34,7 +34,6 @@ const getUserColor = (userId) => {
 const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupInfo }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
-  const [canSendMessage, setCanSendMessage] = useState(true); // Default to true
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -66,19 +65,12 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // CORRECTED: Fetch group members and user role
+  // SIMPLIFIED: Fetch group members and user role - NO RESTRICTIONS
   const fetchGroupMembers = async () => {
-    if (!selectedChat?._id || !isGroup) {
-      // If not a group, allow sending messages
-      setCanSendMessage(true);
-      return;
-    }
+    if (!selectedChat?._id || !isGroup) return;
 
     const token = getToken();
-    if (!token) {
-      setCanSendMessage(true); // Default to allowing messages
-      return;
-    }
+    if (!token) return;
 
     try {
       const res = await axios.get(
@@ -89,65 +81,30 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       const members = res.data.members || [];
       setGroupMembers(members);
 
-      // CORRECTED: Multiple ways to find current user with better error handling
-      let currentUserMember = null;
-
-      // Try different possible data structures
-      currentUserMember = members.find(m => {
-        // Case 1: user is an object with _id
+      // Find current user role for admin panel display only
+      let currentUserMember = members.find(m => {
         if (m.user && typeof m.user === 'object' && m.user._id) {
           return String(m.user._id) === String(userId);
         }
-        // Case 2: user is directly the ID string
         if (m.user && typeof m.user === 'string') {
           return String(m.user) === String(userId);
-        }
-        // Case 3: Check for participant structure
-        if (m.participant && m.participant.user) {
-          return String(m.participant.user._id) === String(userId);
-        }
-        // Case 4: Check for userId field directly
-        if (m.userId) {
-          return String(m.userId) === String(userId);
         }
         return false;
       });
 
-      // CORRECTED: If user is not found in members, check if they might be the group creator
-      // or use a fallback approach
       if (currentUserMember) {
-        const role = currentUserMember.role || 'member';
-        setUserRole(role);
-        setCanSendMessage(true); // Always allow sending if user is a member
+        setUserRole(currentUserMember.role || 'member');
       } else {
-        // If user not found in members list, they might still be able to send messages
-        // This handles cases where the API structure is different
-        setUserRole('member'); // Default to member role
-        setCanSendMessage(true); // Allow sending by default
-        
-        // Try to get role from alternative API endpoint
-        try {
-          const roleRes = await axios.get(
-            `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/user-role`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          if (roleRes.data.role) {
-            setUserRole(roleRes.data.role);
-          }
-        } catch (roleErr) {
-          console.log("Alternative role endpoint not available, using default");
-        }
+        setUserRole('member'); // Default role
       }
 
     } catch (err) {
       console.error("Error fetching group members:", err);
-      // On error, default to allowing messages
-      setUserRole('member');
-      setCanSendMessage(true);
+      setUserRole('member'); // Default role on error
     }
   };
 
-  // CORRECTED: Fetch pending join requests (for admins/owners)
+  // Fetch pending join requests (for admins/owners display only)
   const fetchPendingRequests = async () => {
     if (!selectedChat?._id || !isGroup || !isUserAdmin()) return;
 
@@ -175,7 +132,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // CORRECTED: Check if user is admin/owner
+  // Check if user is admin/owner (for UI display only)
   const isUserAdmin = () => {
     return userRole === 'admin' || userRole === 'owner';
   };
@@ -204,9 +161,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       if (isUserAdmin()) {
         fetchPendingRequests();
       }
-    } else {
-      // For private chats, always allow sending messages
-      setCanSendMessage(true);
     }
   }, [selectedChat?._id, isGroup, userId]);
 
@@ -261,7 +215,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !canSendMessage) return;
+    if (!newMessage.trim()) return; // Only check for empty message
 
     const token = getToken();
     if (!token) return;
@@ -286,10 +240,9 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socket.emit("typing_stop", selectedChat._id);
     } catch (err) {
       console.error("Error sending message:", err);
-      // If there's an error sending, show specific error message
-      if (err.response?.status === 403) {
-        toast.error("You don't have permission to send messages in this group");
-        setCanSendMessage(false);
+      // Only show error if it's not a permission issue
+      if (err.response?.status !== 403) {
+        toast.error("Failed to send message");
       }
     }
   };
@@ -575,72 +528,61 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         <div ref={messagesEndRef} />
       </div>
 
-      {/* CORRECTED: Input Area - Default to allowing messages */}
+      {/* SIMPLIFIED: Input Area - ALWAYS ALLOW MESSAGES */}
       <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gradient-to-r from-gray-800 to-gray-900 backdrop-blur-xl border-t border-purple-500/30 shadow-lg">
-        {canSendMessage ? (
-          <>
-            <div className="flex gap-1">
-              <motion.button 
-                whileHover={{ scale: 1.1 }} 
-                whileTap={{ scale: 0.9 }} 
-                className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
-              >
-                <Paperclip className="w-5 h-5" />
-              </motion.button>
-              <motion.button 
-                whileHover={{ scale: 1.1 }} 
-                whileTap={{ scale: 0.9 }} 
-                className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
-              >
-                <Image className="w-5 h-5" />
-              </motion.button>
-              <motion.button 
-                whileHover={{ scale: 1.1 }} 
-                whileTap={{ scale: 0.9 }} 
-                className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
-              >
-                <Smile className="w-5 h-5" />
-              </motion.button>
-            </div>
-            
-            <div className="flex-1 relative">
-              <Input
-                value={newMessage}
-                onChange={(e) => {
-                  setNewMessage(e.target.value);
-                  handleTyping();
-                }}
-                onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                placeholder="Type your message..."
-                className="w-full pl-4 pr-12 py-3 bg-gray-700/50 border-2 border-purple-500/30 text-white placeholder-gray-400 rounded-2xl focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 backdrop-blur-sm transition-all"
-              />
-              <motion.button 
-                whileHover={{ scale: 1.05 }} 
-                whileTap={{ scale: 0.95 }}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-purple-400 transition-colors"
-              >
-                <Mic className="w-4 h-4" />
-              </motion.button>
-            </div>
-            
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleSendMessage}
-              disabled={!newMessage.trim()}
-              className="p-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg shadow-purple-500/25 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border-2 border-purple-400/30"
-            >
-              <Send className="w-5 h-5" />
-            </motion.button>
-          </>
-        ) : (
-          <div className="w-full flex items-center justify-center text-gray-400 italic text-sm bg-white/5 backdrop-blur-sm py-3 rounded-xl border border-white/10">
-            <div className="flex items-center gap-2">
-              <Info className="w-4 h-4" />
-              You are not allowed to send messages in this group
-            </div>
-          </div>
-        )}
+        <div className="flex gap-1">
+          <motion.button 
+            whileHover={{ scale: 1.1 }} 
+            whileTap={{ scale: 0.9 }} 
+            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
+          >
+            <Paperclip className="w-5 h-5" />
+          </motion.button>
+          <motion.button 
+            whileHover={{ scale: 1.1 }} 
+            whileTap={{ scale: 0.9 }} 
+            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
+          >
+            <Image className="w-5 h-5" />
+          </motion.button>
+          <motion.button 
+            whileHover={{ scale: 1.1 }} 
+            whileTap={{ scale: 0.9 }} 
+            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
+          >
+            <Smile className="w-5 h-5" />
+          </motion.button>
+        </div>
+        
+        <div className="flex-1 relative">
+          <Input
+            value={newMessage}
+            onChange={(e) => {
+              setNewMessage(e.target.value);
+              handleTyping();
+            }}
+            onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+            placeholder="Type your message..."
+            className="w-full pl-4 pr-12 py-3 bg-gray-700/50 border-2 border-purple-500/30 text-white placeholder-gray-400 rounded-2xl focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 backdrop-blur-sm transition-all"
+          />
+          <motion.button 
+            whileHover={{ scale: 1.05 }} 
+            whileTap={{ scale: 0.95 }}
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-purple-400 transition-colors"
+          >
+            <Mic className="w-4 h-4" />
+          </motion.button>
+        </div>
+        
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleSendMessage}
+          disabled={!newMessage.trim()}
+          className="p-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg shadow-purple-500/25 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border-2 border-purple-400/30"
+        >
+          <Send className="w-5 h-5" />
+        </motion.button>
       </div>
 
       {/* Admin Panel Modal */}
