@@ -1,18 +1,36 @@
+// components/chat/ChatWindow.jsx - UPDATED WITH GAME-LEVEL STYLING
 import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Paperclip, Send, Info, X, Smile, Mic, Image, User, Eye, MoreVertical, Settings } from "lucide-react";
+import { Paperclip, Send, Info, X, Smile, Mic, Image, User, Eye, MoreVertical, Settings, Users } from "lucide-react";
 import { getToken } from "@/utils/getToken";
 import { io } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 import GroupChatAdminPanel from "@/components/chat/GroupChatAdminPanel";
 
 const socket = io(import.meta.env.VITE_API_URL);
-const nameColors = ["#F87171", "#60A5FA", "#34D399", "#FBBF24", "#A78BFA", "#F472B6"];
 
-const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
+// Color system for user avatars and names
+const userColors = [
+  'from-purple-500 to-pink-500',
+  'from-blue-500 to-cyan-500',
+  'from-green-500 to-emerald-500',
+  'from-orange-500 to-red-500',
+  'from-indigo-500 to-purple-500',
+  'from-teal-500 to-blue-500',
+  'from-yellow-500 to-orange-500',
+  'from-pink-500 to-rose-500'
+];
+
+const getUserColor = (userId) => {
+  if (!userId) return userColors[0];
+  const index = userId.toString().charCodeAt(0) % userColors.length;
+  return userColors[index];
+};
+
+const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupInfo }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [typing, setTyping] = useState(false);
@@ -113,8 +131,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
   // View current chat profile
   const handleViewChatProfile = () => {
     if (isGroup) {
+      // For groups, show admin panel instead of profile
       setShowAdminPanel(true);
     } else {
+      // For private chats, show user profile
       handleViewProfile(selectedChat);
     }
   };
@@ -210,7 +230,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
   };
 
   const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(timestamp).toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
   };
 
   if (!selectedChat)
@@ -233,138 +256,83 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
     );
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-indigo-50/30 via-white to-purple-50/30 dark:from-gray-900 dark:via-gray-800 dark:to-purple-900/20">
+    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm">
       {/* Header - Fixed height */}
-      <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 shadow-sm z-10">
+      <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-xl border-b border-purple-500/30 shadow-lg z-10">
         <div className="flex items-center gap-4">
           <div className="relative group">
             <Avatar 
-              className="w-14 h-14 shadow-lg border-2 border-white dark:border-gray-700 cursor-pointer hover:scale-105 transition-transform"
+              className="w-14 h-14 shadow-lg border-2 border-white/30 cursor-pointer hover:scale-105 transition-transform"
               onClick={handleViewChatProfile}
             >
               <AvatarImage src={selectedChat.profilePicture || selectedChat.avatar || "/default-avatar.png"} />
-              <AvatarFallback className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold">
+              <AvatarFallback className={`bg-gradient-to-r ${getUserColor(selectedChat._id)} text-white font-semibold`}>
                 {selectedChat.name?.[0]?.toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
             <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
               <Eye className="w-4 h-4 text-white" />
             </div>
           </div>
           <div className="flex flex-col">
             <h3 
-              className="text-lg font-bold text-gray-900 dark:text-gray-100 cursor-pointer hover:text-indigo-600 transition-colors"
+              className="text-lg font-bold text-white cursor-pointer hover:text-purple-200 transition-colors"
               onClick={handleViewChatProfile}
             >
               {selectedChat.name}
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {isTyping ? "typing..." : "Online"}
+            <p className="text-blue-100 text-sm">
+              {isTyping ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex space-x-1">
+                    <div className="w-1.5 h-1.5 bg-green-300 rounded-full animate-bounce"></div>
+                    <div className="w-1.5 h-1.5 bg-green-300 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-1.5 h-1.5 bg-green-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  </div>
+                  <span>typing...</span>
+                </div>
+              ) : isGroup ? `${groupMembers.length} members` : "Online"}
             </p>
           </div>
         </div>
 
-        {/* FIXED: Header Actions - Different icons for different chat types */}
+        {/* Header Actions */}
         <div className="flex items-center gap-2">
           {!isGroup ? (
-            // Private Chat - Show User Profile Icon
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleViewChatProfile}
-              className="p-3 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-200/50 dark:border-gray-700/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition-all duration-200 shadow-sm"
+              className="p-3 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 shadow-sm"
               title="View Profile"
             >
-              <User className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+              <User className="w-5 h-5 text-white" />
             </motion.button>
           ) : (
-            // Group Chat - Show three-dot menu for all members with role-based options
-            <div className="relative" ref={menuRef}>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowMenu(!showMenu)}
-                className="p-3 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-200/50 dark:border-gray-700/50 hover:bg-white/80 dark:hover:bg-gray-700/50 transition-all duration-200 shadow-sm"
-              >
-                <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-              </motion.button>
-              
-              {/* Dropdown Menu */}
-              <AnimatePresence>
-                {showMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                    className="absolute right-0 top-full mt-2 w-48 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 py-2 z-50"
-                  >
-                    {/* Group Info - Available to all group members */}
-                    <button
-                      onClick={() => {
-                        setShowAdminPanel(true);
-                        setShowMenu(false);
-                      }}
-                      className="w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-3"
-                    >
-                      <Info className="w-4 h-4" />
-                      Group Info
-                    </button>
-                    
-                    {/* Admin Only Options */}
-                    {isUserAdmin() && (
-                      <>
-                        <div className="border-t border-gray-200/50 dark:border-gray-700/50 my-1"></div>
-                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                          Admin Actions
-                        </div>
-                        <button
-                          onClick={() => {
-                            setShowAdminPanel(true);
-                            setShowMenu(false);
-                          }}
-                          className="w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-3"
-                        >
-                          <User className="w-4 h-4" />
-                          Manage Members
-                        </button>
-                        <button
-                          onClick={() => {
-                            // Add your settings action here
-                            setShowMenu(false);
-                          }}
-                          className="w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-3"
-                        >
-                          <Settings className="w-4 h-4" />
-                          Group Settings
-                        </button>
-                      </>
-                    )}
-                    
-                    {/* Show user role badge */}
-                    <div className="border-t border-gray-200/50 dark:border-gray-700/50 mt-2 pt-2 px-4">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        Your role: <span className="font-semibold text-indigo-600 dark:text-indigo-400 capitalize">{userRole || 'member'}</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowAdminPanel(true)}
+              className="p-3 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 shadow-sm"
+              title="Group Info"
+            >
+              <Users className="w-5 h-5 text-white" />
+            </motion.button>
           )}
         </div>
       </div>
 
-      {/* Messages Area - Flexible height with proper scrolling */}
+      {/* Messages Area - Game-Level Styling */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-6 space-y-4 bg-transparent min-h-0"
+        className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-gray-800/50 to-gray-900/50 min-h-0 custom-scrollbar"
       >
         <AnimatePresence>
           {messages.map((msg, idx) => {
             const senderId = msg.sender?._id || msg.senderId;
             const isSent = senderId?.toString() === userId?.toString();
-            const nameColor = nameColors[senderId?.toString().charCodeAt(0) % nameColors.length];
+            const userColor = getUserColor(senderId);
 
             return (
               <motion.div
@@ -374,15 +342,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
                 exit={{ opacity: 0, y: -20 }}
                 className={`flex ${isSent ? "justify-end" : "justify-start"}`}
               >
-                <div className={`flex items-end gap-3 max-w-[70%] ${isSent ? "flex-row-reverse" : ""}`}>
+                <div className={`flex items-end gap-3 max-w-[80%] ${isSent ? "flex-row-reverse" : ""}`}>
+                  {/* Avatar for received messages */}
                   {!isSent && (
-                    <div className="relative group">
+                    <div className="relative group flex-shrink-0">
                       <Avatar 
-                        className="w-10 h-10 shadow-md border-2 border-white dark:border-gray-700 cursor-pointer hover:scale-105 transition-transform"
+                        className="w-10 h-10 shadow-md border-2 border-white/30 cursor-pointer hover:scale-105 transition-transform"
                         onClick={() => handleViewProfile(msg.sender)}
                       >
                         <AvatarImage src={msg.sender?.profilePicture || "/default-avatar.png"} />
-                        <AvatarFallback className="text-xs">
+                        <AvatarFallback className={`text-xs bg-gradient-to-r ${userColor} text-white`}>
                           {msg.sender?.name?.[0] || "?"}
                         </AvatarFallback>
                       </Avatar>
@@ -391,28 +360,36 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
                       </div>
                     </div>
                   )}
+                  
+                  {/* Message Bubble */}
                   <div className="flex flex-col space-y-1">
+                    {/* Sender name for group chats */}
                     {isGroup && !isSent && (
-                      <span 
-                        className="text-xs font-semibold px-1 cursor-pointer hover:underline transition-all"
-                        style={{ color: nameColor }}
-                        onClick={() => handleViewProfile(msg.sender)}
-                      >
-                        {msg.sender?.name}
-                      </span>
+                      <div className="flex items-center space-x-2 mb-1 px-1">
+                        <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${userColor}`}></div>
+                        <span 
+                          className="text-xs font-semibold text-gray-200 cursor-pointer hover:underline transition-all"
+                          onClick={() => handleViewProfile(msg.sender)}
+                        >
+                          {msg.sender?.name}
+                        </span>
+                      </div>
                     )}
+                    
                     <motion.div
                       whileHover={{ scale: 1.02 }}
-                      className={`px-4 py-3 rounded-2xl shadow-sm backdrop-blur-sm border ${
+                      className={`px-4 py-3 rounded-2xl shadow-lg backdrop-blur-sm border ${
                         isSent
-                          ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-br-md border-indigo-200"
-                          : "bg-white/80 dark:bg-gray-800/80 text-gray-900 dark:text-gray-100 rounded-bl-md border-gray-200/50 dark:border-gray-700/50"
+                          ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md border-blue-400/30"
+                          : "bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-bl-md border-gray-600/30"
                       }`}
                     >
-                      <p className="leading-relaxed">{msg.content}</p>
-                      <p className={`text-xs mt-1 ${isSent ? 'text-indigo-100' : 'text-gray-500'}`}>
-                        {formatTime(msg.createdAt)}
-                      </p>
+                      <p className="leading-relaxed text-sm">{msg.content}</p>
+                      <div className={`flex ${isSent ? 'justify-end' : 'justify-start'} mt-2`}>
+                        <p className={`text-xs ${isSent ? 'text-blue-200' : 'text-gray-400'}`}>
+                          {formatTime(msg.createdAt)}
+                        </p>
+                      </div>
                     </motion.div>
                   </div>
                 </div>
@@ -421,35 +398,50 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
           })}
         </AnimatePresence>
         
+        {/* Enhanced Typing Indicator */}
         {isTyping && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center gap-2 text-sm text-gray-500 px-4"
+            className="flex items-center gap-3 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 max-w-max"
           >
             <div className="flex space-x-1">
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
             </div>
-            <span>{selectedChat.name} is typing...</span>
+            <span className="text-green-300 text-sm font-medium">
+              {selectedChat.name} is typing...
+            </span>
           </motion.div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area - Fixed height */}
-      <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-t border-gray-200/50 dark:border-gray-700/50 shadow-lg">
+      {/* Input Area - Enhanced Styling */}
+      <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gradient-to-r from-gray-800 to-gray-900 backdrop-blur-xl border-t border-purple-500/30 shadow-lg">
         {canSendMessage ? (
           <>
             <div className="flex gap-1">
-              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-3 text-gray-500 hover:text-indigo-500 transition-colors">
+              <motion.button 
+                whileHover={{ scale: 1.1 }} 
+                whileTap={{ scale: 0.9 }} 
+                className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
+              >
                 <Paperclip className="w-5 h-5" />
               </motion.button>
-              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-3 text-gray-500 hover:text-indigo-500 transition-colors">
+              <motion.button 
+                whileHover={{ scale: 1.1 }} 
+                whileTap={{ scale: 0.9 }} 
+                className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
+              >
                 <Image className="w-5 h-5" />
               </motion.button>
-              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-3 text-gray-500 hover:text-indigo-500 transition-colors">
+              <motion.button 
+                whileHover={{ scale: 1.1 }} 
+                whileTap={{ scale: 0.9 }} 
+                className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
+              >
                 <Smile className="w-5 h-5" />
               </motion.button>
             </div>
@@ -462,13 +454,13 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
                   handleTyping();
                 }}
                 onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                placeholder="Type a message..."
-                className="w-full pl-4 pr-12 py-3 bg-white/50 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 backdrop-blur-sm"
+                placeholder="Type your message..."
+                className="w-full pl-4 pr-12 py-3 bg-gray-700/50 border-2 border-purple-500/30 text-white placeholder-gray-400 rounded-2xl focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 backdrop-blur-sm transition-all"
               />
               <motion.button 
                 whileHover={{ scale: 1.05 }} 
                 whileTap={{ scale: 0.95 }}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-indigo-500 transition-colors"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-purple-400 transition-colors"
               >
                 <Mic className="w-4 h-4" />
               </motion.button>
@@ -479,13 +471,13 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
               whileTap={{ scale: 0.95 }}
               onClick={handleSendMessage}
               disabled={!newMessage.trim()}
-              className="p-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl shadow-lg shadow-indigo-500/25 hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              className="p-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg shadow-purple-500/25 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border-2 border-purple-400/30"
             >
               <Send className="w-5 h-5" />
             </motion.button>
           </>
         ) : (
-          <div className="w-full flex items-center justify-center text-gray-500 italic text-sm">
+          <div className="w-full flex items-center justify-center text-gray-400 italic text-sm bg-white/5 backdrop-blur-sm py-3 rounded-xl border border-white/10">
             <div className="flex items-center gap-2">
               <Info className="w-4 h-4" />
               You are not allowed to send messages in this group
@@ -493,6 +485,32 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
           </div>
         )}
       </div>
+
+      {/* Add custom scrollbar styles */}
+      <style jsx>{`
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(168, 85, 247, 0.5) transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+          border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(to bottom, #8b5cf6, #3b82f6);
+          border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(to bottom, #7c3aed, #2563eb);
+        }
+      `}</style>
 
       {/* Profile View Modal */}
       <AnimatePresence>
@@ -508,41 +526,41 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden"
+              className="bg-gradient-to-br from-gray-900 to-purple-900 w-full max-w-md rounded-2xl shadow-2xl border border-purple-500/30 overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between p-6 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+              <div className="flex items-center justify-between p-6 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-sm">
+                <h3 className="text-xl font-bold text-white">
                   User Profile
                 </h3>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => setShowProfileModal(false)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 text-white" />
                 </motion.button>
               </div>
               
               <div className="p-6 space-y-6">
                 {/* Profile Header */}
                 <div className="flex flex-col items-center text-center space-y-4">
-                  <Avatar className="w-24 h-24 border-4 border-indigo-100 dark:border-gray-700">
+                  <Avatar className="w-24 h-24 border-4 border-purple-500/30">
                     <AvatarImage 
                       src={viewedProfile.profilePicture || "/default-avatar.png"} 
                       onError={(e) => e.target.src = "/default-avatar.png"}
                     />
-                    <AvatarFallback className="text-2xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
+                    <AvatarFallback className={`text-2xl bg-gradient-to-r ${getUserColor(viewedProfile._id)} text-white`}>
                       {viewedProfile.name?.[0]?.toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    <h2 className="text-2xl font-bold text-white">
                       {viewedProfile.name}
                     </h2>
-                    <p className="text-gray-500 dark:text-gray-400">
+                    <p className="text-purple-200">
                       @{viewedProfile.name?.toLowerCase().replace(/\s+/g, '')}
                     </p>
                   </div>
@@ -552,8 +570,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
                 <div className="space-y-4">
                   {viewedProfile.bio && (
                     <div>
-                      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Bio</h4>
-                      <p className="text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                      <h4 className="font-semibold text-purple-300 mb-1">Bio</h4>
+                      <p className="text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700">
                         {viewedProfile.bio}
                       </p>
                     </div>
@@ -561,18 +579,18 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Status</h4>
+                      <h4 className="font-semibold text-purple-300 mb-1">Status</h4>
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${viewedProfile.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                        <span className="text-sm text-gray-600 dark:text-gray-400 capitalize">
+                        <span className="text-sm text-gray-300 capitalize">
                           {viewedProfile.status || 'offline'}
                         </span>
                       </div>
                     </div>
                     
                     <div>
-                      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Last Seen</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <h4 className="font-semibold text-purple-300 mb-1">Last Seen</h4>
+                      <p className="text-sm text-gray-300">
                         {viewedProfile.lastSeen ? new Date(viewedProfile.lastSeen).toLocaleDateString() : 'Unknown'}
                       </p>
                     </div>
@@ -580,18 +598,18 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
                   
                   {viewedProfile.email && (
                     <div>
-                      <h4 className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Email</h4>
-                      <p className="text-gray-600 dark:text-gray-400">{viewedProfile.email}</p>
+                      <h4 className="font-semibold text-purple-300 mb-1">Email</h4>
+                      <p className="text-gray-300">{viewedProfile.email}</p>
                     </div>
                   )}
                 </div>
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 pt-4">
-                  <Button className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600">
+                  <Button className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white">
                     Send Message
                   </Button>
-                  <Button variant="outline" className="flex-1">
+                  <Button variant="outline" className="flex-1 border-purple-500 text-purple-300 hover:bg-purple-500/20">
                     Add Friend
                   </Button>
                 </div>
@@ -615,20 +633,20 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser }) => {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white dark:bg-gray-900 w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden"
+              className="bg-gradient-to-br from-gray-900 to-purple-900 w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl border border-purple-500/30 overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between p-6 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+              <div className="flex items-center justify-between p-6 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-sm">
+                <h3 className="text-xl font-bold text-white">
                   Group Settings - {selectedChat.name}
                 </h3>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => setShowAdminPanel(false)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 text-white" />
                 </motion.button>
               </div>
               <div className="overflow-y-auto max-h-[60vh]">
