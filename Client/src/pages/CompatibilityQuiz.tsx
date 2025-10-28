@@ -22,13 +22,14 @@ import {
   Coffee, Film, BookOpen, Utensils, Mountain, Palette,
   Zap as Lightning, Moon, Sun, Wifi, WifiOff,
   BarChart3, GitBranch, Eye, EyeOff, RotateCcw,
-  Smartphone, Monitor
+  Smartphone, Monitor, ArrowDown
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
 const socket = io(import.meta.env.VITE_API_URL, {
   transports: ['websocket', 'polling'],
-  timeout: 10000
+  timeout: 10000,
+  autoConnect: true
 });
 
 // Enhanced questions with categories, weights, and personality insights
@@ -150,6 +151,7 @@ export default function AdvancedCompatibilityGame() {
   const [activeTab, setActiveTab] = useState("basic");
   const [typingIndicator, setTypingIndicator] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [gameState, setGameState] = useState<any>(null);
 
   // Screenshot sharing states
   const [isCapturing, setIsCapturing] = useState(false);
@@ -164,11 +166,21 @@ export default function AdvancedCompatibilityGame() {
   const submitTimeoutRef = useRef<NodeJS.Timeout>();
   const screenshotRef = useRef<HTMLDivElement>(null);
   const mainContainerRef = useRef<HTMLDivElement>(null);
+  const optionsContainerRef = useRef<HTMLDivElement>(null);
+  const questionContainerRef = useRef<HTMLDivElement>(null);
 
-  // FIXED: Detect mobile device and handle resize
+  // FIXED: Enhanced mobile detection and scroll handling
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      
+      // Add mobile-specific class to body
+      if (mobile) {
+        document.body.classList.add('mobile-device');
+      } else {
+        document.body.classList.remove('mobile-device');
+      }
     };
 
     checkMobile();
@@ -176,10 +188,266 @@ export default function AdvancedCompatibilityGame() {
 
     return () => {
       window.removeEventListener('resize', checkMobile);
+      document.body.classList.remove('mobile-device');
     };
   }, []);
 
-  // FIXED: Enhanced sound effects with better error handling
+  // FIXED: Enhanced state persistence with game state recovery
+  useEffect(() => {
+    const savedState = localStorage.getItem('compatibilityGameState');
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        setPlayerName(state.playerName || '');
+        setRoomId(state.roomId || '');
+        setDarkMode(state.darkMode !== undefined ? state.darkMode : true);
+        
+        // If we were in a room, try to rejoin
+        if (state.roomId && state.playerName && state.joined) {
+          setTimeout(() => {
+            socket.emit("rejoin-room", {
+              roomId: state.roomId,
+              playerName: state.playerName
+            });
+          }, 1000);
+        }
+      } catch (error) {
+        console.error('Error loading saved state:', error);
+      }
+    }
+  }, []);
+
+  // FIXED: Enhanced auto-save with game state
+  useEffect(() => {
+    const state = {
+      playerName,
+      roomId,
+      darkMode,
+      joined,
+      gameStarted,
+      currentQuestion,
+      answers,
+      advancedAnswers,
+      gameState
+    };
+    localStorage.setItem('compatibilityGameState', JSON.stringify(state));
+  }, [playerName, roomId, darkMode, joined, gameStarted, currentQuestion, answers, advancedAnswers, gameState]);
+
+  // FIXED: Enhanced socket connection management
+  useEffect(() => {
+    const handleConnect = () => {
+      setConnectionStatus("connected");
+      console.log("Connected to server");
+    };
+
+    const handleDisconnect = () => {
+      setConnectionStatus("disconnected");
+    };
+
+    const handleReconnect = () => {
+      setConnectionStatus("connected");
+      // Try to rejoin room if we were in one
+      if (joined && roomId && playerName) {
+        socket.emit("rejoin-room", { 
+          roomId, 
+          playerName 
+        });
+      }
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("reconnect", handleReconnect);
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("reconnect", handleReconnect);
+    };
+  }, [joined, roomId, playerName]);
+
+  // FIXED: Enhanced socket event handlers with state synchronization
+  useEffect(() => {
+    const handleRoomCreated = (room: any) => {
+      setRoomId(room.roomId);
+      setIsHost(true);
+      setJoined(true);
+      setPlayers(room.players || []);
+      setGameState(room.gameState || null);
+      playSound("success");
+    };
+
+    const handleRoomJoined = (room: any) => {
+      setRoomId(room.roomId);
+      setPlayers(room.players || []);
+      setJoined(true);
+      setGameState(room.gameState || null);
+      
+      // If game is already in progress, sync state
+      if (room.gameState?.gameStarted) {
+        setGameStarted(true);
+        setCurrentQuestion(room.gameState.currentQuestion || 0);
+        setPlayerProgress(room.gameState.playerProgress || {});
+      }
+      
+      playSound("success");
+    };
+
+    const handleRejoinSuccess = (data: any) => {
+      setRoomId(data.roomId);
+      setPlayers(data.players || []);
+      setJoined(true);
+      setGameState(data.gameState || null);
+      
+      if (data.gameState?.gameStarted) {
+        setGameStarted(true);
+        setCurrentQuestion(data.gameState.currentQuestion || 0);
+        setPlayerProgress(data.gameState.playerProgress || {});
+        setAnswers(data.playerAnswers || []);
+      }
+      
+      if (data.gameState?.showResults) {
+        setShowResults(true);
+        setBothAnswers(data.gameState.results || {});
+      }
+      
+      playSound("success");
+    };
+
+    const handleUpdatePlayers = (players: any[]) => {
+      const newPlayers = players.filter(p => !players.map(prev => prev.name).includes(p.name));
+      if (newPlayers.length > 0) {
+        playSound("notification");
+      }
+      setPlayers(players);
+    };
+
+    const handlePlayerProgress = (data: {player: string, progress: number}) => {
+      setPlayerProgress(prev => ({
+        ...prev,
+        [data.player]: data.progress
+      }));
+    };
+
+    const handleGameStarted = (gameState: any) => {
+      setGameStarted(true);
+      setCurrentQuestion(0);
+      setAnswers([]);
+      setCurrentAnswer("");
+      setAdvancedAnswers({
+        communicationStyle: "",
+        loveLanguage: "",
+        conflictStyle: "",
+        futureGoal: "",
+        energyLevel: "",
+        socialPreference: "",
+        personalityTraits: []
+      });
+      setGameState(gameState);
+      playSound("success");
+    };
+
+    const handleQuestionChanged = (data: any) => {
+      setCurrentQuestion(data.questionIndex);
+      setTimeLeft(data.timeLeft || 25);
+      setGameState(data.gameState);
+    };
+
+    const handleShowResults = (data: any) => {
+      setBothAnswers(data.results);
+      setShowResults(true);
+      setIsSubmitting(false);
+      setGameState(data.gameState);
+      playSound("victory");
+      triggerConfetti();
+    };
+
+    const handlePlayerReaction = (data: {player: string, reaction: string}) => {
+      setPlayerReactions(prev => ({
+        ...prev,
+        [data.player]: data.reaction
+      }));
+      
+      setTimeout(() => {
+        setPlayerReactions(prev => {
+          const newReactions = {...prev};
+          delete newReactions[data.player];
+          return newReactions;
+        });
+      }, 3000);
+    };
+
+    const handleGameStateUpdate = (newGameState: any) => {
+      setGameState(newGameState);
+    };
+
+    const handleConnectionError = (error: any) => {
+      setConnectionStatus("disconnected");
+      console.error("Connection error:", error);
+    };
+
+    // Register event listeners
+    socket.on("room-created", handleRoomCreated);
+    socket.on("room-joined", handleRoomJoined);
+    socket.on("rejoin-success", handleRejoinSuccess);
+    socket.on("update-players", handleUpdatePlayers);
+    socket.on("player-progress", handlePlayerProgress);
+    socket.on("game-started", handleGameStarted);
+    socket.on("question-changed", handleQuestionChanged);
+    socket.on("show-results", handleShowResults);
+    socket.on("player-reaction", handlePlayerReaction);
+    socket.on("game-state-update", handleGameStateUpdate);
+    socket.on("connect_error", handleConnectionError);
+
+    return () => {
+      socket.off("room-created", handleRoomCreated);
+      socket.off("room-joined", handleRoomJoined);
+      socket.off("rejoin-success", handleRejoinSuccess);
+      socket.off("update-players", handleUpdatePlayers);
+      socket.off("player-progress", handlePlayerProgress);
+      socket.off("game-started", handleGameStarted);
+      socket.off("question-changed", handleQuestionChanged);
+      socket.off("show-results", handleShowResults);
+      socket.off("player-reaction", handlePlayerReaction);
+      socket.off("game-state-update", handleGameStateUpdate);
+      socket.off("connect_error", handleConnectionError);
+    };
+  }, []);
+
+  // FIXED: Enhanced timer with state synchronization
+  useEffect(() => {
+    if (timeLeft === null || !gameStarted || showResults) return;
+    
+    if (timeLeft <= 0) {
+      handleAutoSubmit();
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      setTimeLeft(prev => prev !== null ? prev - 1 : null);
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [timeLeft, gameStarted, showResults]);
+
+  // FIXED: Start timer when question changes with mobile scroll
+  useEffect(() => {
+    if (gameStarted && !showResults && currentQuestion < questions.length) {
+      setTimeLeft(25);
+      
+      // Scroll to top on mobile when question changes
+      if (isMobile && questionContainerRef.current) {
+        setTimeout(() => {
+          questionContainerRef.current?.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+          });
+        }, 300);
+      }
+    }
+  }, [currentQuestion, gameStarted, showResults, isMobile]);
+
+  // FIXED: Enhanced sound effects
   const playSound = (soundName: string) => {
     if (!soundEnabled) return;
     
@@ -214,61 +482,6 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // FIXED: Save game state to localStorage
-  useEffect(() => {
-    const savedState = localStorage.getItem('compatibilityGameState');
-    if (savedState) {
-      const state = JSON.parse(savedState);
-      setPlayerName(state.playerName || '');
-      setRoomId(state.roomId || '');
-      setDarkMode(state.darkMode !== undefined ? state.darkMode : true);
-    }
-  }, []);
-
-  // FIXED: Auto-save important states
-  useEffect(() => {
-    const state = {
-      playerName,
-      roomId,
-      darkMode,
-      joined,
-      gameStarted
-    };
-    localStorage.setItem('compatibilityGameState', JSON.stringify(state));
-  }, [playerName, roomId, darkMode, joined, gameStarted]);
-
-  // FIXED: Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (submitTimeoutRef.current) {
-        clearTimeout(submitTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // FIXED: Timer with proper cleanup
-  useEffect(() => {
-    if (timeLeft === null || !gameStarted || showResults) return;
-    
-    if (timeLeft <= 0) {
-      handleAutoSubmit();
-      return;
-    }
-    
-    const timer = setTimeout(() => {
-      setTimeLeft(prev => prev !== null ? prev - 1 : null);
-    }, 1000);
-    
-    return () => clearTimeout(timer);
-  }, [timeLeft, gameStarted, showResults]);
-
-  // FIXED: Start timer when question changes
-  useEffect(() => {
-    if (gameStarted && !showResults && currentQuestion < questions.length) {
-      setTimeLeft(25); // Reduced time for faster gameplay
-    }
-  }, [currentQuestion, gameStarted, showResults]);
-
   const handleAutoSubmit = () => {
     if (currentAnswer) {
       submitAnswer();
@@ -284,7 +497,7 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // FIXED: Enhanced screenshot capture for mobile
+  // FIXED: Enhanced mobile screenshot capture
   const captureScreenshot = async () => {
     if (!screenshotRef.current) return;
     
@@ -341,118 +554,7 @@ export default function AdvancedCompatibilityGame() {
     document.body.removeChild(link);
   };
 
-  // FIXED: Socket Event Handlers with reconnection logic
-  useEffect(() => {
-    const handleRoomCreated = (room: any) => {
-      setRoomId(room.roomId);
-      setIsHost(true);
-      setJoined(true);
-      setPlayers(room.players || []);
-      playSound("success");
-    };
-
-    const handleRoomJoined = (room: any) => {
-      setRoomId(room.roomId);
-      setPlayers(room.players || []);
-      setJoined(true);
-      playSound("success");
-    };
-
-    const handleUpdatePlayers = (players: any[]) => {
-      const newPlayers = players.filter(p => !players.map(prev => prev.name).includes(p.name));
-      if (newPlayers.length > 0) {
-        playSound("notification");
-      }
-      setPlayers(players);
-    };
-
-    const handlePlayerProgress = (data: {player: string, progress: number}) => {
-      setPlayerProgress(prev => ({
-        ...prev,
-        [data.player]: data.progress
-      }));
-    };
-
-    const handleGameStarted = () => {
-      setGameStarted(true);
-      setCurrentQuestion(0);
-      setAnswers([]);
-      setCurrentAnswer("");
-      setAdvancedAnswers({
-        communicationStyle: "",
-        loveLanguage: "",
-        conflictStyle: "",
-        futureGoal: "",
-        energyLevel: "",
-        socialPreference: "",
-        personalityTraits: []
-      });
-      playSound("success");
-    };
-
-    const handleShowResults = (data: any) => {
-      setBothAnswers(data);
-      setShowResults(true);
-      setIsSubmitting(false);
-      playSound("victory");
-      triggerConfetti();
-    };
-
-    const handlePlayerReaction = (data: {player: string, reaction: string}) => {
-      setPlayerReactions(prev => ({
-        ...prev,
-        [data.player]: data.reaction
-      }));
-      
-      setTimeout(() => {
-        setPlayerReactions(prev => {
-          const newReactions = {...prev};
-          delete newReactions[data.player];
-          return newReactions;
-        });
-      }, 3000);
-    };
-
-    const handleConnectionError = () => {
-      setConnectionStatus("disconnected");
-    };
-
-    const handleReconnect = () => {
-      setConnectionStatus("connected");
-      // Try to rejoin room if we were in one
-      if (joined && roomId && playerName) {
-        socket.emit("join-room", { 
-          roomId, 
-          player: { name: playerName } 
-        });
-      }
-    };
-
-    // Register event listeners
-    socket.on("room-created", handleRoomCreated);
-    socket.on("room-joined", handleRoomJoined);
-    socket.on("update-players", handleUpdatePlayers);
-    socket.on("player-progress", handlePlayerProgress);
-    socket.on("game-started", handleGameStarted);
-    socket.on("show-results", handleShowResults);
-    socket.on("player-reaction", handlePlayerReaction);
-    socket.on("connect_error", handleConnectionError);
-    socket.on("reconnect", handleReconnect);
-
-    return () => {
-      socket.off("room-created", handleRoomCreated);
-      socket.off("room-joined", handleRoomJoined);
-      socket.off("update-players", handleUpdatePlayers);
-      socket.off("player-progress", handlePlayerProgress);
-      socket.off("game-started", handleGameStarted);
-      socket.off("show-results", handleShowResults);
-      socket.off("player-reaction", handlePlayerReaction);
-      socket.off("connect_error", handleConnectionError);
-      socket.off("reconnect", handleReconnect);
-    };
-  }, [joined, roomId, playerName]);
-
-  // FIXED: Room creation with better validation
+  // FIXED: Enhanced room creation with state persistence
   const createRoom = () => {
     const trimmedName = playerName.trim();
     if (!trimmedName || trimmedName.length < 2) {
@@ -467,7 +569,7 @@ export default function AdvancedCompatibilityGame() {
     });
   };
 
-  // FIXED: Room joining with better validation
+  // FIXED: Enhanced room joining with state recovery
   const joinRoom = () => {
     const trimmedName = playerName.trim();
     const trimmedRoomId = roomId.trim();
@@ -497,7 +599,7 @@ export default function AdvancedCompatibilityGame() {
     socket.emit("start-game", { roomId });
   };
 
-  // FIXED: Submit answer with proper state management
+  // FIXED: Enhanced answer submission with state synchronization
   const submitAnswer = () => {
     if (!currentAnswer || isSubmitting) return;
 
@@ -520,6 +622,15 @@ export default function AdvancedCompatibilityGame() {
 
     setTimeout(() => {
       if (currentQuestion < questions.length - 1) {
+        // Emit answer submitted event
+        socket.emit("answer-submitted", {
+          roomId,
+          playerName,
+          questionIndex: currentQuestion,
+          answer: currentAnswer,
+          advancedAnswers: currentQuestion === questions.length - 1 ? advancedAnswers : null
+        });
+        
         setCurrentQuestion(prev => prev + 1);
         setCurrentAnswer("");
         setIsSubmitting(false);
@@ -566,7 +677,24 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // NEW: Advanced compatibility calculation
+  // FIXED: Enhanced mobile option selection with auto-scroll
+  const handleOptionSelect = (option: string) => {
+    setCurrentAnswer(option);
+    playSound("select");
+    
+    // Auto-scroll to submit button on mobile after selection
+    if (isMobile && optionsContainerRef.current) {
+      setTimeout(() => {
+        const submitButton = document.querySelector('button[type="button"]');
+        submitButton?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+      }, 300);
+    }
+  };
+
+  // Enhanced compatibility calculation (same as before)
   const calculateCompatibility = () => {
     const allPlayers = Object.keys(bothAnswers);
     if (allPlayers.length < 2) return { score: 0, breakdown: {}, insights: [], advancedAnalysis: {} };
@@ -581,7 +709,6 @@ export default function AdvancedCompatibilityGame() {
     const insights: string[] = [];
     const advancedAnalysis: any = {};
 
-    // Calculate basic question compatibility
     questions.forEach((question, i) => {
       const weight = question.weight;
       maxPossibleScore += weight;
@@ -592,7 +719,6 @@ export default function AdvancedCompatibilityGame() {
       }
     });
 
-    // Calculate advanced factors compatibility
     let advancedScore = 0;
     let maxAdvancedScore = 0;
     const advancedMatches: string[] = [];
@@ -607,12 +733,10 @@ export default function AdvancedCompatibilityGame() {
       }
     });
 
-    // Combine scores (60% from questions, 40% from advanced factors)
     const questionScore = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 60 : 0;
     const advancedFactorScore = maxAdvancedScore > 0 ? (advancedScore / maxAdvancedScore) * 40 : 0;
     const finalScore = Math.round(questionScore + advancedFactorScore);
 
-    // Generate enhanced insights
     if (finalScore >= 95) {
       insights.push("💖 Cosmic Connection! You're practically soulmates");
       insights.push("✨ Perfect harmony in values, communication, and lifestyle");
@@ -633,7 +757,6 @@ export default function AdvancedCompatibilityGame() {
       insights.push("⚡ Your differences create exciting, unpredictable chemistry");
     }
 
-    // Advanced analysis
     advancedAnalysis.matches = advancedMatches;
     advancedAnalysis.communicationMatch = ans1.advancedAnswers?.communicationStyle === ans2.advancedAnswers?.communicationStyle;
     advancedAnalysis.loveLanguageMatch = ans1.advancedAnswers?.loveLanguage === ans2.advancedAnswers?.loveLanguage;
@@ -670,9 +793,12 @@ export default function AdvancedCompatibilityGame() {
     return "from-purple-400 to-pink-500";
   };
 
-  // NEW: Enhanced Advanced Questions Component with mobile support
+  // NEW: Enhanced Advanced Questions Component with mobile scroll
   const AdvancedQuestions = () => (
-    <Card className={`p-4 md:p-6 ${darkMode ? 'bg-slate-800/50' : 'bg-white/80'} backdrop-blur-sm border-white/20 mb-4 md:mb-6 transition-all duration-300`}>
+    <Card 
+      ref={optionsContainerRef}
+      className={`p-4 md:p-6 ${darkMode ? 'bg-slate-800/50' : 'bg-white/80'} backdrop-blur-sm border-white/20 mb-4 md:mb-6 transition-all duration-300`}
+    >
       <h3 className="text-xl md:text-2xl font-bold text-center mb-4 md:mb-6 flex items-center justify-center">
         <Brain className="w-5 h-5 md:w-6 md:h-6 mr-2 text-purple-500" />
         Advanced Compatibility
@@ -841,7 +967,7 @@ export default function AdvancedCompatibilityGame() {
     </Card>
   );
 
-  // Enhanced Player Card Component with mobile support
+  // Enhanced Player Card Component
   const PlayerCard = ({ player, index }: { player: any, index: number }) => (
     <div className={`flex items-center justify-between p-3 md:p-4 rounded-xl border transition-all ${
       darkMode ? 'bg-slate-800/50 hover:bg-slate-700/50 border-slate-600' : 'bg-white/80 hover:bg-white border-gray-200'
@@ -891,7 +1017,7 @@ export default function AdvancedCompatibilityGame() {
     </div>
   );
 
-  // Settings Panel Component with mobile support
+  // Settings Panel Component
   const SettingsPanel = () => (
     <Card className={`p-4 md:p-6 absolute top-12 md:top-16 right-2 md:right-4 w-72 md:w-80 backdrop-blur-sm border ${
       darkMode ? 'bg-slate-800/90 border-slate-600' : 'bg-white/90 border-gray-200'
@@ -1162,7 +1288,7 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // Waiting Screen Component with mobile support
+  // Waiting Screen Component
   const WaitingScreen = () => (
     <div 
       ref={mainContainerRef}
@@ -1272,15 +1398,10 @@ export default function AdvancedCompatibilityGame() {
     </div>
   );
 
-  // FIXED: Game Screen Component with improved mobile input handling
+  // FIXED: Enhanced Game Screen with mobile scroll handling
   const GameScreen = () => {
     const currentQ = questions[currentQuestion];
     
-    const handleOptionSelect = (option: string) => {
-      setCurrentAnswer(option);
-      playSound("select");
-    };
-
     const handleSubmit = () => {
       if (!currentAnswer) {
         alert("Please select an answer before submitting");
@@ -1380,9 +1501,12 @@ export default function AdvancedCompatibilityGame() {
           </div>
 
           {/* Question Card */}
-          <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 mb-4 md:mb-6 ${
-            darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-          }`}>
+          <Card 
+            ref={questionContainerRef}
+            className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 mb-4 md:mb-6 ${
+              darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+            }`}
+          >
             <div className="text-center mb-6 md:mb-8">
               <Badge className={`mb-2 md:mb-3 text-xs md:text-sm ${darkMode ? 'bg-purple-500/20 text-purple-300 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>
                 {currentQ.category} • Weight: {currentQ.weight}x
@@ -1396,7 +1520,10 @@ export default function AdvancedCompatibilityGame() {
             </div>
 
             {/* Options */}
-            <div className="space-y-3 md:space-y-4 mb-6 md:mb-8">
+            <div 
+              ref={optionsContainerRef}
+              className="space-y-3 md:space-y-4 mb-6 md:mb-8"
+            >
               {currentQ.options.map((option, index) => (
                 <div 
                   key={index} 
@@ -1495,6 +1622,23 @@ export default function AdvancedCompatibilityGame() {
               </Button>
             ))}
           </div>
+
+          {/* Mobile Scroll Helper */}
+          {isMobile && (
+            <div className="fixed bottom-4 right-4 z-30">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const submitButton = document.querySelector('button[type="button"]');
+                  submitButton?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                className="rounded-full bg-black/50 text-white border-white/20 backdrop-blur-sm"
+              >
+                <ArrowDown className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
         </div>
 
         {showAdvancedSettings && <SettingsPanel />}
@@ -1502,7 +1646,7 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // FIXED: Join/Create Screen with improved mobile input handling
+  // Join/Create Screen
   const JoinCreateScreen = () => {
     return (
       <div 
@@ -1655,7 +1799,7 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // Add CSS for confetti animation and mobile optimizations
+  // Add enhanced CSS for mobile optimizations
   useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
@@ -1670,7 +1814,7 @@ export default function AdvancedCompatibilityGame() {
         }
       }
       
-      /* Mobile optimizations */
+      /* Enhanced Mobile Optimizations */
       @media (max-width: 768px) {
         .mobile-text-sm {
           font-size: 0.875rem;
@@ -1681,25 +1825,88 @@ export default function AdvancedCompatibilityGame() {
         .mobile-space-y-2 > * + * {
           margin-top: 0.5rem;
         }
-      }
-      
-      /* Prevent horizontal scroll */
-      body {
-        overflow-x: hidden;
-      }
-      
-      /* Better touch targets for mobile */
-      @media (max-width: 768px) {
+        
+        /* Prevent horizontal scroll and enable smooth vertical scroll */
+        body {
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          height: 100%;
+        }
+        
+        html {
+          height: 100%;
+          overflow: hidden;
+        }
+        
+        /* Better touch targets for mobile */
         button, [role="button"] {
           min-height: 44px;
           min-width: 44px;
         }
+        
+        /* Improved scrolling for game screens */
+        .game-container {
+          height: 100vh;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Ensure options are easily tappable */
+        .option-item {
+          min-height: 60px;
+          display: flex;
+          align-items: center;
+        }
+        
+        /* Better text sizing for mobile */
+        .mobile-text-lg {
+          font-size: 1.125rem;
+        }
+        
+        .mobile-text-xl {
+          font-size: 1.25rem;
+        }
+        
+        /* Prevent zoom on input focus */
+        input, select, textarea {
+          font-size: 16px;
+        }
+      }
+      
+      /* Desktop enhancements */
+      @media (min-width: 769px) {
+        .game-container {
+          min-height: 100vh;
+          overflow-y: auto;
+        }
+      }
+      
+      /* Smooth transitions for all interactive elements */
+      * {
+        transition: all 0.2s ease-in-out;
       }
     `;
     document.head.appendChild(style);
 
     return () => {
       document.head.removeChild(style);
+    };
+  }, []);
+
+  // Enhanced cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (submitTimeoutRef.current) {
+        clearTimeout(submitTimeoutRef.current);
+      }
+      
+      // Clean up any remaining confetti
+      const confettiElements = document.querySelectorAll('div[style*="confetti-fall"]');
+      confettiElements.forEach(el => {
+        if (document.body.contains(el)) {
+          document.body.removeChild(el);
+        }
+      });
     };
   }, []);
 

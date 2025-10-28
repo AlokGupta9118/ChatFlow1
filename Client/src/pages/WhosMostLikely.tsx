@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { 
   ArrowLeft, Users, Crown, Target, Timer, Sparkles, 
   Volume2, VolumeX, Gamepad2, RefreshCw, MessageCircle, Send,
-  ChevronDown, ChevronUp, Smartphone, Monitor
+  ChevronDown, ChevronUp, Smartphone, Monitor, Copy
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -443,17 +443,40 @@ const WhosMostLikely = () => {
   // Socket event handlers
   useEffect(() => {
     const handleRoomCreated = (room) => {
+      console.log("Room created:", room);
       setRoomId(room.roomId);
       setIsHost(true);
       setJoined(true);
       setPlayers(room.players);
+      setGameStarted(false);
+      setGameFinished(false);
+      setRoundResults(null);
+      setFinalResults(null);
+      setCurrentRound(1);
+      setHasVoted(false);
+      setSelectedPlayer("");
+      setVotes({});
+      setVoteCount(0);
+      setChatMessages([]);
       playSound("success");
     };
 
     const handleRoomJoined = (room) => {
+      console.log("Room joined:", room);
       setRoomId(room.roomId);
       setPlayers(room.players);
       setJoined(true);
+      setIsHost(false);
+      setGameStarted(false);
+      setGameFinished(false);
+      setRoundResults(null);
+      setFinalResults(null);
+      setCurrentRound(1);
+      setHasVoted(false);
+      setSelectedPlayer("");
+      setVotes({});
+      setVoteCount(0);
+      setChatMessages([]);
       playSound("success");
     };
 
@@ -465,16 +488,17 @@ const WhosMostLikely = () => {
       setIsHost(data.isHost);
       
       if (data.gameState) {
-        setGameStarted(data.gameState.gameStarted);
-        setGameFinished(data.gameState.gameFinished);
-        setCurrentScenario(data.gameState.currentScenario);
-        setCurrentRound(data.gameState.currentRound);
-        setTotalRounds(data.gameState.totalRounds);
-        setHasVoted(data.gameState.hasVoted);
+        setGameStarted(data.gameState.gameStarted || false);
+        setGameFinished(data.gameState.gameFinished || false);
+        setCurrentScenario(data.gameState.currentScenario || "");
+        setCurrentRound(data.gameState.currentRound || 1);
+        setTotalRounds(data.gameState.totalRounds || 10);
+        setHasVoted(data.gameState.hasVoted || false);
         setVotes(data.gameState.votes || {});
-        setRoundResults(data.gameState.roundResults);
-        setFinalResults(data.gameState.finalResults);
+        setRoundResults(data.gameState.roundResults || null);
+        setFinalResults(data.gameState.finalResults || null);
         setVoteCount(data.gameState.voteCount || 0);
+        setSelectedPlayer(data.gameState.selectedPlayer || "");
       }
       
       if (data.chatHistory) {
@@ -491,14 +515,17 @@ const WhosMostLikely = () => {
       removeSavedRoomData();
       removeSavedGameState();
       reconnectAttempted.current = false;
+      setJoined(false);
     };
 
     const handleUpdatePlayers = (playersList) => {
+      console.log("Players updated:", playersList);
       setPlayers(playersList);
       playSound("notification");
     };
 
     const handleGameStarted = (data) => {
+      console.log("Game started:", data);
       setGameStarted(true);
       setCurrentScenario(data.scenario);
       setCurrentRound(data.currentRound);
@@ -508,10 +535,13 @@ const WhosMostLikely = () => {
       setGameFinished(false);
       setRoundResults(null);
       setFinalResults(null);
+      setVotes({});
+      setVoteCount(0);
       playSound("success");
     };
 
     const handleVoteReceived = (data) => {
+      console.log("Vote received:", data);
       setVotes(prev => ({
         ...prev,
         [data.voter]: data.votedFor
@@ -520,14 +550,17 @@ const WhosMostLikely = () => {
     };
 
     const handleRoundResults = (results) => {
+      console.log("Round results:", results);
       setRoundResults(results);
-      setVotes(results.votes);
+      setVotes(results.votes || {});
       setHasVoted(false);
       setSelectedPlayer("");
+      setVoteCount(0);
       playSound("victory");
     };
 
     const handleNextRound = (data) => {
+      console.log("Next round:", data);
       setCurrentScenario(data.scenario);
       setCurrentRound(data.currentRound);
       setRoundResults(null);
@@ -539,17 +572,21 @@ const WhosMostLikely = () => {
     };
 
     const handleGameFinished = (data) => {
+      console.log("Game finished:", data);
       setGameFinished(true);
       setFinalResults(data);
       setGameStarted(false);
+      setRoundResults(null);
       playSound("victory");
     };
 
     const handleConnectionError = () => {
+      console.log("Connection error");
       setConnectionStatus("disconnected");
     };
 
     const handleReconnect = () => {
+      console.log("Reconnected");
       setConnectionStatus("connected");
       // Attempt to rejoin on reconnect
       if (joined && playerName && roomId) {
@@ -558,11 +595,13 @@ const WhosMostLikely = () => {
     };
 
     const handleDisconnect = () => {
+      console.log("Disconnected");
       setConnectionStatus("disconnected");
     };
 
     // Chat event handlers
     const handleChatMessage = (message) => {
+      console.log("Chat message received:", message);
       setChatMessages(prev => [...prev, message]);
       if (message.sender !== playerName) {
         playSound("message");
@@ -570,6 +609,7 @@ const WhosMostLikely = () => {
     };
 
     const handleChatHistory = (messages) => {
+      console.log("Chat history received:", messages);
       setChatMessages(messages);
     };
 
@@ -651,6 +691,7 @@ const WhosMostLikely = () => {
   };
 
   const leaveRoom = () => {
+    socket.emit("leave-mostlikely-room", { roomId });
     removeSavedPlayerData();
     removeSavedRoomData();
     removeSavedGameState();
@@ -671,9 +712,6 @@ const WhosMostLikely = () => {
       return;
     }
     
-    // FIX: Allow voting for yourself on all devices
-    // Removed the restriction that prevented self-voting
-    
     socket.emit("submit-mostlikely-vote", { 
       roomId, 
       votedFor: selectedPlayer 
@@ -687,8 +725,13 @@ const WhosMostLikely = () => {
   };
 
   const restartGame = () => {
-    removeSavedGameState();
-    window.location.reload();
+    socket.emit("restart-mostlikely-game", { roomId });
+  };
+
+  const copyRoomCode = () => {
+    navigator.clipboard.writeText(roomId).then(() => {
+      alert("Room code copied to clipboard!");
+    });
   };
 
   // Player Card Component - Improved for mobile
@@ -703,19 +746,19 @@ const WhosMostLikely = () => {
       } ${canSelect ? 'cursor-pointer active:scale-95' : ''}`}
       onClick={canSelect ? () => onSelect(player.name) : undefined}
     >
-      <div className="flex items-center space-x-3">
-        <Avatar className="w-8 h-8 border-2 border-white/30">
+      <div className="flex items-center space-x-3 flex-1 min-w-0">
+        <Avatar className="w-8 h-8 border-2 border-white/30 flex-shrink-0">
           <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs">
             {player.name.charAt(0).toUpperCase()}
           </AvatarFallback>
         </Avatar>
-        <div className="flex items-center space-x-2">
-          <span className="font-semibold text-white text-sm">{player.name}</span>
-          {player.isHost && <Crown className="w-3 h-3 text-yellow-400" />}
+        <div className="flex items-center space-x-2 flex-1 min-w-0">
+          <span className="font-semibold text-white text-sm truncate">{player.name}</span>
+          {player.isHost && <Crown className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
         </div>
       </div>
       
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-2 flex-shrink-0">
         {showVotes && voteCounts[player.name] > 0 && (
           <Badge className="bg-green-500 text-white text-xs">
             {voteCounts[player.name]} votes
@@ -911,8 +954,17 @@ const WhosMostLikely = () => {
               <ArrowLeft className="mr-2 h-4 w-4" />
               Leave Room
             </Button>
-            <div className="text-white font-medium bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm text-center">
-              Room: {roomId}
+            <div className="flex items-center space-x-2">
+              <div className="text-white font-medium bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm text-center">
+                Room: {roomId}
+              </div>
+              <Button
+                onClick={copyRoomCode}
+                size="sm"
+                className="bg-white/20 hover:bg-white/30 border-white/30 text-white"
+              >
+                <Copy className="w-3 h-3" />
+              </Button>
             </div>
           </div>
 
@@ -936,10 +988,11 @@ const WhosMostLikely = () => {
                   <div className="mb-6">
                     <h3 className="text-lg font-bold text-white mb-2">Room Code: {roomId}</h3>
                     <Button 
-                      onClick={() => navigator.clipboard?.writeText(roomId)}
+                      onClick={copyRoomCode}
                       className="bg-white/20 hover:bg-white/30 border-white/30 text-sm"
                       size="sm"
                     >
+                      <Copy className="w-3 h-3 mr-1" />
                       Copy Code
                     </Button>
                   </div>
@@ -1045,13 +1098,22 @@ const WhosMostLikely = () => {
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Button 
-                    onClick={restartGame}
-                    className="flex-1 py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-14"
-                  >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Play Again
-                  </Button>
+                  {isHost ? (
+                    <Button 
+                      onClick={restartGame}
+                      className="flex-1 py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-14"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Play Again
+                    </Button>
+                  ) : (
+                    <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-3 text-center">
+                      <div className="flex items-center justify-center space-x-2">
+                        <Timer className="w-4 h-4 text-blue-400 animate-pulse" />
+                        <span className="text-blue-300 text-sm">Waiting for host to start new game...</span>
+                      </div>
+                    </div>
+                  )}
                   <Button 
                     onClick={leaveRoom}
                     className="flex-1 py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white h-14"
@@ -1118,7 +1180,7 @@ const WhosMostLikely = () => {
                     Voting Results
                   </h3>
                   <div className="space-y-2">
-                    {Object.entries(roundResults.voteCounts)
+                    {Object.entries(roundResults.voteCounts || {})
                       .sort(([,a], [,b]) => b - a)
                       .map(([player, count]) => (
                       <div key={player} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
