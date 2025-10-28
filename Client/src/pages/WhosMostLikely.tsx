@@ -1044,7 +1044,7 @@ const WhosMostLikely = () => {
               {!hasVoted ? (
                 <Button
                   onClick={submitVote}
-                  disabled={!selectedPlayer}
+                  
                   className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg"
                 >
                   <Target className="w-4 h-4 mr-2" />
