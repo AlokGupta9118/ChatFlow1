@@ -1,10 +1,10 @@
-// components/chat/ChatWindow.jsx - UPDATED WITH GAME-LEVEL STYLING
+// components/chat/ChatWindow.jsx - UPDATED WITH ADMIN/MEMBER DIFFERENTIATION
 import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Paperclip, Send, Info, X, Smile, Mic, Image, User, Eye, MoreVertical, Settings, Users } from "lucide-react";
+import { Paperclip, Send, Info, X, Smile, Mic, Image, User, Eye, MoreVertical, Settings, Users, Crown, Shield } from "lucide-react";
 import { getToken } from "@/utils/getToken";
 import { io } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
@@ -142,6 +142,30 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   // Check if user is admin/owner
   const isUserAdmin = () => {
     return userRole === 'admin' || userRole === 'owner';
+  };
+
+  // Get role badge color
+  const getRoleColor = (role) => {
+    switch (role) {
+      case "owner":
+        return "bg-gradient-to-r from-amber-500 to-orange-500 text-white";
+      case "admin":
+        return "bg-gradient-to-r from-blue-500 to-cyan-500 text-white";
+      default:
+        return "bg-gradient-to-r from-gray-600 to-gray-700 text-white";
+    }
+  };
+
+  // Get role icon
+  const getRoleIcon = (role) => {
+    switch (role) {
+      case "owner":
+        return <Crown className="w-3 h-3" />;
+      case "admin":
+        return <Shield className="w-3 h-3" />;
+      default:
+        return <Users className="w-3 h-3" />;
+    }
   };
 
   useEffect(() => {
@@ -292,14 +316,25 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                   </div>
                   <span>typing...</span>
                 </div>
-              ) : isGroup ? `${groupMembers.length} members` : "Online"}
+              ) : isGroup ? (
+                <div className="flex items-center gap-2">
+                  <span>{groupMembers.length} members</span>
+                  {userRole && (
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getRoleColor(userRole)}`}>
+                      {getRoleIcon(userRole)}
+                      <span className="capitalize">{userRole}</span>
+                    </span>
+                  )}
+                </div>
+              ) : "Online"}
             </p>
           </div>
         </div>
 
-        {/* Header Actions */}
+        {/* FIXED: Header Actions - Different icons based on user role */}
         <div className="flex items-center gap-2">
           {!isGroup ? (
+            // Private Chat - Show User Profile Icon
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -310,15 +345,116 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
               <User className="w-5 h-5 text-white" />
             </motion.button>
           ) : (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowAdminPanel(true)}
-              className="p-3 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 shadow-sm"
-              title="Group Info"
-            >
-              <Users className="w-5 h-5 text-white" />
-            </motion.button>
+            // Group Chat - Different icons based on user role
+            <div className="relative" ref={menuRef}>
+              {isUserAdmin() ? (
+                // ADMIN/OWNER: Show Settings icon with dropdown menu
+                <>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowMenu(!showMenu)}
+                    className="p-3 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 shadow-sm"
+                    title="Group Settings"
+                  >
+                    <Settings className="w-5 h-5 text-white" />
+                  </motion.button>
+                  
+                  {/* Admin Dropdown Menu */}
+                  <AnimatePresence>
+                    {showMenu && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                        className="absolute right-0 top-full mt-2 w-56 bg-gray-800/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-purple-500/30 py-2 z-50"
+                      >
+                        {/* Group Info */}
+                        <button
+                          onClick={() => {
+                            setShowAdminPanel(true);
+                            setShowMenu(false);
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm text-white hover:bg-purple-600/30 transition-colors flex items-center gap-3 border-b border-purple-500/20"
+                        >
+                          <Users className="w-4 h-4" />
+                          Group Info & Members
+                        </button>
+                        
+                        {/* Admin Actions Section */}
+                        <div className="px-3 py-2 text-xs font-semibold text-purple-300 uppercase tracking-wide border-b border-purple-500/20">
+                          Admin Actions
+                        </div>
+                        
+                        {/* Manage Members */}
+                        <button
+                          onClick={() => {
+                            setShowAdminPanel(true);
+                            setShowMenu(false);
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm text-white hover:bg-purple-600/30 transition-colors flex items-center gap-3"
+                        >
+                          <User className="w-4 h-4" />
+                          Manage Members
+                        </button>
+                        
+                        {/* Pending Requests */}
+                        {pendingRequests.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setShowAdminPanel(true);
+                              setShowMenu(false);
+                            }}
+                            className="w-full px-4 py-3 text-left text-sm text-white hover:bg-purple-600/30 transition-colors flex items-center gap-3"
+                          >
+                            <UserCheck className="w-4 h-4" />
+                            Pending Requests
+                            <span className="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                              {pendingRequests.length}
+                            </span>
+                          </button>
+                        )}
+                        
+                        {/* Group Settings */}
+                        <button
+                          onClick={() => {
+                            // Add your group settings action here
+                            setShowMenu(false);
+                            toast.success("Group settings feature coming soon!");
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm text-white hover:bg-purple-600/30 transition-colors flex items-center gap-3"
+                        >
+                          <Settings className="w-4 h-4" />
+                          Group Settings
+                        </button>
+                        
+                        {/* User Role Badge */}
+                        <div className="border-t border-purple-500/20 mt-2 pt-2 px-4">
+                          <div className="text-xs text-purple-300 flex items-center justify-between">
+                            <span>Your role:</span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getRoleColor(userRole)}`}>
+                              {getRoleIcon(userRole)}
+                              <span className="capitalize">{userRole}</span>
+                            </span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
+              ) : (
+                // REGULAR MEMBER: Show simple Group Info icon
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowAdminPanel(true)}
+                  className="p-3 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 shadow-sm"
+                  title="Group Info"
+                >
+                  <Users className="w-5 h-5 text-white" />
+                </motion.button>
+              )}
+            </div>
           )}
         </div>
       </div>

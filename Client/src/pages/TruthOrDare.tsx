@@ -17,6 +17,277 @@ import {
 
 const DEFAULT_SOCKET_URL = `${import.meta.env.VITE_API_URL}`;
 
+// Color system for user avatars and names
+const userColors = [
+  'from-purple-500 to-pink-500',
+  'from-blue-500 to-cyan-500',
+  'from-green-500 to-emerald-500',
+  'from-orange-500 to-red-500',
+  'from-indigo-500 to-purple-500',
+  'from-teal-500 to-blue-500',
+  'from-yellow-500 to-orange-500',
+  'from-pink-500 to-rose-500'
+];
+
+const getUserColor = (userId) => {
+  if (!userId) return userColors[0];
+  const index = userId.toString().charCodeAt(0) % userColors.length;
+  return userColors[index];
+};
+
+// Updated ChatInput component with game-level styling
+const ChatInput = ({ onSendMessage, disabled, onTyping, chatInput, setChatInput }) => {
+  const inputRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+
+  const handleSubmit = () => {
+    if (chatInput.trim() && !disabled) {
+      onSendMessage(chatInput);
+      setChatInput("");
+      
+      // Clear typing indicator when sending
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      onTyping(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  const handleChange = (e) => {
+    const value = e.target.value;
+    setChatInput(value);
+    
+    // Handle typing indicators
+    if (value.trim() && !disabled) {
+      // User is typing
+      onTyping(true);
+      
+      // Clear existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      
+      // Set new timeout to stop typing indicator after 1 second of inactivity
+      typingTimeoutRef.current = setTimeout(() => {
+        onTyping(false);
+        typingTimeoutRef.current = null;
+      }, 1000);
+    } else {
+      // Input is empty, stop typing indicator
+      onTyping(false);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div className="flex gap-3 p-4 bg-transparent safe-area-inset-bottom">
+      <Input
+        ref={inputRef}
+        value={chatInput}
+        onChange={handleChange}
+        onKeyPress={handleKeyPress}
+        placeholder={disabled ? "Connecting..." : "Type your message..."}
+        className="flex-1 bg-gray-700 border-2 border-purple-500/50 text-white placeholder-gray-400 min-h-[48px] text-sm rounded-xl focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 transition-all"
+        disabled={disabled}
+      />
+      <Button
+        onClick={handleSubmit}
+        disabled={!chatInput.trim() || disabled}
+        className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white flex-shrink-0 min-w-[60px] min-h-[48px] shadow-lg rounded-xl border-2 border-purple-400/30 transition-all transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+        size="sm"
+      >
+        <Send className="w-5 h-5" />
+      </Button>
+    </div>
+  );
+};
+
+// Updated ChatPanel component with game-level styling
+const ChatPanel = React.memo(({ 
+  chatMessages, 
+  playerName, 
+  typingUsers, 
+  onSendMessage,
+  isConnected,
+  onTyping,
+  chatInput,
+  setChatInput,
+  onClose
+}) => {
+  const chatContainerRef = useRef(null);
+
+  const formatChatTime = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  // Improved scroll to bottom function
+  const scrollToBottom = () => {
+    if (chatContainerRef.current) {
+      const container = chatContainerRef.current;
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatMessages]);
+
+  return (
+    <Card className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm shadow-2xl rounded-xl border-2 border-purple-500/30">
+      {/* Chat Header */}
+      <div className="p-4 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="relative">
+              <MessageCircle className="w-6 h-6 text-white" />
+              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+                isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'
+              }`} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">Game Chat</h3>
+              <p className="text-blue-100 text-xs">
+                {isConnected ? "Live with players" : "Connecting..."}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge className={`${
+              isConnected 
+                ? "bg-green-500 hover:bg-green-600 text-white" 
+                : "bg-red-500 hover:bg-red-600 text-white"
+            } shadow-lg`}>
+              {isConnected ? "🟢 Online" : "🔴 Offline"}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="md:hidden h-6 w-6 p-0 text-white hover:bg-white/20"
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          </div>
+        </div>
+        
+        {/* Typing indicators */}
+        {typingUsers.size > 0 && (
+          <div className="flex items-center mt-3 p-2 bg-white/10 rounded-lg border border-white/20">
+            <div className="flex space-x-1 mr-2">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span className="text-green-300 text-sm font-medium">
+              {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Chat Messages */}
+      <div 
+        ref={chatContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scroll-smooth bg-gradient-to-b from-gray-800/50 to-gray-900/50 custom-scrollbar"
+        style={{ 
+          WebkitOverflowScrolling: 'touch',
+          overflowY: 'auto'
+        }}
+      >
+        {chatMessages.length === 0 ? (
+          <div className="text-center text-gray-300 py-12">
+            <div className="bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+              <MessageCircle className="w-8 h-8 text-purple-300" />
+            </div>
+            <p className="text-lg font-semibold text-white mb-2">No messages yet</p>
+            <p className="text-purple-200 text-sm">Start the conversation!</p>
+          </div>
+        ) : (
+          chatMessages.map((message, index) => {
+            const isOwnMessage = message.sender === playerName;
+            const userColor = getUserColor(message.sender);
+            
+            return (
+              <div
+                key={message.id}
+                className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+              >
+                <div className={`max-w-[85%] rounded-2xl p-4 shadow-lg ${
+                  isOwnMessage
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md'
+                    : 'bg-gradient-to-r from-gray-700 to-gray-800 border border-gray-600 text-white rounded-bl-md'
+                }`}>
+                  {/* Sender name for others' messages */}
+                  {!isOwnMessage && (
+                    <div className="flex items-center space-x-2 mb-2">
+                      <div className={`w-6 h-6 rounded-full bg-gradient-to-r ${userColor} flex items-center justify-center text-xs font-bold text-white`}>
+                        {message.sender.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="font-bold text-sm text-gray-200">
+                        {message.sender}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Message content */}
+                  <div className="text-sm break-words leading-relaxed">
+                    {message.content}
+                  </div>
+                  
+                  {/* Message time */}
+                  <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mt-2`}>
+                    <div className={`text-xs ${
+                      isOwnMessage ? 'text-blue-200' : 'text-gray-400'
+                    }`}>
+                      {formatChatTime(message.timestamp)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Chat Input */}
+      <div className="border-t border-purple-500/30 bg-gradient-to-r from-gray-800 to-gray-900 rounded-b-xl">
+        <ChatInput 
+          onSendMessage={onSendMessage}
+          disabled={!isConnected}
+          onTyping={onTyping}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+        />
+      </div>
+    </Card>
+  );
+});
+
 export default function TruthOrDare({ currentUser }) {
   const params = useParams();
   const navigate = useNavigate();
@@ -62,7 +333,7 @@ export default function TruthOrDare({ currentUser }) {
   const [currentProof, setCurrentProof] = useState(null);
   const [truthCompletionText, setTruthCompletionText] = useState("");
 
-  // 🔥 CHAT STATE - FIXED: Better mobile handling
+  // 🔥 CHAT STATE - UPDATED: Using new ChatPanel component
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [showChat, setShowChat] = useState(false);
@@ -85,24 +356,65 @@ export default function TruthOrDare({ currentUser }) {
 
   promptsRef.current = prompts;
 
+  // Add CSS for custom scrollbar
+  useEffect(() => {
+    const styles = `
+      .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(168, 85, 247, 0.5) transparent;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+        border-radius: 10px;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: linear-gradient(to bottom, #8b5cf6, #3b82f6);
+        border-radius: 10px;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(to bottom, #7c3aed, #2563eb);
+      }
+
+      .safe-area-padding {
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      
+      .safe-area-inset-bottom {
+        margin-bottom: env(safe-area-inset-bottom);
+      }
+      
+      @media (max-width: 1024px) {
+        .safe-area-padding {
+          padding-left: max(1rem, env(safe-area-inset-left));
+          padding-right: max(1rem, env(safe-area-inset-right));
+        }
+      }
+    `;
+
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = styles;
+    document.head.appendChild(styleSheet);
+    
+    return () => {
+      document.head.removeChild(styleSheet);
+    };
+  }, []);
+
   // FIXED: Better mobile scrolling
   useEffect(() => {
     if (mainContainerRef.current) {
       mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [stage, selectedPlayer, chosenPrompt, showChat]);
-
-  // FIXED: Better chat scrolling for mobile
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      const scrollToBottom = () => {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-      };
-      
-      // Small delay to ensure DOM is updated
-      setTimeout(scrollToBottom, 100);
-    }
-  }, [chatMessages]);
 
   // NEW: Automatically set prompt type based on selected player's choice
   useEffect(() => {
@@ -513,14 +825,14 @@ export default function TruthOrDare({ currentUser }) {
     }
   }, [stage, selectedPlayer, truthDareChoice, chosenPrompt, spinning, roomId, localName, isHost]);
 
-  // 🔥 CHAT FUNCTIONS - IMPROVED MOBILE HANDLING
-  const sendChatMessage = () => {
-    if (!chatInput.trim() || !socket) return;
+  // 🔥 CHAT FUNCTIONS - UPDATED: Using new ChatPanel component
+  const sendChatMessage = (messageContent) => {
+    if (!messageContent.trim() || !socket) return;
 
     const message = {
       id: Date.now(),
       sender: localName,
-      content: chatInput.trim(),
+      content: messageContent.trim(),
       timestamp: new Date().toISOString(),
       type: "text"
     };
@@ -535,36 +847,9 @@ export default function TruthOrDare({ currentUser }) {
     }
   };
 
-  const handleChatInputChange = (e) => {
-    setChatInput(e.target.value);
-    
-    // Typing indicators
-    if (!typingTimeoutRef.current) {
-      socket.emit("typing", { roomId, isTyping: true });
-    }
-    
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("typing", { roomId, isTyping: false });
-      typingTimeoutRef.current = null;
-    }, 1000);
-  };
-
-  const handleChatKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
-  };
-
-  const formatChatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+  const handleTyping = (isTyping) => {
+    if (!socket) return;
+    socket.emit("typing", { roomId, isTyping });
   };
 
   // NEW: Manual reconnection function
@@ -978,7 +1263,7 @@ export default function TruthOrDare({ currentUser }) {
   return (
     <div className="h-screen w-full flex overflow-hidden bg-background">
       <div className="flex-1 overflow-y-auto" ref={mainContainerRef}>
-        <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-3 md:p-6 relative">
+        <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-3 md:p-6 relative safe-area-padding">
           {/* Reconnection Banner */}
           {isReconnecting && (
             <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 z-50">
@@ -1693,103 +1978,20 @@ export default function TruthOrDare({ currentUser }) {
                 )}
               </div>
 
-              {/* RIGHT COLUMN - CHAT - FIXED MOBILE RESPONSIVENESS */}
+              {/* RIGHT COLUMN - UPDATED CHAT PANEL */}
               {showChat && (
                 <div className="space-y-4 md:space-y-6">
-                  <Card className="h-[400px] md:h-[600px] flex flex-col bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0 overflow-hidden">
-                    <div className="p-3 md:p-4 border-b border-gray-200 bg-white/80">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-base md:text-lg font-semibold text-gray-900 flex items-center">
-                          <MessageCircle className="w-4 h-4 md:w-5 md:h-5 mr-2 text-blue-600" />
-                          Game Chat
-                        </h3>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowChat(false)}
-                          className="md:hidden h-6 w-6 p-0"
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                        <Badge variant="outline" className="text-xs hidden md:flex">
-                          {players.length} online
-                        </Badge>
-                      </div>
-                      
-                      {/* Typing indicators */}
-                      {typingUsers.size > 0 && (
-                        <div className="text-xs text-gray-500 mt-1 truncate">
-                          {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Chat Messages - FIXED SCROLLING */}
-                    <div 
-                      ref={chatContainerRef}
-                      className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 md:space-y-3 bg-gray-50/50"
-                      style={{ 
-                        WebkitOverflowScrolling: 'touch',
-                        overflowX: 'hidden'
-                      }}
-                    >
-                      {chatMessages.length === 0 ? (
-                        <div className="text-center text-gray-500 mt-8 md:mt-16">
-                          <MessageCircle className="w-8 h-8 md:w-12 md:h-12 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">No messages yet</p>
-                          <p className="text-xs">Start the conversation!</p>
-                        </div>
-                      ) : (
-                        chatMessages.map((message) => (
-                          <div
-                            key={message.id}
-                            className={`flex ${message.sender === localName ? 'justify-end' : 'justify-start'}`}
-                          >
-                            <div
-                              className={`max-w-[85%] md:max-w-[75%] rounded-2xl p-2 md:p-3 ${
-                                message.sender === localName
-                                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-md'
-                                  : 'bg-gray-100 text-gray-900 rounded-bl-md'
-                              }`}
-                            >
-                              {message.sender !== localName && (
-                                <div className="text-xs font-semibold mb-1 opacity-75 truncate">
-                                  {message.sender}
-                                </div>
-                              )}
-                              <div className="text-xs md:text-sm break-words whitespace-pre-wrap">{message.content}</div>
-                              <div className={`text-xs mt-1 ${
-                                message.sender === localName ? 'text-blue-100' : 'text-gray-500'
-                              }`}>
-                                {formatChatTime(message.timestamp)}
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    {/* Chat Input - FIXED MOBILE INPUT */}
-                    <div className="p-3 md:p-4 border-t border-gray-200 bg-white/80">
-                      <div className="flex gap-2">
-                        <Input
-                          value={chatInput}
-                          onChange={handleChatInputChange}
-                          onKeyPress={handleChatKeyPress}
-                          placeholder="Type a message..."
-                          className="flex-1 text-sm md:text-base min-h-[40px]"
-                        />
-                        <Button
-                          onClick={sendChatMessage}
-                          disabled={!chatInput.trim()}
-                          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white min-h-[40px] min-w-[40px] p-0 md:px-4"
-                        >
-                          <Send className="w-4 h-4" />
-                          <span className="hidden md:inline ml-1">Send</span>
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
+                  <ChatPanel 
+                    chatMessages={chatMessages}
+                    playerName={localName}
+                    typingUsers={typingUsers}
+                    onSendMessage={sendChatMessage}
+                    isConnected={socket?.connected}
+                    onTyping={handleTyping}
+                    chatInput={chatInput}
+                    setChatInput={setChatInput}
+                    onClose={() => setShowChat(false)}
+                  />
                 </div>
               )}
             </div>

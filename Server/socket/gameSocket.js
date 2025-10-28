@@ -1,4 +1,6 @@
 // socket/gameSocket.js
+import UserModel from "../models/User";
+
 export default function gameSocket(io) {
   const rooms = {}; // { roomId: { roomId, players: [], status, currentPlayer, currentPrompt, currentChoice, answers: {}, proofs: {}, scores: {}, playerStats: {}, roundNumber: 1 } }
   
@@ -22,6 +24,7 @@ export default function gameSocket(io) {
 
     io.to(room.roomId).emit("game-state-sync", gameState);
   }
+
 
   // ✅ Helper function to get random scenario - NEW
   function getRandomScenario(room) {
@@ -116,6 +119,15 @@ export default function gameSocket(io) {
       const messages = chatMessages.get(roomId) || [];
       socket.emit("chat-history", messages);
     };
+    socket.on("user-online", async (userId) => {
+      if (!userId) return;
+      try {
+        await User.findByIdAndUpdate(userId, { status: "online", lastSeen: new Date() });
+        console.log(`✅ ${userId} is now online`);
+      } catch (err) {
+        console.error("Error updating user to online:", err.message);
+      }
+    });
 
     // 🔥 NEW: Chat message handler
     socket.on("send-chat-message", ({ roomId, message }) => {
@@ -1117,11 +1129,33 @@ export default function gameSocket(io) {
       }
     });
 
+    socket.on("user-logout", async (userId) => {
+      if (!userId) return;
+      try {
+        await User.findByIdAndUpdate(userId, { status: "offline", lastSeen: new Date() });
+        console.log(`👋 ${userId} logged out`);
+      } catch (err) {
+        console.error("Error setting user offline on logout:", err.message);
+      }
+    });
+  });
+
     // ✅ Disconnect cleanup - ENHANCED with chat cleanup
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       for (const roomId in rooms) {
         const room = rooms[roomId];
         const disconnectedPlayer = room.players.find(p => p.socketId === socket.id);
+        
+         const userId = socket.userId;
+      if (userId) {
+        try {
+          await User.findByIdAndUpdate(userId, { status: "offline", lastSeen: new Date() });
+          console.log(`❌ ${userId} set to offline`);
+        } catch (err) {
+          console.error("Error setting user offline:", err.message);
+        }
+      }
+      
         
         if (disconnectedPlayer) {
           room.players = room.players.filter((p) => p.socketId !== socket.id);
@@ -1162,6 +1196,7 @@ export default function gameSocket(io) {
         }
       }
       console.log("❌ Disconnected:", socket.id);
+      
     });
   });
 }
