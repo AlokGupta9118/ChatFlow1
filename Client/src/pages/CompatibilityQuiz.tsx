@@ -122,7 +122,7 @@ export default function AdvancedCompatibilityGame() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Game states - FIXED: Initialize bothAnswers as empty object
+  // Game states
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [answers, setAnswers] = useState<any[]>([]);
@@ -169,7 +169,7 @@ export default function AdvancedCompatibilityGame() {
   const optionsContainerRef = useRef<HTMLDivElement>(null);
   const questionContainerRef = useRef<HTMLDivElement>(null);
 
-  // FIXED: Enhanced mobile detection and scroll handling
+  // FIXED: Enhanced mobile detection with proper viewport handling
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
@@ -178,9 +178,11 @@ export default function AdvancedCompatibilityGame() {
       if (mobile) {
         document.body.classList.add('mobile-device');
         document.body.style.overflowX = 'hidden';
+        document.documentElement.style.overflowX = 'hidden';
       } else {
         document.body.classList.remove('mobile-device');
         document.body.style.overflowX = 'auto';
+        document.documentElement.style.overflowX = 'auto';
       }
     };
 
@@ -191,6 +193,158 @@ export default function AdvancedCompatibilityGame() {
       window.removeEventListener('resize', checkMobile);
       document.body.classList.remove('mobile-device');
       document.body.style.overflowX = 'auto';
+      document.documentElement.style.overflowX = 'auto';
+    };
+  }, []);
+
+  // FIXED: Enhanced CSS injection for mobile optimizations
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes confetti-fall {
+        0% {
+          transform: translateY(-20px) rotate(0deg) scale(1);
+          opacity: 1;
+        }
+        100% {
+          transform: translateY(100vh) rotate(720deg) scale(0.5);
+          opacity: 0;
+        }
+      }
+      
+      /* Enhanced Mobile Optimizations */
+      @media (max-width: 768px) {
+        .mobile-device {
+          position: fixed;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+        }
+        
+        .mobile-scroll-container {
+          height: 100vh;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          scroll-behavior: smooth;
+          padding-bottom: 80px;
+        }
+        
+        .mobile-fixed-bottom {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: linear-gradient(transparent, var(--background));
+          padding: 20px 16px;
+          z-index: 40;
+        }
+        
+        .mobile-text-sm {
+          font-size: 0.875rem;
+        }
+        
+        .mobile-p-3 {
+          padding: 0.75rem;
+        }
+        
+        .mobile-space-y-2 > * + * {
+          margin-top: 0.5rem;
+        }
+        
+        /* Better touch targets for mobile */
+        button, [role="button"] {
+          min-height: 44px;
+          min-width: 44px;
+        }
+        
+        /* Improved input fields for mobile */
+        input, textarea {
+          font-size: 16px !important;
+          min-height: 44px;
+          border-radius: 8px;
+        }
+        
+        /* Enhanced option items for better touch */
+        .option-item {
+          min-height: 60px;
+          display: flex;
+          align-items: center;
+          padding: 12px 16px;
+          border-radius: 12px;
+          margin-bottom: 8px;
+        }
+        
+        /* Better text sizing for mobile */
+        .mobile-text-lg {
+          font-size: 1.125rem;
+        }
+        
+        .mobile-text-xl {
+          font-size: 1.25rem;
+        }
+        
+        /* Prevent horizontal scroll */
+        * {
+          max-width: 100vw;
+        }
+        
+        /* Smooth scrolling for all containers */
+        .scroll-container {
+          -webkit-overflow-scrolling: touch;
+          scroll-behavior: smooth;
+        }
+        
+        /* Input container fixes */
+        .input-container {
+          position: relative;
+          width: 100%;
+          margin-bottom: 16px;
+        }
+        
+        .input-container input {
+          width: 100%;
+          box-sizing: border-box;
+          border: 2px solid;
+          padding: 12px;
+        }
+        
+        /* Fix for iOS zoom on input focus */
+        @media screen and (-webkit-min-device-pixel-ratio:0) {
+          input, select, textarea {
+            font-size: 16px !important;
+          }
+        }
+      }
+      
+      /* Desktop enhancements */
+      @media (min-width: 769px) {
+        .scroll-container {
+          overflow-y: auto;
+        }
+      }
+      
+      /* Global input fixes */
+      input:focus {
+        transform: none !important;
+        outline: none;
+        ring: 2px;
+      }
+      
+      /* Smooth transitions for interactive elements */
+      button, [role="button"], .option-item {
+        transition: all 0.2s ease-in-out;
+      }
+      
+      /* Ensure proper input display */
+      .input-container input:focus {
+        border-color: hsl(262.1 83.3% 57.8%);
+        box-shadow: 0 0 0 2px hsl(262.1 83.3% 57.8% / 0.2);
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
     };
   }, []);
 
@@ -366,13 +520,9 @@ export default function AdvancedCompatibilityGame() {
     const handleShowResults = (data: any) => {
       console.log("Show results data received:", data);
       
-      // Ensure data is always an object
       const safeData = data || {};
-      
-      // FIXED: Ensure results is always an object, never null or undefined
       const results = safeData.results || safeData || {};
       
-      // Validate that results is actually an object
       if (typeof results !== 'object' || results === null) {
         console.error("Results is not an object, setting empty object:", results);
         setBothAnswers({});
@@ -724,11 +874,7 @@ export default function AdvancedCompatibilityGame() {
 
   // FIXED: Enhanced compatibility calculation with comprehensive null checks
   const calculateCompatibility = () => {
-    console.log("Calculating compatibility with bothAnswers:", bothAnswers);
-    
-    // FIXED: Comprehensive check for bothAnswers to prevent TypeError
     if (!bothAnswers || typeof bothAnswers !== 'object' || bothAnswers === null) {
-      console.error("bothAnswers is invalid, returning default:", bothAnswers);
       return { 
         score: 0, 
         breakdown: {}, 
@@ -739,7 +885,6 @@ export default function AdvancedCompatibilityGame() {
     }
 
     const allPlayers = Object.keys(bothAnswers);
-    console.log("Players found:", allPlayers);
     
     if (allPlayers.length < 2) {
       return { 
@@ -822,7 +967,7 @@ export default function AdvancedCompatibilityGame() {
     advancedAnalysis.energyCompatibility = adv1.energyLevel === adv2.energyLevel;
     advancedAnalysis.socialCompatibility = adv1.socialPreference === adv2.socialPreference;
 
-    const result = {
+    return {
       score: finalScore,
       breakdown: categoryScores,
       insights,
@@ -834,9 +979,6 @@ export default function AdvancedCompatibilityGame() {
         social: adv1.socialPreference === adv2.socialPreference ? "Social harmony" : "Different preferences"
       }
     };
-
-    console.log("Final compatibility result:", result);
-    return result;
   };
 
   const getCompatibilityMessage = (score: number) => {
@@ -857,31 +999,31 @@ export default function AdvancedCompatibilityGame() {
 
   // Enhanced Player Card Component
   const PlayerCard = ({ player, index }: { player: any, index: number }) => (
-    <div className={`flex items-center justify-between p-3 md:p-4 rounded-xl border transition-all ${
+    <div className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
       darkMode ? 'bg-slate-800/50 hover:bg-slate-700/50 border-slate-600' : 'bg-white/80 hover:bg-white border-gray-200'
     }`}>
-      <div className="flex items-center space-x-2 md:space-x-3">
-        <Avatar className={`w-8 h-8 md:w-12 md:h-12 border-2 ${index === 0 ? 'border-yellow-400' : 'border-blue-400'}`}>
-          <AvatarFallback className={`text-xs md:text-base ${index === 0 ? 'bg-gradient-to-br from-yellow-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-cyan-600'} text-white font-bold`}>
+      <div className="flex items-center space-x-2">
+        <Avatar className={`w-8 h-8 border-2 ${index === 0 ? 'border-yellow-400' : 'border-blue-400'}`}>
+          <AvatarFallback className={`text-xs ${index === 0 ? 'bg-gradient-to-br from-yellow-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-cyan-600'} text-white font-bold`}>
             {player.name?.charAt(0)?.toUpperCase() || "?"}
           </AvatarFallback>
         </Avatar>
-        <div className="flex items-center space-x-1 md:space-x-2">
-          <span className="font-bold text-sm md:text-lg">{player.name || "Unknown"}</span>
-          {index === 0 && <Crown className="w-4 h-4 md:w-5 md:h-5 text-yellow-400 animate-pulse" />}
+        <div className="flex items-center space-x-1">
+          <span className="font-bold text-sm">{player.name || "Unknown"}</span>
+          {index === 0 && <Crown className="w-4 h-4 text-yellow-400 animate-pulse" />}
         </div>
       </div>
       
-      <div className="flex items-center space-x-2 md:space-x-3">
+      <div className="flex items-center space-x-2">
         {playerProgress[player.name] !== undefined && (
           <div className="text-right">
-            <div className="text-xs md:text-sm font-bold">{playerProgress[player.name]}%</div>
-            <Progress value={playerProgress[player.name]} className={`w-16 md:w-24 h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`} />
+            <div className="text-xs font-bold">{playerProgress[player.name]}%</div>
+            <Progress value={playerProgress[player.name]} className={`w-16 h-1.5 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`} />
           </div>
         )}
         
         {playerReactions[player.name] && (
-          <div className={`px-2 py-0.5 md:px-3 md:py-1 rounded-full text-base md:text-lg animate-bounce ${
+          <div className={`px-2 py-0.5 rounded-full text-base animate-bounce ${
             darkMode ? 'bg-slate-600' : 'bg-gray-100'
           }`}>
             {playerReactions[player.name]}
@@ -893,32 +1035,32 @@ export default function AdvancedCompatibilityGame() {
 
   // Connection Status Indicator
   const ConnectionStatus = () => (
-    <div className={`fixed top-2 md:top-4 right-2 md:right-4 px-2 py-1 md:px-3 md:py-2 rounded-full text-xs md:text-sm font-semibold z-50 backdrop-blur-sm border ${
+    <div className={`fixed top-2 right-2 px-2 py-1 rounded-full text-xs font-semibold z-50 backdrop-blur-sm border ${
       connectionStatus === "connected" 
         ? `${darkMode ? 'bg-green-500/20 border-green-400/50' : 'bg-green-100 border-green-200'} text-green-700` 
         : `${darkMode ? 'bg-red-500/20 border-red-400/50' : 'bg-red-100 border-red-200'} text-red-700 animate-pulse`
     }`}>
       {connectionStatus === "connected" ? 
-        <><Wifi className="w-3 h-3 md:w-4 md:h-4 inline mr-1 md:mr-2" />Connected</> : 
-        <><WifiOff className="w-3 h-3 md:w-4 md:h-4 inline mr-1 md:mr-2" />Disconnected</>
+        <><Wifi className="w-3 h-3 inline mr-1" />Connected</> : 
+        <><WifiOff className="w-3 h-3 inline mr-1" />Disconnected</>
       }
     </div>
   );
 
   // Settings Panel Component
   const SettingsPanel = () => (
-    <Card className={`p-4 md:p-6 absolute top-12 md:top-16 right-2 md:right-4 w-72 md:w-80 backdrop-blur-sm border ${
+    <Card className={`p-4 absolute top-12 right-2 w-72 backdrop-blur-sm border ${
       darkMode ? 'bg-slate-800/90 border-slate-600' : 'bg-white/90 border-gray-200'
     } shadow-2xl z-40 transition-all duration-300`}>
-      <h3 className="text-base md:text-lg font-bold mb-3 md:mb-4 flex items-center">
-        <Settings className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+      <h3 className="text-base font-bold mb-3 flex items-center">
+        <Settings className="w-4 h-4 mr-2" />
         Game Settings
       </h3>
       
-      <div className="space-y-3 md:space-y-4">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <Label htmlFor="dark-mode" className="flex items-center text-sm md:text-base">
-            <Moon className="w-3 h-3 md:w-4 md:h-4 mr-2" />
+          <Label htmlFor="dark-mode" className="flex items-center text-sm">
+            <Moon className="w-3 h-3 mr-2" />
             Dark Mode
           </Label>
           <Switch
@@ -929,8 +1071,8 @@ export default function AdvancedCompatibilityGame() {
         </div>
         
         <div className="flex items-center justify-between">
-          <Label htmlFor="animations" className="flex items-center text-sm md:text-base">
-            <Sparkles className="w-3 h-3 md:w-4 md:h-4 mr-2" />
+          <Label htmlFor="animations" className="flex items-center text-sm">
+            <Sparkles className="w-3 h-3 mr-2" />
             Animations
           </Label>
           <Switch
@@ -941,8 +1083,8 @@ export default function AdvancedCompatibilityGame() {
         </div>
         
         <div className="flex items-center justify-between">
-          <Label htmlFor="sound" className="flex items-center text-sm md:text-base">
-            <Volume2 className="w-3 h-3 md:w-4 md:h-4 mr-2" />
+          <Label htmlFor="sound" className="flex items-center text-sm">
+            <Volume2 className="w-3 h-3 mr-2" />
             Sound Effects
           </Label>
           <Switch
@@ -952,10 +1094,10 @@ export default function AdvancedCompatibilityGame() {
           />
         </div>
         
-        <div className="pt-3 md:pt-4 border-t">
+        <div className="pt-3 border-t">
           <Button
             onClick={() => setShowAdvancedSettings(false)}
-            className="w-full text-sm md:text-base"
+            className="w-full text-sm"
             variant="outline"
           >
             Close Settings
@@ -970,7 +1112,6 @@ export default function AdvancedCompatibilityGame() {
     const compatibility = calculateCompatibility();
     const { score, breakdown, insights, advancedAnalysis, advancedFactors } = compatibility;
 
-    // FIXED: Check if we have valid results to display
     const hasValidResults = bothAnswers && 
                            typeof bothAnswers === 'object' && 
                            bothAnswers !== null && 
@@ -1005,7 +1146,7 @@ export default function AdvancedCompatibilityGame() {
     return (
       <div 
         ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
+        className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-300 overflow-hidden ${
           darkMode 
             ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
             : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
@@ -1013,30 +1154,27 @@ export default function AdvancedCompatibilityGame() {
       >
         <ConnectionStatus />
         
-        {/* Settings Button */}
-        <div className="absolute top-2 md:top-4 left-2 md:left-4">
+        <div className="absolute top-3 left-3 z-20">
           <Button
             variant="ghost"
             size={isMobile ? "sm" : "default"}
             onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
             className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
           >
-            <Settings className="w-4 h-4 md:w-5 md:h-5" />
+            <Settings className="w-4 h-4" />
           </Button>
         </div>
 
-        {/* Screenshot capture area */}
-        <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-6xl">
-          <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
+        <div ref={screenshotRef} className="w-full max-w-4xl mx-auto mobile-scroll-container">
+          <Card className={`p-4 backdrop-blur-sm border transition-all duration-300 ${
             darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
           }`}>
-            {/* Header with share button */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
               <div>
-                <h2 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
                   Compatibility Results
                 </h2>
-                <p className={`mt-1 md:mt-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                <p className={`mt-1 text-sm ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
                   {Object.keys(bothAnswers).join(" 💞 ")}
                 </p>
               </div>
@@ -1048,31 +1186,29 @@ export default function AdvancedCompatibilityGame() {
                 className={`${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`}
               >
                 {isCapturing ? (
-                  <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <Share2 className="w-4 h-4 md:w-5 md:h-5" />
+                  <Share2 className="w-4 h-4" />
                 )}
               </Button>
             </div>
 
-            {/* Main Score */}
-            <div className="text-center mb-6 md:mb-8">
-              <div className={`text-5xl md:text-7xl font-black mb-3 md:mb-4 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
+            <div className="text-center mb-6">
+              <div className={`text-5xl font-black mb-3 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
                 {score}%
               </div>
-              <h3 className="text-xl md:text-3xl font-bold mb-1 md:mb-2">{getCompatibilityMessage(score)}</h3>
+              <h3 className="text-xl font-bold mb-2">{getCompatibilityMessage(score)}</h3>
             </div>
 
-            {/* Advanced Factors Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
               {Object.entries(advancedFactors).map(([key, value]) => (
-                <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
+                <div key={key} className={`p-3 rounded-xl border text-center ${
                   darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
                 }`}>
-                  <div className="text-xs md:text-sm font-medium capitalize mb-1">
+                  <div className="text-xs font-medium capitalize mb-1">
                     {key.replace(/([A-Z])/g, ' $1').trim()}
                   </div>
-                  <div className={`text-base md:text-lg font-semibold ${
+                  <div className={`text-base font-semibold ${
                     typeof value === 'string' && value.includes('match') 
                       ? 'text-green-500' 
                       : typeof value === 'string' && value.includes('Different')
@@ -1085,64 +1221,61 @@ export default function AdvancedCompatibilityGame() {
               ))}
             </div>
 
-            {/* Category Breakdown */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
               {Object.entries(breakdown).map(([category, catScore]) => (
-                <div key={category} className={`p-3 md:p-4 rounded-xl border ${
+                <div key={category} className={`p-3 rounded-xl border ${
                   darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
                 }`}>
-                  <div className="text-xs md:text-sm mb-1 md:mb-2">{category}</div>
-                  <div className="text-xl md:text-2xl font-bold mb-1 md:mb-2">
+                  <div className="text-xs mb-1">{category}</div>
+                  <div className="text-xl font-bold mb-1">
                     {Math.round((catScore as number / questions.filter(q => q.category === category).length) * 100)}%
                   </div>
                   <Progress 
                     value={(catScore as number / questions.filter(q => q.category === category).length) * 100} 
-                    className={`h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
+                    className={`h-1.5 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
                   />
                 </div>
               ))}
             </div>
 
-            {/* Insights */}
-            <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
+            <div className={`p-4 rounded-xl border mb-6 ${
               darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
             }`}>
-              <h3 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center justify-center">
-                <Brain className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-500" />
+              <h3 className="text-lg font-bold mb-3 flex items-center justify-center">
+                <Brain className="w-4 h-4 mr-2 text-purple-500" />
                 Relationship Insights
               </h3>
-              <div className="space-y-2 md:space-y-3">
+              <div className="space-y-2">
                 {insights.map((insight, index) => (
-                  <div key={index} className={`flex items-start space-x-2 md:space-x-3 p-2 md:p-3 rounded-lg ${
+                  <div key={index} className={`flex items-start space-x-2 p-2 rounded-lg ${
                     darkMode ? 'bg-slate-600/50' : 'bg-white'
                   }`}>
-                    <Sparkles className="w-3 h-3 md:w-4 md:h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm md:text-base">{insight}</span>
+                    <Sparkles className="w-3 h-3 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm">{insight}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-3 md:gap-4 flex-col sm:flex-row">
+            <div className="flex gap-3 flex-col sm:flex-row">
               <Button 
                 onClick={() => window.location.reload()} 
                 size={isMobile ? "sm" : "lg"}
-                className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white"
+                className="flex-1 py-4 text-base bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white"
               >
-                <RotateCcw className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                <RotateCcw className="w-4 h-4 mr-2" />
                 Play Again
               </Button>
               <Button 
                 onClick={captureScreenshot}
                 disabled={isCapturing}
                 size={isMobile ? "sm" : "lg"}
-                className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
+                className="flex-1 py-4 text-base bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
               >
                 {isCapturing ? (
-                  <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
-                  <Share2 className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                  <Share2 className="w-4 h-4 mr-2" />
                 )}
                 {isCapturing ? 'Capturing...' : 'Share Results'}
               </Button>
@@ -1152,12 +1285,12 @@ export default function AdvancedCompatibilityGame() {
 
         {showAdvancedSettings && <SettingsPanel />}
         {showShareModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 md:p-4">
-            <Card className="max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-xl md:rounded-2xl border-0 max-h-[90vh] overflow-y-auto">
-              <div className="p-4 md:p-6">
-                <div className="flex justify-between items-center mb-3 md:mb-4">
-                  <h3 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center">
-                    <Share2 className="w-5 h-5 md:w-6 md:h-6 mr-2 text-blue-600" />
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-xl border-0 max-h-[90vh] overflow-y-auto">
+              <div className="p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                    <Share2 className="w-5 h-5 mr-2 text-blue-600" />
                     Share Your Results
                   </h3>
                   <Button
@@ -1169,33 +1302,33 @@ export default function AdvancedCompatibilityGame() {
                   </Button>
                 </div>
                 
-                <div className="space-y-3 md:space-y-4">
+                <div className="space-y-3">
                   {capturedImage && (
                     <div className="text-center">
                       <img
                         src={capturedImage}
                         alt="Compatibility Results"
-                        className="w-full h-auto max-h-48 md:max-h-96 object-contain border rounded-lg"
+                        className="w-full h-auto max-h-48 object-contain border rounded-lg"
                       />
                     </div>
                   )}
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <Button
                       onClick={() => capturedImage && downloadImage(capturedImage)}
                       size={isMobile ? "sm" : "default"}
-                      className="py-3 md:py-4"
+                      className="py-3"
                     >
-                      <Download className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                      <Download className="w-4 h-4 mr-2" />
                       Download
                     </Button>
                     
                     <Button
                       onClick={() => capturedImage && navigator.clipboard?.writeText(`Check out our compatibility score: ${score}%! 🎉`)}
                       size={isMobile ? "sm" : "default"}
-                      className="py-3 md:py-4"
+                      className="py-3"
                     >
-                      <Copy className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                      <Copy className="w-4 h-4 mr-2" />
                       Copy Text
                     </Button>
                   </div>
@@ -1212,7 +1345,7 @@ export default function AdvancedCompatibilityGame() {
   const WaitingScreen = () => (
     <div 
       ref={mainContainerRef}
-      className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
+      className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-300 overflow-hidden ${
         darkMode 
           ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
           : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
@@ -1220,94 +1353,87 @@ export default function AdvancedCompatibilityGame() {
     >
       <ConnectionStatus />
       
-      {/* Settings Button */}
-      <div className="absolute top-2 md:top-4 left-2 md:left-4">
+      <div className="absolute top-3 left-3 z-20">
         <Button
           variant="ghost"
           size={isMobile ? "sm" : "default"}
           onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
           className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
         >
-          <Settings className="w-4 h-4 md:w-5 md:h-5" />
+          <Settings className="w-4 h-4" />
         </Button>
       </div>
 
-      {/* Screenshot capture area */}
-      <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-2xl">
-        <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
+      <div ref={screenshotRef} className="w-full max-w-2xl mx-auto mobile-scroll-container">
+        <Card className={`p-4 backdrop-blur-sm border transition-all duration-300 ${
           darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
         }`}>
-          {/* Header */}
-          <div className="text-center mb-6 md:mb-8">
-            <div className="flex justify-center mb-4 md:mb-6">
+          <div className="text-center mb-6">
+            <div className="flex justify-center mb-4">
               <div className="relative">
-                <Heart className="w-16 h-16 md:w-20 md:h-20 text-pink-500 animate-pulse" />
-                <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-500 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-spin" />
+                <Heart className="w-16 h-16 text-pink-500 animate-pulse" />
+                <Sparkles className="w-6 h-6 text-yellow-500 absolute -top-1 -right-1 animate-spin" />
               </div>
             </div>
             
-            <h2 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+            <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
               Advanced Compatibility
             </h2>
-            <p className={`text-base md:text-lg ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-              Room Code: <span className="font-mono font-bold text-xl md:text-2xl">{roomId}</span>
+            <p className={`text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              Room Code: <span className="font-mono font-bold text-xl">{roomId}</span>
             </p>
           </div>
 
-          {/* Players */}
-          <div className="grid grid-cols-1 gap-3 md:gap-4 mb-6 md:mb-8">
+          <div className="grid grid-cols-1 gap-3 mb-6">
             {players.map((player, index) => (
               <PlayerCard key={player.name || index} player={player} index={index} />
             ))}
           </div>
 
-          {/* Status Message */}
           {players.length === 1 && (
-            <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 text-center ${
+            <div className={`p-3 rounded-xl border mb-4 text-center ${
               darkMode ? 'bg-yellow-500/20 border-yellow-400/30' : 'bg-yellow-100 border-yellow-200'
             }`}>
-              <div className="flex items-center justify-center space-x-1 md:space-x-2">
-                <Users className="w-4 h-4 md:w-5 md:h-5 text-yellow-600" />
-                <span className={`text-sm md:text-base ${darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
+              <div className="flex items-center justify-center space-x-1">
+                <Users className="w-4 h-4 text-yellow-600" />
+                <span className={`text-sm ${darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
                   Waiting for partner to join...
                 </span>
               </div>
             </div>
           )}
 
-          {/* Action Button */}
           {isHost ? (
             <Button 
               onClick={startGame} 
               disabled={players.length < 2}
-              size={isMobile ? "sm" : "lg"}
-              className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-2xl disabled:opacity-50"
+              size={isMobile ? "default" : "lg"}
+              className="w-full py-4 text-base bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-2xl disabled:opacity-50"
             >
-              <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+              <Sparkles className="w-4 h-4 mr-2" />
               Start Compatibility Test {players.length < 2 && `(Need ${2 - players.length} more)`}
             </Button>
           ) : (
-            <div className={`p-3 md:p-4 rounded-xl border text-center ${
+            <div className={`p-3 rounded-xl border text-center ${
               darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
             }`}>
-              <div className="flex items-center justify-center space-x-1 md:space-x-2">
-                <Clock className="w-4 h-4 md:w-5 md:h-5 text-blue-500 animate-pulse" />
-                <span className={`text-sm md:text-base ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+              <div className="flex items-center justify-center space-x-1">
+                <Clock className="w-4 h-4 text-blue-500 animate-pulse" />
+                <span className={`text-sm ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
                   Waiting for host to start the test...
                 </span>
               </div>
             </div>
           )}
 
-          {/* Quick Copy */}
-          <div className="mt-4 md:mt-6 text-center">
+          <div className="mt-4 text-center">
             <Button
               onClick={() => navigator.clipboard?.writeText(roomId)}
               variant="outline"
               size={isMobile ? "sm" : "default"}
               className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
             >
-              <LinkIcon className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+              <LinkIcon className="w-3 h-3 mr-1" />
               Copy Room Code
             </Button>
           </div>
@@ -1318,7 +1444,7 @@ export default function AdvancedCompatibilityGame() {
     </div>
   );
 
-  // FIXED: Enhanced Game Screen with mobile scroll handling
+  // FIXED: Enhanced Game Screen with better mobile scrolling
   const GameScreen = () => {
     const currentQ = questions[currentQuestion];
     
@@ -1330,10 +1456,26 @@ export default function AdvancedCompatibilityGame() {
       submitAnswer();
     };
 
+    // FIXED: Enhanced mobile scroll to options
+    const scrollToOptions = () => {
+      if (isMobile && optionsContainerRef.current) {
+        setTimeout(() => {
+          optionsContainerRef.current?.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+          });
+        }, 100);
+      }
+    };
+
+    useEffect(() => {
+      scrollToOptions();
+    }, [currentQuestion]);
+
     return (
       <div 
         ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
+        className={`min-h-screen flex flex-col items-center p-3 transition-colors duration-300 overflow-hidden ${
           darkMode 
             ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
             : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
@@ -1341,50 +1483,45 @@ export default function AdvancedCompatibilityGame() {
       >
         <ConnectionStatus />
         
-        {/* Settings Button */}
-        <div className="absolute top-2 md:top-4 left-2 md:left-4">
+        <div className="absolute top-2 left-2 z-20">
           <Button
             variant="ghost"
             size={isMobile ? "sm" : "default"}
             onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
             className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
           >
-            <Settings className="w-4 h-4 md:w-5 md:h-5" />
+            <Settings className="w-4 h-4" />
           </Button>
         </div>
 
-        {/* Screenshot capture area */}
-        <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
-          {/* Header */}
-          <div className="mb-4 md:mb-6">
-            <div className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 md:p-6 rounded-xl border backdrop-blur-sm gap-3 md:gap-0 ${
+        <div className="w-full max-w-4xl mx-auto mobile-scroll-container pb-20">
+          <div className="mb-4">
+            <div className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 rounded-xl border backdrop-blur-sm gap-3 ${
               darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
             }`}>
               <div>
-                <h2 className="text-lg md:text-xl font-bold">Room: {roomId}</h2>
-                <div className={`flex items-center space-x-1 md:space-x-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  <Users className="w-3 h-3 md:w-4 md:h-4" />
+                <h2 className="text-lg font-bold">Room: {roomId}</h2>
+                <div className={`flex items-center space-x-1 text-sm ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                  <Users className="w-3 h-3" />
                   <span>{players.map(p => p.name).join(" & ")}</span>
                 </div>
               </div>
               
-              <div className="flex items-center space-x-4 md:space-x-6 w-full md:w-auto justify-between md:justify-normal">
-                {/* Progress */}
+              <div className="flex items-center space-x-4 w-full md:w-auto justify-between md:justify-normal">
                 <div className="text-right md:text-left">
-                  <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Progress</div>
-                  <div className="text-base md:text-lg font-bold">
+                  <div className={`text-xs ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Progress</div>
+                  <div className="text-base font-bold">
                     {currentQuestion + 1} / {questions.length}
                   </div>
                 </div>
                 
-                {/* Timer */}
                 {timeLeft !== null && (
                   <div className="text-right md:text-left">
-                    <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Time Left</div>
-                    <div className={`text-base md:text-lg font-bold flex items-center ${
+                    <div className={`text-xs ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Time Left</div>
+                    <div className={`text-base font-bold flex items-center ${
                       timeLeft <= 10 ? 'text-red-500 animate-pulse' : ''
                     }`}>
-                      <Timer className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                      <Timer className="w-3 h-3 mr-1" />
                       {timeLeft}s
                     </div>
                   </div>
@@ -1393,98 +1530,93 @@ export default function AdvancedCompatibilityGame() {
             </div>
           </div>
 
-          {/* Player Progress */}
-          <div className="grid grid-cols-1 gap-3 md:gap-4 mb-4 md:mb-6">
+          <div className="grid grid-cols-1 gap-3 mb-4">
             {players.map((player) => (
-              <div key={player.name} className={`p-3 md:p-4 rounded-xl border backdrop-blur-sm ${
+              <div key={player.name} className={`p-3 rounded-xl border backdrop-blur-sm ${
                 darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
               }`}>
-                <div className="flex items-center justify-between mb-1 md:mb-2">
-                  <div className="flex items-center space-x-2 md:space-x-3">
-                    <Avatar className="w-8 h-8 md:w-10 md:h-10">
-                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-600 text-white text-xs md:text-base">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center space-x-2">
+                    <Avatar className="w-8 h-8">
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-600 text-white text-xs">
                         {player.name?.charAt(0)?.toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="font-semibold text-sm md:text-base">{player.name}</span>
+                    <span className="font-semibold text-sm">{player.name}</span>
                   </div>
-                  <div className="text-base md:text-lg font-bold">
+                  <div className="text-base font-bold">
                     {playerProgress[player.name] || 0}%
                   </div>
                 </div>
                 <Progress 
                   value={playerProgress[player.name] || 0} 
-                  className={`h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
+                  className={`h-1.5 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
                 />
               </div>
             ))}
           </div>
 
-          {/* Question Card */}
           <Card 
             ref={questionContainerRef}
-            className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 mb-4 md:mb-6 ${
+            className={`p-4 backdrop-blur-sm border transition-all duration-300 mb-4 ${
               darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
             }`}
           >
-            <div className="text-center mb-6 md:mb-8">
-              <Badge className={`mb-2 md:mb-3 text-xs md:text-sm ${darkMode ? 'bg-purple-500/20 text-purple-300 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>
+            <div className="text-center mb-6">
+              <Badge className={`mb-2 text-xs ${darkMode ? 'bg-purple-500/20 text-purple-300 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>
                 {currentQ.category} • Weight: {currentQ.weight}x
               </Badge>
-              <h3 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">
+              <h3 className="text-xl font-bold mb-3">
                 {currentQ.question}
               </h3>
-              <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              <p className={`text-sm ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
                 Question {currentQuestion + 1} of {questions.length}
               </p>
             </div>
 
-            {/* Options */}
             <div 
               ref={optionsContainerRef}
-              className="space-y-3 md:space-y-4 mb-6 md:mb-8"
+              className="space-y-3 mb-6"
             >
               {currentQ.options.map((option, index) => (
                 <div 
                   key={index} 
-                  className={`flex items-center space-x-3 md:space-x-4 p-3 md:p-4 rounded-xl border transition-all cursor-pointer ${
+                  className={`option-item rounded-xl border transition-all cursor-pointer ${
                     currentAnswer === option 
                       ? 'bg-purple-500/20 border-purple-400/50 scale-105 shadow-lg' 
                       : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50 border-slate-600' : 'bg-white hover:bg-gray-50 border-gray-200'} hover:scale-102`
                   }`}
                   onClick={() => handleOptionSelect(option)}
                 >
-                  <div className={`w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center ${
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                     currentAnswer === option 
                       ? 'border-purple-400 bg-purple-400' 
                       : 'border-gray-400'
                   }`}>
                     {currentAnswer === option && (
-                      <div className="w-2 h-2 md:w-3 md:h-3 rounded-full bg-white"></div>
+                      <div className="w-2 h-2 rounded-full bg-white"></div>
                     )}
                   </div>
-                  <Label className="flex-1 cursor-pointer font-semibold text-base md:text-lg">
+                  <Label className="flex-1 cursor-pointer font-semibold text-base ml-3">
                     {option}
                   </Label>
                 </div>
               ))}
             </div>
 
-            {/* Personality Insight */}
             {currentAnswer && currentQ.insights && (
-              <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 ${
+              <div className={`p-3 rounded-xl border mb-4 ${
                 darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
               }`}>
                 <div className="flex items-center space-x-2">
-                  <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
-                  <span className="font-medium text-sm md:text-base">
+                  <Sparkles className="w-4 h-4 text-blue-500" />
+                  <span className="font-medium text-sm">
                     This suggests: {currentQ.insights[currentAnswer]}
                   </span>
                 </div>
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="flex justify-between items-center">
               <Button
                 variant="outline"
@@ -1498,22 +1630,22 @@ export default function AdvancedCompatibilityGame() {
               <Button
                 onClick={handleSubmit}
                 disabled={!currentAnswer || isSubmitting}
-                size={isMobile ? "sm" : "default"}
-                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 md:px-8 py-2 md:py-3 text-base md:text-lg disabled:opacity-50 transition-all"
+                size={isMobile ? "default" : "default"}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 py-2 text-base disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2 animate-spin" />
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Submitting...
                   </>
                 ) : currentQuestion === questions.length - 1 ? (
                   <>
-                    <CheckCircle className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
+                    <CheckCircle className="w-4 h-4 mr-2" />
                     Finish Test
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
+                    <Sparkles className="w-4 h-4 mr-2" />
                     Next Question
                   </>
                 )}
@@ -1521,15 +1653,14 @@ export default function AdvancedCompatibilityGame() {
             </div>
           </Card>
 
-          {/* Quick Reactions */}
-          <div className="flex justify-center space-x-1 md:space-x-2">
+          <div className="flex justify-center space-x-2">
             {['❤️', '😂', '😮', '👏', '🎉'].map(reaction => (
               <Button
                 key={reaction}
                 variant="outline"
                 size={isMobile ? "sm" : "default"}
                 onClick={() => sendReaction(reaction)}
-                className={`text-base md:text-lg h-10 w-10 md:h-12 md:w-12 ${
+                className={`text-base h-10 w-10 ${
                   darkMode ? 'bg-slate-700 border-slate-600 hover:bg-slate-600' : 'bg-white border-gray-200 hover:bg-gray-50'
                 }`}
               >
@@ -1537,36 +1668,51 @@ export default function AdvancedCompatibilityGame() {
               </Button>
             ))}
           </div>
-
-          {/* Mobile Scroll Helper */}
-          {isMobile && (
-            <div className="fixed bottom-4 right-4 z-30">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const submitButton = document.querySelector('button[type="button"]');
-                  submitButton?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }}
-                className="rounded-full bg-black/50 text-white border-white/20 backdrop-blur-sm"
-              >
-                <ArrowDown className="w-4 h-4" />
-              </Button>
-            </div>
-          )}
         </div>
+
+        {isMobile && (
+          <div className="fixed bottom-4 right-4 z-30">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const submitButton = document.querySelector('button[type="button"]');
+                submitButton?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="rounded-full bg-black/50 text-white border-white/20 backdrop-blur-sm"
+            >
+              <ArrowDown className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
 
         {showAdvancedSettings && <SettingsPanel />}
       </div>
     );
   };
 
-  // Join/Create Screen
+  // FIXED: Enhanced Join/Create Screen with proper input handling
   const JoinCreateScreen = () => {
+    const handleNameInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+      if (isMobile) {
+        setTimeout(() => {
+          e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+    };
+
+    const handleRoomInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+      if (isMobile) {
+        setTimeout(() => {
+          e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+    };
+
     return (
       <div 
         ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
+        className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-300 overflow-hidden ${
           darkMode 
             ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
             : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
@@ -1574,249 +1720,153 @@ export default function AdvancedCompatibilityGame() {
       >
         <ConnectionStatus />
         
-        {/* Settings Button */}
-        <div className="absolute top-2 md:top-4 left-2 md:left-4">
+        <div className="absolute top-3 left-3 z-20">
           <Button
             variant="ghost"
             size={isMobile ? "sm" : "default"}
             onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
             className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
           >
-            <Settings className="w-4 h-4 md:w-5 md:h-5" />
+            <Settings className="w-4 h-4" />
           </Button>
         </div>
 
-        <Card className={`p-4 md:p-8 max-w-md w-full backdrop-blur-sm border transition-all duration-300 ${
-          darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-        }`}>
-          <div className="text-center mb-6 md:mb-8">
-            <div className="flex justify-center mb-4 md:mb-6">
-              <div className="relative">
-                <Heart className="w-12 h-12 md:w-16 md:h-16 text-pink-500" />
-                <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-500 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-spin" />
+        <div className="w-full max-w-md mx-auto mobile-scroll-container">
+          <Card className={`p-4 backdrop-blur-sm border transition-all duration-300 ${
+            darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+          }`}>
+            <div className="text-center mb-6">
+              <div className="flex justify-center mb-4">
+                <div className="relative">
+                  <Heart className="w-12 h-12 text-pink-500" />
+                  <Sparkles className="w-5 h-5 text-yellow-500 absolute -top-1 -right-1 animate-spin" />
+                </div>
+              </div>
+              
+              <h1 className="text-2xl font-bold mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                Advanced Compatibility
+              </h1>
+              <p className={`text-sm ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                Discover your deep connection with someone special
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div className="input-container">
+                <Label htmlFor="playerName" className="font-medium mb-2 block text-sm">
+                  Your Name
+                </Label>
+                <Input
+                  ref={nameInputRef}
+                  id="playerName"
+                  placeholder="Enter your name"
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  onFocus={handleNameInputFocus}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && playerName.trim() && !roomId.trim()) {
+                      createRoom();
+                    } else if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
+                      joinRoom();
+                    }
+                  }}
+                  className={`text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'} h-12`}
+                  autoComplete="name"
+                />
+              </div>
+              
+              <div className="input-container">
+                <Label htmlFor="roomId" className="font-medium mb-2 block text-sm">
+                  Room Code (optional)
+                </Label>
+                <Input
+                  ref={roomInputRef}
+                  id="roomId"
+                  placeholder="Enter room code to join"
+                  value={roomId}
+                  onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                  onFocus={handleRoomInputFocus}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
+                      joinRoom();
+                    }
+                  }}
+                  className={`text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'} h-12`}
+                  autoComplete="off"
+                />
               </div>
             </div>
-            
-            <h1 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-              Advanced Compatibility
-            </h1>
-            <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-              Discover your deep connection with someone special
-            </p>
-          </div>
 
-          <div className="space-y-3 md:space-y-4 mb-4 md:mb-6">
-            <div>
-              <Label htmlFor="playerName" className="font-medium mb-1 md:mb-2 block text-sm md:text-base">
-                Your Name
-              </Label>
-              <Input
-                ref={nameInputRef}
-                id="playerName"
-                placeholder="Enter your name"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && playerName.trim() && !roomId.trim()) {
-                    createRoom();
-                  } else if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
-                    joinRoom();
-                  }
-                }}
-                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
-                autoComplete="name"
-                autoFocus
-              />
+            <div className="space-y-3">
+              <Button
+                onClick={createRoom}
+                disabled={!playerName.trim()}
+                size={isMobile ? "default" : "lg"}
+                className="w-full h-12 text-base bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50"
+              >
+                <Crown className="w-4 h-4 mr-2" />
+                Create New Room
+              </Button>
+
+              <Button
+                onClick={joinRoom}
+                disabled={!playerName.trim() || !roomId.trim()}
+                size={isMobile ? "default" : "lg"}
+                className="w-full h-12 text-base bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white disabled:opacity-50"
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Join Existing Room
+              </Button>
             </div>
-            
-            <div>
-              <Label htmlFor="roomId" className="font-medium mb-1 md:mb-2 block text-sm md:text-base">
-                Room Code (optional)
-              </Label>
-              <Input
-                ref={roomInputRef}
-                id="roomId"
-                placeholder="Enter room code to join"
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-               
-                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
-                autoComplete="off"
-              />
-            </div>
-          </div>
 
-          <div className="space-y-2 md:space-y-3">
-            <Button
-              onClick={createRoom}
-              disabled={!playerName.trim()}
-              size={isMobile ? "sm" : "lg"}
-              className="w-full py-3 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
-            >
-              <Crown className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
-              Create New Room
-            </Button>
-
-            <Button
-              onClick={joinRoom}
-              disabled={!playerName.trim() || !roomId.trim()}
-              size={isMobile ? "sm" : "lg"}
-              className="w-full py-3 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white disabled:opacity-50 transition-all"
-            >
-              <Users className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
-              Join Existing Room
-            </Button>
-          </div>
-
-          <div className={`mt-4 md:mt-6 p-3 md:p-4 rounded-lg border ${
-            darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-          }`}>
-            <h4 className="font-semibold mb-1 md:mb-2 flex items-center justify-center text-sm md:text-base">
-              <Sparkles className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2 text-yellow-500" />
-              Advanced Features
-            </h4>
-            <ul className="text-xs md:text-sm space-y-0.5 md:space-y-1 text-left">
-              <li>• Personality-based matching algorithm</li>
-              <li>• Advanced compatibility factors</li>
-              <li>• Real-time progress tracking</li>
-              <li>• Interactive results with insights</li>
-              <li>• Dark/Light mode support</li>
-              <li>• Mobile & Desktop optimized</li>
-            </ul>
-          </div>
-
-          {/* Device Indicator */}
-          <div className="mt-3 text-center">
-            <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
-              darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
+            <div className={`mt-6 p-3 rounded-lg border ${
+              darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
             }`}>
-              {isMobile ? (
-                <>
-                  <Smartphone className="w-3 h-3" />
-                  <span>Mobile Mode</span>
-                </>
-              ) : (
-                <>
-                  <Monitor className="w-3 h-3" />
-                  <span>Desktop Mode</span>
-                </>
-              )}
+              <h4 className="font-semibold mb-2 flex items-center justify-center text-sm">
+                <Sparkles className="w-3 h-3 mr-2 text-yellow-500" />
+                Advanced Features
+              </h4>
+              <ul className="text-xs space-y-1 text-left">
+                <li>• Personality-based matching algorithm</li>
+                <li>• Advanced compatibility factors</li>
+                <li>• Real-time progress tracking</li>
+                <li>• Interactive results with insights</li>
+                <li>• Dark/Light mode support</li>
+                <li>• Mobile & Desktop optimized</li>
+              </ul>
             </div>
-          </div>
-        </Card>
+
+            <div className="mt-4 text-center">
+              <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
+                darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
+              }`}>
+                {isMobile ? (
+                  <>
+                    <Smartphone className="w-3 h-3" />
+                    <span>Mobile Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <Monitor className="w-3 h-3" />
+                    <span>Desktop Mode</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
 
         {showAdvancedSettings && <SettingsPanel />}
       </div>
     );
   };
 
-  // Add enhanced CSS for mobile optimizations
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes confetti-fall {
-        0% {
-          transform: translateY(-20px) rotate(0deg) scale(1);
-          opacity: 1;
-        }
-        100% {
-          transform: translateY(100vh) rotate(720deg) scale(0.5);
-          opacity: 0;
-        }
-      }
-      
-      /* Enhanced Mobile Optimizations */
-      @media (max-width: 768px) {
-        .mobile-text-sm {
-          font-size: 0.875rem;
-        }
-        .mobile-p-3 {
-          padding: 0.75rem;
-        }
-        .mobile-space-y-2 > * + * {
-          margin-top: 0.5rem;
-        }
-        
-        /* Prevent horizontal scroll and enable smooth vertical scroll */
-        body {
-          overflow-x: hidden;
-          -webkit-overflow-scrolling: touch;
-          height: 100%;
-        }
-        
-        html {
-          height: 100%;
-          overflow: hidden;
-        }
-        
-        /* Better touch targets for mobile */
-        button, [role="button"] {
-          min-height: 44px;
-          min-width: 44px;
-        }
-        
-        /* Improved scrolling for game screens */
-        .game-container {
-          height: 100vh;
-          overflow-y: auto;
-          -webkit-overflow-scrolling: touch;
-        }
-        
-        /* Ensure options are easily tappable */
-        .option-item {
-          min-height: 60px;
-          display: flex;
-          align-items: center;
-        }
-        
-        /* Better text sizing for mobile */
-        .mobile-text-lg {
-          font-size: 1.125rem;
-        }
-        
-        .mobile-text-xl {
-          font-size: 1.25rem;
-        }
-        
-        /* Prevent zoom on input focus */
-        input, select, textarea {
-          font-size: 16px;
-        }
-      }
-      
-      /* Desktop enhancements */
-      @media (min-width: 769px) {
-        .game-container {
-          min-height: 100vh;
-          overflow-y: auto;
-        }
-      }
-      
-      /* Smooth transitions for all interactive elements */
-      * {
-        transition: all 0.2s ease-in-out;
-      }
-    `;
-    document.head.appendChild(style);
-
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
-
-  // Enhanced cleanup on unmount
+  // Enhanced cleanup
   useEffect(() => {
     return () => {
       if (submitTimeoutRef.current) {
         clearTimeout(submitTimeoutRef.current);
       }
-      
-      const confettiElements = document.querySelectorAll('div[style*="confetti-fall"]');
-      confettiElements.forEach(el => {
-        if (document.body.contains(el)) {
-          document.body.removeChild(el);
-        }
-      });
     };
   }, []);
 
