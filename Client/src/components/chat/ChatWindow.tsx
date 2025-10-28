@@ -1,4 +1,4 @@
-// components/chat/ChatWindow.jsx - FIXED ADMIN CONTROLS
+// components/chat/ChatWindow.jsx - FIXED WITH DEBUGGING
 import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -9,7 +9,7 @@ import { getToken } from "@/utils/getToken";
 import { io } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 import GroupChatAdminPanel from "@/components/chat/GroupChatAdminPanel";
-import { toast } from "sonner"; // Make sure you have toast notifications set up
+import { toast } from "sonner";
 
 const socket = io(import.meta.env.VITE_API_URL);
 
@@ -32,6 +32,8 @@ const getUserColor = (userId) => {
 };
 
 const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupInfo }) => {
+  console.log("ChatWindow Props:", { selectedChat, isGroup, currentUser }); // DEBUG
+
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [typing, setTyping] = useState(false);
@@ -44,7 +46,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [userRole, setUserRole] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
   const [showMenu, setShowMenu] = useState(false);
-  const [pendingRequests, setPendingRequests] = useState([]); // Added missing state
+  const [pendingRequests, setPendingRequests] = useState([]);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const menuRef = useRef(null);
@@ -113,9 +115,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       if (currentUserMember) {
         setUserRole(currentUserMember.role);
         setCanSendMessage(true);
+        console.log("User role in group:", currentUserMember.role); // DEBUG
       } else {
         setUserRole(null);
         setCanSendMessage(false);
+        console.log("User not found in group members"); // DEBUG
       }
 
     } catch (err) {
@@ -162,7 +166,9 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
   // Check if user is admin/owner
   const isUserAdmin = () => {
-    return userRole === 'admin' || userRole === 'owner';
+    const isAdmin = userRole === 'admin' || userRole === 'owner';
+    console.log("isUserAdmin check:", { userRole, isAdmin }); // DEBUG
+    return isAdmin;
   };
 
   // Get role badge color
@@ -190,13 +196,14 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   };
 
   useEffect(() => {
-    if (isGroup) {
+    console.log("useEffect triggered - isGroup:", isGroup, "selectedChat:", selectedChat); // DEBUG
+    if (isGroup && selectedChat) {
       fetchGroupMembers();
       if (isUserAdmin()) {
         fetchPendingRequests();
       }
     }
-  }, [selectedChat?._id, isGroup, userId, userRole]);
+  }, [selectedChat?._id, isGroup, userId]);
 
   useEffect(() => {
     if (!selectedChat?._id) return;
@@ -377,7 +384,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowMenu(!showMenu)}
+                    onClick={() => {
+                      console.log("Settings button clicked"); // DEBUG
+                      setShowMenu(!showMenu);
+                    }}
                     className="p-3 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 shadow-sm"
                     title="Group Settings"
                   >
@@ -396,6 +406,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                         {/* Group Info */}
                         <button
                           onClick={() => {
+                            console.log("Group Info clicked"); // DEBUG
                             setShowAdminPanel(true);
                             setShowMenu(false);
                           }}
@@ -470,7 +481,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowAdminPanel(true)}
+                  onClick={() => {
+                    console.log("Group Info button clicked"); // DEBUG
+                    setShowAdminPanel(true);
+                  }}
                   className="p-3 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 shadow-sm"
                   title="Group Info"
                 >
@@ -482,13 +496,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         </div>
       </div>
 
-      {/* Rest of your ChatWindow component remains the same... */}
       {/* Messages Area */}
       <div 
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-gray-800/50 to-gray-900/50 min-h-0 custom-scrollbar"
       >
-        {/* Your existing messages rendering code... */}
         <AnimatePresence>
           {messages.map((msg, idx) => {
             const senderId = msg.sender?._id || msg.senderId;
