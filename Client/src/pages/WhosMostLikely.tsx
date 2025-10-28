@@ -11,77 +11,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { 
   ArrowLeft, Users, Crown, Target, Timer, Sparkles, 
   Volume2, VolumeX, Gamepad2, RefreshCw, MessageCircle, Send,
-  ChevronDown, ChevronUp, Smartphone, Monitor, Copy
+  ChevronDown, ChevronUp
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const socket = io(import.meta.env.VITE_API_URL, {
   transports: ['websocket', 'polling'],
-  timeout: 10000,
-  reconnection: true,
-  reconnectionAttempts: 5,
-  reconnectionDelay: 1000
+  timeout: 10000
 });
-
-// Local storage keys for persistence
-const STORAGE_KEYS = {
-  PLAYER_DATA: 'mostlikely_player_data',
-  ROOM_DATA: 'mostlikely_room_data',
-  GAME_STATE: 'mostlikely_game_state'
-};
-
-// Device detection hook
-const useDeviceDetection = () => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkDevice = () => {
-      const mobile = window.innerWidth <= 768;
-      setIsMobile(mobile);
-    };
-
-    checkDevice();
-    window.addEventListener('resize', checkDevice);
-    
-    return () => window.removeEventListener('resize', checkDevice);
-  }, []);
-
-  return isMobile;
-};
-
-// Persistence hooks
-const useLocalStorage = (key, initialValue) => {
-  const [storedValue, setStoredValue] = useState(() => {
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      console.log(`Error reading localStorage key "${key}":`, error);
-      return initialValue;
-    }
-  });
-
-  const setValue = (value) => {
-    try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      setStoredValue(valueToStore);
-      window.localStorage.setItem(key, JSON.stringify(valueToStore));
-    } catch (error) {
-      console.log(`Error setting localStorage key "${key}":`, error);
-    }
-  };
-
-  const removeValue = () => {
-    try {
-      window.localStorage.removeItem(key);
-      setStoredValue(initialValue);
-    } catch (error) {
-      console.log(`Error removing localStorage key "${key}":`, error);
-    }
-  };
-
-  return [storedValue, setValue, removeValue];
-};
 
 // ChatInput component
 const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
@@ -94,6 +31,7 @@ const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
       onSendMessage(inputValue);
       setInputValue("");
       
+      // Clear typing indicator when sending
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
@@ -113,18 +51,23 @@ const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
     const value = e.target.value;
     setInputValue(value);
     
+    // Handle typing indicators
     if (value.trim() && !disabled) {
+      // User is typing
       onTyping(true);
       
+      // Clear existing timeout
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
       
+      // Set new timeout to stop typing indicator after 1 second of inactivity
       typingTimeoutRef.current = setTimeout(() => {
         onTyping(false);
         typingTimeoutRef.current = null;
       }, 1000);
     } else {
+      // Input is empty, stop typing indicator
       onTyping(false);
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -133,6 +76,7 @@ const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
     }
   }, [onTyping, disabled]);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) {
@@ -182,6 +126,7 @@ const ChatPanel = React.memo(({
     });
   };
 
+  // Improved scroll to bottom function
   const scrollToBottom = useCallback(() => {
     if (chatContainerRef.current) {
       const container = chatContainerRef.current;
@@ -208,6 +153,7 @@ const ChatPanel = React.memo(({
           </Badge>
         </div>
         
+        {/* Typing indicators */}
         {typingUsers.size > 0 && (
           <div className="text-xs text-gray-500 mt-1 truncate">
             {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
@@ -271,87 +217,37 @@ const ChatPanel = React.memo(({
 });
 
 const WhosMostLikely = () => {
-  const isMobile = useDeviceDetection();
-  
-  // Persistent states
-  const [savedPlayerData, setSavedPlayerData, removeSavedPlayerData] = useLocalStorage(STORAGE_KEYS.PLAYER_DATA, null);
-  const [savedRoomData, setSavedRoomData, removeSavedRoomData] = useLocalStorage(STORAGE_KEYS.ROOM_DATA, null);
-  const [savedGameState, setSavedGameState, removeSavedGameState] = useLocalStorage(STORAGE_KEYS.GAME_STATE, null);
-
   // Game states
-  const [roomId, setRoomId] = useState(savedRoomData?.roomId || "");
-  const [playerName, setPlayerName] = useState(savedPlayerData?.name || "");
-  const [isHost, setIsHost] = useState(savedRoomData?.isHost || false);
-  const [joined, setJoined] = useState(savedRoomData?.joined || false);
-  const [players, setPlayers] = useState(savedGameState?.players || []);
-  const [gameStarted, setGameStarted] = useState(savedGameState?.gameStarted || false);
-  const [gameFinished, setGameFinished] = useState(savedGameState?.gameFinished || false);
+  const [roomId, setRoomId] = useState("");
+  const [playerName, setPlayerName] = useState("");
+  const [isHost, setIsHost] = useState(false);
+  const [joined, setJoined] = useState(false);
+  const [players, setPlayers] = useState([]);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [gameFinished, setGameFinished] = useState(false);
   
   // Round states
-  const [currentScenario, setCurrentScenario] = useState(savedGameState?.currentScenario || "");
-  const [currentRound, setCurrentRound] = useState(savedGameState?.currentRound || 1);
-  const [totalRounds, setTotalRounds] = useState(savedGameState?.totalRounds || 10);
-  const [hasVoted, setHasVoted] = useState(savedGameState?.hasVoted || false);
-  const [votes, setVotes] = useState(savedGameState?.votes || {});
-  const [roundResults, setRoundResults] = useState(savedGameState?.roundResults || null);
-  const [finalResults, setFinalResults] = useState(savedGameState?.finalResults || null);
+  const [currentScenario, setCurrentScenario] = useState("");
+  const [currentRound, setCurrentRound] = useState(1);
+  const [totalRounds, setTotalRounds] = useState(10);
+  const [hasVoted, setHasVoted] = useState(false);
+  const [votes, setVotes] = useState({});
+  const [roundResults, setRoundResults] = useState(null);
+  const [finalResults, setFinalResults] = useState(null);
   
   // UI states
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState("connected");
-  const [voteCount, setVoteCount] = useState(savedGameState?.voteCount || 0);
-  const [selectedPlayer, setSelectedPlayer] = useState(savedGameState?.selectedPlayer || "");
+  const [voteCount, setVoteCount] = useState(0);
+  const [selectedPlayer, setSelectedPlayer] = useState("");
 
   // Chat states
-  const [chatMessages, setChatMessages] = useState(savedGameState?.chatMessages || []);
+  const [chatMessages, setChatMessages] = useState([]);
   const [showChat, setShowChat] = useState(false);
   const [typingUsers, setTypingUsers] = useState(new Set());
 
   const audioRef = useRef(null);
   const mainContainerRef = useRef(null);
-  const reconnectAttempted = useRef(false);
-
-  // Save game state to localStorage whenever it changes
-  useEffect(() => {
-    const gameState = {
-      players,
-      gameStarted,
-      gameFinished,
-      currentScenario,
-      currentRound,
-      totalRounds,
-      hasVoted,
-      votes,
-      roundResults,
-      finalResults,
-      voteCount,
-      selectedPlayer,
-      chatMessages
-    };
-    setSavedGameState(gameState);
-  }, [
-    players, gameStarted, gameFinished, currentScenario, currentRound,
-    totalRounds, hasVoted, votes, roundResults, finalResults, voteCount,
-    selectedPlayer, chatMessages, setSavedGameState
-  ]);
-
-  // Save room data
-  useEffect(() => {
-    const roomData = {
-      roomId,
-      isHost,
-      joined
-    };
-    setSavedRoomData(roomData);
-  }, [roomId, isHost, joined, setSavedRoomData]);
-
-  // Save player data
-  useEffect(() => {
-    const playerData = {
-      name: playerName
-    };
-    setSavedPlayerData(playerData);
-  }, [playerName, setSavedPlayerData]);
 
   // Fixed scrolling implementation
   useEffect(() => {
@@ -376,26 +272,6 @@ const WhosMostLikely = () => {
       mainContainerRef.current.scrollTop = 0;
     }
   }, [gameStarted, gameFinished, roundResults, currentRound]);
-
-  // Auto-rejoin functionality
-  useEffect(() => {
-    if (savedRoomData?.joined && savedPlayerData?.name && !reconnectAttempted.current) {
-      reconnectAttempted.current = true;
-      setTimeout(() => {
-        attemptRejoin();
-      }, 1000);
-    }
-  }, [savedRoomData, savedPlayerData]);
-
-  const attemptRejoin = () => {
-    if (savedRoomData?.roomId && savedPlayerData?.name) {
-      console.log("Attempting to rejoin game...");
-      socket.emit("rejoin-mostlikely-room", {
-        roomId: savedRoomData.roomId,
-        playerName: savedPlayerData.name
-      });
-    }
-  };
 
   // Sound effects
   const playSound = (soundName) => {
@@ -443,105 +319,36 @@ const WhosMostLikely = () => {
   // Socket event handlers
   useEffect(() => {
     const handleRoomCreated = (room) => {
-      console.log("Room created:", room);
       setRoomId(room.roomId);
       setIsHost(true);
       setJoined(true);
       setPlayers(room.players);
-      setGameStarted(false);
-      setGameFinished(false);
-      setRoundResults(null);
-      setFinalResults(null);
-      setCurrentRound(1);
-      setHasVoted(false);
-      setSelectedPlayer("");
-      setVotes({});
-      setVoteCount(0);
-      setChatMessages([]);
       playSound("success");
     };
 
     const handleRoomJoined = (room) => {
-      console.log("Room joined:", room);
       setRoomId(room.roomId);
       setPlayers(room.players);
       setJoined(true);
-      setIsHost(false);
-      setGameStarted(false);
-      setGameFinished(false);
-      setRoundResults(null);
-      setFinalResults(null);
-      setCurrentRound(1);
-      setHasVoted(false);
-      setSelectedPlayer("");
-      setVotes({});
-      setVoteCount(0);
-      setChatMessages([]);
       playSound("success");
-    };
-
-    const handleRejoinSuccess = (data) => {
-      console.log("Rejoined successfully:", data);
-      setRoomId(data.roomId);
-      setPlayers(data.players);
-      setJoined(true);
-      setIsHost(data.isHost);
-      
-      if (data.gameState) {
-        setGameStarted(data.gameState.gameStarted || false);
-        setGameFinished(data.gameState.gameFinished || false);
-        setCurrentScenario(data.gameState.currentScenario || "");
-        setCurrentRound(data.gameState.currentRound || 1);
-        setTotalRounds(data.gameState.totalRounds || 10);
-        setHasVoted(data.gameState.hasVoted || false);
-        setVotes(data.gameState.votes || {});
-        setRoundResults(data.gameState.roundResults || null);
-        setFinalResults(data.gameState.finalResults || null);
-        setVoteCount(data.gameState.voteCount || 0);
-        setSelectedPlayer(data.gameState.selectedPlayer || "");
-      }
-      
-      if (data.chatHistory) {
-        setChatMessages(data.chatHistory);
-      }
-      
-      playSound("success");
-    };
-
-    const handleRejoinFailed = (error) => {
-      console.log("Rejoin failed:", error);
-      // Clear saved data if rejoin fails
-      removeSavedPlayerData();
-      removeSavedRoomData();
-      removeSavedGameState();
-      reconnectAttempted.current = false;
-      setJoined(false);
     };
 
     const handleUpdatePlayers = (playersList) => {
-      console.log("Players updated:", playersList);
       setPlayers(playersList);
       playSound("notification");
     };
 
     const handleGameStarted = (data) => {
-      console.log("Game started:", data);
       setGameStarted(true);
       setCurrentScenario(data.scenario);
       setCurrentRound(data.currentRound);
       setTotalRounds(data.totalRounds);
       setHasVoted(false);
       setSelectedPlayer("");
-      setGameFinished(false);
-      setRoundResults(null);
-      setFinalResults(null);
-      setVotes({});
-      setVoteCount(0);
       playSound("success");
     };
 
     const handleVoteReceived = (data) => {
-      console.log("Vote received:", data);
       setVotes(prev => ({
         ...prev,
         [data.voter]: data.votedFor
@@ -550,17 +357,12 @@ const WhosMostLikely = () => {
     };
 
     const handleRoundResults = (results) => {
-      console.log("Round results:", results);
       setRoundResults(results);
-      setVotes(results.votes || {});
-      setHasVoted(false);
-      setSelectedPlayer("");
-      setVoteCount(0);
+      setVotes(results.votes);
       playSound("victory");
     };
 
     const handleNextRound = (data) => {
-      console.log("Next round:", data);
       setCurrentScenario(data.scenario);
       setCurrentRound(data.currentRound);
       setRoundResults(null);
@@ -572,36 +374,21 @@ const WhosMostLikely = () => {
     };
 
     const handleGameFinished = (data) => {
-      console.log("Game finished:", data);
       setGameFinished(true);
       setFinalResults(data);
-      setGameStarted(false);
-      setRoundResults(null);
       playSound("victory");
     };
 
     const handleConnectionError = () => {
-      console.log("Connection error");
       setConnectionStatus("disconnected");
     };
 
     const handleReconnect = () => {
-      console.log("Reconnected");
       setConnectionStatus("connected");
-      // Attempt to rejoin on reconnect
-      if (joined && playerName && roomId) {
-        setTimeout(attemptRejoin, 500);
-      }
-    };
-
-    const handleDisconnect = () => {
-      console.log("Disconnected");
-      setConnectionStatus("disconnected");
     };
 
     // Chat event handlers
     const handleChatMessage = (message) => {
-      console.log("Chat message received:", message);
       setChatMessages(prev => [...prev, message]);
       if (message.sender !== playerName) {
         playSound("message");
@@ -609,7 +396,6 @@ const WhosMostLikely = () => {
     };
 
     const handleChatHistory = (messages) => {
-      console.log("Chat history received:", messages);
       setChatMessages(messages);
     };
 
@@ -628,8 +414,6 @@ const WhosMostLikely = () => {
     // Register event listeners
     socket.on("mostlikely-room-created", handleRoomCreated);
     socket.on("mostlikely-room-joined", handleRoomJoined);
-    socket.on("mostlikely-rejoin-success", handleRejoinSuccess);
-    socket.on("mostlikely-rejoin-failed", handleRejoinFailed);
     socket.on("mostlikely-update-players", handleUpdatePlayers);
     socket.on("mostlikely-game-started", handleGameStarted);
     socket.on("vote-received", handleVoteReceived);
@@ -638,7 +422,6 @@ const WhosMostLikely = () => {
     socket.on("mostlikely-game-finished", handleGameFinished);
     socket.on("connect_error", handleConnectionError);
     socket.on("reconnect", handleReconnect);
-    socket.on("disconnect", handleDisconnect);
 
     // Chat listeners
     socket.on("receive-chat-message", handleChatMessage);
@@ -649,8 +432,6 @@ const WhosMostLikely = () => {
       // Cleanup event listeners
       socket.off("mostlikely-room-created", handleRoomCreated);
       socket.off("mostlikely-room-joined", handleRoomJoined);
-      socket.off("mostlikely-rejoin-success", handleRejoinSuccess);
-      socket.off("mostlikely-rejoin-failed", handleRejoinFailed);
       socket.off("mostlikely-update-players", handleUpdatePlayers);
       socket.off("mostlikely-game-started", handleGameStarted);
       socket.off("vote-received", handleVoteReceived);
@@ -659,14 +440,13 @@ const WhosMostLikely = () => {
       socket.off("mostlikely-game-finished", handleGameFinished);
       socket.off("connect_error", handleConnectionError);
       socket.off("reconnect", handleReconnect);
-      socket.off("disconnect", handleDisconnect);
 
       // Chat listeners
       socket.off("receive-chat-message", handleChatMessage);
       socket.off("chat-history", handleChatHistory);
       socket.off("user-typing", handleUserTyping);
     };
-  }, [playerName, roomId, joined]);
+  }, [playerName]);
 
   // Room management functions
   const createRoom = () => {
@@ -690,14 +470,6 @@ const WhosMostLikely = () => {
     });
   };
 
-  const leaveRoom = () => {
-    socket.emit("leave-mostlikely-room", { roomId });
-    removeSavedPlayerData();
-    removeSavedRoomData();
-    removeSavedGameState();
-    window.location.reload();
-  };
-
   const startGame = () => {
     if (players.length < 2) {
       alert("Need at least 2 players to start");
@@ -709,6 +481,10 @@ const WhosMostLikely = () => {
   const submitVote = () => {
     if (!selectedPlayer) {
       alert("Please select a player to vote for");
+      return;
+    }
+    if (selectedPlayer === playerName) {
+      alert("You cannot vote for yourself!");
       return;
     }
     
@@ -725,48 +501,32 @@ const WhosMostLikely = () => {
   };
 
   const restartGame = () => {
-    socket.emit("restart-mostlikely-game", { roomId });
+    window.location.reload();
   };
 
-  const copyRoomCode = () => {
-    navigator.clipboard.writeText(roomId).then(() => {
-      alert("Room code copied to clipboard!");
-    });
-  };
-
-  // Player Card Component - Improved for mobile
-  const PlayerCard = ({ player, index, showVotes = false, voteCounts = {}, onSelect = null, isSelected = false, canSelect = false }) => (
-    <div 
-      className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
-        isSelected
-          ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-400 scale-105' 
-          : canSelect
-            ? 'bg-white/10 border-white/20 hover:bg-white/20 cursor-pointer'
-            : 'bg-white/10 border-white/20'
-      } ${canSelect ? 'cursor-pointer active:scale-95' : ''}`}
-      onClick={canSelect ? () => onSelect(player.name) : undefined}
-    >
-      <div className="flex items-center space-x-3 flex-1 min-w-0">
-        <Avatar className="w-8 h-8 border-2 border-white/30 flex-shrink-0">
+  // Player Card Component
+  const PlayerCard = ({ player, index, showVotes = false, voteCounts = {} }) => (
+    <div className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
+      selectedPlayer === player.name 
+        ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-400 scale-105' 
+        : 'bg-white/10 border-white/20 hover:bg-white/20'
+    }`}>
+      <div className="flex items-center space-x-3">
+        <Avatar className="w-8 h-8 border-2 border-white/30">
           <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs">
             {player.name.charAt(0).toUpperCase()}
           </AvatarFallback>
         </Avatar>
-        <div className="flex items-center space-x-2 flex-1 min-w-0">
-          <span className="font-semibold text-white text-sm truncate">{player.name}</span>
-          {player.isHost && <Crown className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
+        <div className="flex items-center space-x-2">
+          <span className="font-semibold text-white text-sm">{player.name}</span>
+          {player.isHost && <Crown className="w-3 h-3 text-yellow-400" />}
         </div>
       </div>
       
-      <div className="flex items-center space-x-2 flex-shrink-0">
+      <div className="flex items-center space-x-2">
         {showVotes && voteCounts[player.name] > 0 && (
           <Badge className="bg-green-500 text-white text-xs">
             {voteCounts[player.name]} votes
-          </Badge>
-        )}
-        {isSelected && (
-          <Badge className="bg-blue-500 text-white text-xs">
-            Selected
           </Badge>
         )}
       </div>
@@ -775,24 +535,16 @@ const WhosMostLikely = () => {
 
   // Connection Status
   const ConnectionStatus = () => (
-    <div className={`fixed top-4 right-4 px-3 py-1 rounded-full text-xs font-semibold z-50 backdrop-blur-sm border ${
+    <div className={`fixed top-4 right-4 px-3 py-1 rounded-full text-xs font-semibold z-50 ${
       connectionStatus === "connected" 
-        ? "bg-green-500/90 text-white border-green-400" 
-        : "bg-red-500/90 text-white border-red-400 animate-pulse"
+        ? "bg-green-500 text-white" 
+        : "bg-red-500 text-white animate-pulse"
     }`}>
       {connectionStatus === "connected" ? "🟢 Connected" : "🔴 Disconnected"}
     </div>
   );
 
-  // Device Indicator
-  const DeviceIndicator = () => (
-    <div className="fixed top-4 left-4 px-3 py-1 rounded-full text-xs font-semibold z-50 backdrop-blur-sm border bg-blue-500/90 text-white border-blue-400">
-      {isMobile ? <Smartphone className="w-3 h-3 inline mr-1" /> : <Monitor className="w-3 h-3 inline mr-1" />}
-      {isMobile ? "Mobile" : "Desktop"}
-    </div>
-  );
-
-  // Fixed Mobile Chat Toggle Button
+  // Fixed Mobile Chat Toggle Button - Won't hide send button
   const MobileChatToggle = () => (
     <Button
       onClick={() => setShowChat(!showChat)}
@@ -803,33 +555,11 @@ const WhosMostLikely = () => {
     </Button>
   );
 
-  // Reconnection Banner
-  const ReconnectionBanner = () => {
-    if (connectionStatus === "connected" || !joined) return null;
-    
-    return (
-      <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 z-50 animate-pulse">
-        <div className="flex items-center justify-center space-x-2">
-          <Timer className="w-4 h-4" />
-          <span className="text-sm font-medium">Attempting to reconnect...</span>
-          <Button 
-            onClick={attemptRejoin} 
-            size="sm" 
-            className="bg-white/20 hover:bg-white/30 text-xs h-6"
-          >
-            Retry Now
-          </Button>
-        </div>
-      </div>
-    );
-  };
-
   // Join/Create Screen
   if (!joined) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
         <ConnectionStatus />
-        <DeviceIndicator />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
         <div ref={mainContainerRef} className="max-w-2xl mx-auto relative z-10 h-full flex flex-col justify-center overflow-y-auto">
@@ -855,7 +585,7 @@ const WhosMostLikely = () => {
                   placeholder="Enter your name"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
-                  className="bg-white/10 border-white/20 text-white placeholder-white/50 text-base h-12"
+                  className="bg-white/10 border-white/20 text-white placeholder-white/50"
                 />
               </div>
 
@@ -868,7 +598,7 @@ const WhosMostLikely = () => {
                   placeholder="Enter room code to join"
                   value={roomId}
                   onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                  className="bg-white/10 border-white/20 text-white placeholder-white/50 text-base h-12"
+                  className="bg-white/10 border-white/20 text-white placeholder-white/50"
                 />
               </div>
             </div>
@@ -877,7 +607,7 @@ const WhosMostLikely = () => {
               <Button
                 onClick={createRoom}
                 disabled={!playerName.trim()}
-                className="w-full py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg h-14"
+                className="w-full py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg"
               >
                 <Crown className="w-4 h-4 mr-2" />
                 Create New Room
@@ -886,30 +616,12 @@ const WhosMostLikely = () => {
               <Button
                 onClick={joinRoom}
                 disabled={!playerName.trim() || !roomId.trim()}
-                className="w-full py-4 text-base bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg h-14"
+                className="w-full py-4 text-base bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg"
               >
                 <Users className="w-4 h-4 mr-2" />
                 Join Existing Room
               </Button>
             </div>
-
-            {/* Auto-rejoin option */}
-            {savedRoomData?.joined && savedPlayerData?.name && (
-              <div className="mt-4 p-3 bg-blue-500/20 rounded-lg border border-blue-400/30">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-blue-300 text-sm font-medium">Rejoin previous game?</p>
-                    <p className="text-blue-200 text-xs">Room: {savedRoomData.roomId} as {savedPlayerData.name}</p>
-                  </div>
-                  <Button 
-                    onClick={attemptRejoin}
-                    className="bg-blue-500 hover:bg-blue-600 text-white text-xs h-8"
-                  >
-                    Rejoin
-                  </Button>
-                </div>
-              </div>
-            )}
 
             <div className="mt-6 p-3 bg-white/5 rounded-lg border border-white/10">
               <h4 className="font-semibold text-white mb-2 flex items-center justify-center text-sm">
@@ -919,11 +631,10 @@ const WhosMostLikely = () => {
               <ul className="text-xs text-white/70 space-y-1 text-left">
                 <li>• Create a room and share the code with friends</li>
                 <li>• Vote for who's most likely to do something</li>
-                <li>• You CAN vote for yourself on all devices</li>
+                <li>• Can't vote for yourself!</li>
                 <li>• Most votes wins the round</li>
                 <li>• Play multiple rounds to find the most likely person</li>
                 <li className="text-blue-300">• 💬 Real-time chat with other players!</li>
-                <li className="text-green-300">• 🔄 Auto-reconnect if you lose connection!</li>
               </ul>
             </div>
           </Card>
@@ -939,8 +650,6 @@ const WhosMostLikely = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
         <ConnectionStatus />
-        <DeviceIndicator />
-        <ReconnectionBanner />
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
@@ -948,23 +657,14 @@ const WhosMostLikely = () => {
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 px-2 pt-4">
             <Button
               variant="ghost"
-              onClick={leaveRoom}
+              onClick={() => window.location.reload()}
               className="text-white hover:bg-white/20 backdrop-blur-sm self-start"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Leave Room
             </Button>
-            <div className="flex items-center space-x-2">
-              <div className="text-white font-medium bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm text-center">
-                Room: {roomId}
-              </div>
-              <Button
-                onClick={copyRoomCode}
-                size="sm"
-                className="bg-white/20 hover:bg-white/30 border-white/30 text-white"
-              >
-                <Copy className="w-3 h-3" />
-              </Button>
+            <div className="text-white font-medium bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm text-center">
+              Room: {roomId}
             </div>
           </div>
 
@@ -988,11 +688,10 @@ const WhosMostLikely = () => {
                   <div className="mb-6">
                     <h3 className="text-lg font-bold text-white mb-2">Room Code: {roomId}</h3>
                     <Button 
-                      onClick={copyRoomCode}
+                      onClick={() => navigator.clipboard?.writeText(roomId)}
                       className="bg-white/20 hover:bg-white/30 border-white/30 text-sm"
                       size="sm"
                     >
-                      <Copy className="w-3 h-3 mr-1" />
                       Copy Code
                     </Button>
                   </div>
@@ -1017,7 +716,7 @@ const WhosMostLikely = () => {
                   <Button 
                     onClick={startGame} 
                     disabled={players.length < 2}
-                    className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-2xl h-14"
+                    className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-2xl"
                   >
                     <Gamepad2 className="w-4 h-4 mr-2" />
                     Start Game ({players.length} players ready)
@@ -1057,8 +756,6 @@ const WhosMostLikely = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
         <ConnectionStatus />
-        <DeviceIndicator />
-        <ReconnectionBanner />
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
@@ -1098,25 +795,16 @@ const WhosMostLikely = () => {
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
-                  {isHost ? (
-                    <Button 
-                      onClick={restartGame}
-                      className="flex-1 py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-14"
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Play Again
-                    </Button>
-                  ) : (
-                    <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-3 text-center">
-                      <div className="flex items-center justify-center space-x-2">
-                        <Timer className="w-4 h-4 text-blue-400 animate-pulse" />
-                        <span className="text-blue-300 text-sm">Waiting for host to start new game...</span>
-                      </div>
-                    </div>
-                  )}
                   <Button 
-                    onClick={leaveRoom}
-                    className="flex-1 py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white h-14"
+                    onClick={restartGame}
+                    className="flex-1 py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Play Again
+                  </Button>
+                  <Button 
+                    onClick={() => window.location.reload()}
+                    className="flex-1 py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
                   >
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Main Menu
@@ -1149,8 +837,6 @@ const WhosMostLikely = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
         <ConnectionStatus />
-        <DeviceIndicator />
-        <ReconnectionBanner />
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
@@ -1180,7 +866,7 @@ const WhosMostLikely = () => {
                     Voting Results
                   </h3>
                   <div className="space-y-2">
-                    {Object.entries(roundResults.voteCounts || {})
+                    {Object.entries(roundResults.voteCounts)
                       .sort(([,a], [,b]) => b - a)
                       .map(([player, count]) => (
                       <div key={player} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
@@ -1207,7 +893,7 @@ const WhosMostLikely = () => {
                 {isHost && (
                   <Button
                     onClick={nextRound}
-                    className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-14"
+                    className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
                   >
                     <Sparkles className="w-4 h-4 mr-2" />
                     {currentRound < totalRounds ? "Next Round" : "See Final Results"}
@@ -1248,8 +934,6 @@ const WhosMostLikely = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
       <ConnectionStatus />
-      <DeviceIndicator />
-      <ReconnectionBanner />
       <MobileChatToggle />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
       
@@ -1310,7 +994,7 @@ const WhosMostLikely = () => {
                   <p className="text-white/80 mb-3 text-base">
                     {hasVoted 
                       ? "✅ You've voted! Waiting for other players..." 
-                      : "Choose who you think is most likely (you can vote for anyone!)"}
+                      : "Choose who you think is most likely (can't choose yourself!)"}
                   </p>
                   
                   {!hasVoted && selectedPlayer && (
@@ -1323,19 +1007,35 @@ const WhosMostLikely = () => {
                 </div>
               </div>
 
-              {/* Player Selection Grid - FIXED: Now includes all players including yourself */}
+              {/* Player Selection Grid */}
               {!hasVoted && (
                 <div className="flex-1 overflow-y-auto min-h-0 mb-6 custom-scrollbar">
                   <div className="grid grid-cols-1 gap-3">
-                    {players.map((player) => (
-                      <PlayerCard
-                        key={player.name}
-                        player={player}
-                        onSelect={setSelectedPlayer}
-                        isSelected={selectedPlayer === player.name}
-                        canSelect={true}
-                      />
-                    ))}
+                    {players
+                      .filter(player => player.name !== playerName) // Can't vote for yourself
+                      .map((player) => (
+                        <div
+                          key={player.name}
+                          className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                            selectedPlayer === player.name
+                              ? 'bg-gradient-to-r from-green-500/30 to-emerald-500/30 border-green-400 scale-105 shadow-lg'
+                              : 'bg-white/10 border-white/20 hover:bg-white/20 hover:scale-102'
+                          }`}
+                          onClick={() => setSelectedPlayer(player.name)}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <Avatar className="w-10 h-10 border-2 border-white/30">
+                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                                {player.name.charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <h3 className="text-base font-bold text-white">{player.name}</h3>
+                              <p className="text-white/70 text-xs">Click to select</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 </div>
               )}
@@ -1345,7 +1045,7 @@ const WhosMostLikely = () => {
                 <Button
                   onClick={submitVote}
                   disabled={!selectedPlayer}
-                  className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg h-14"
+                  className="w-full py-4 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg"
                 >
                   <Target className="w-4 h-4 mr-2" />
                   Submit Your Vote
