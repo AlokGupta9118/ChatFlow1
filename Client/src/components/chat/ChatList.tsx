@@ -90,9 +90,21 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   );
 
   const handleSelect = (chat, isGroup = false) => {
+    console.log("🎯 ChatList: handleSelect called", {
+      chat: chat?.name,
+      isGroup,
+      chatType: isGroup ? "GROUP" : "PRIVATE"
+    });
+    
     const key = chat._id;
     setUnreadCounts((prev) => ({ ...prev, [key]: 0 }));
-    onSelectChat(chat, isGroup);
+    
+    // Make sure to pass the isGroup parameter to the parent
+    if (onSelectChat) {
+      onSelectChat(chat, isGroup);
+    } else {
+      console.error("❌ onSelectChat callback is not defined!");
+    }
   };
 
   const getStatusColor = (status) => {
@@ -132,8 +144,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
 
   const handleAdminAction = (action, groupId) => {
     console.log(`Admin action: ${action} for group: ${groupId}`);
-    // Here you would implement the actual admin actions
-    // For now, just close the panel
     setShowAdminPanel(null);
   };
 
@@ -230,7 +240,10 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                     className="px-2"
                   >
                     <div
-                      onClick={() => handleSelect(item, true)}
+                      onClick={() => {
+                        console.log("🎯 Clicked on GROUP:", itemName);
+                        handleSelect(item, true); // Explicitly pass true for groups
+                      }}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
@@ -357,7 +370,10 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                     className="px-2"
                   >
                     <div
-                      onClick={() => handleSelect(item, false)}
+                      onClick={() => {
+                        console.log("🎯 Clicked on PRIVATE CHAT:", itemName);
+                        handleSelect(item, false); // Explicitly pass false for private chats
+                      }}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"

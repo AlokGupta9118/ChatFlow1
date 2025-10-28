@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import ChatList from "../components/chat/ChatList";
-import ChatWindow from "../components/chat/ChatWindow";
+import TestChatWindow from "../components/chat/ChatWindow";
 import GroupChatAdminPanel from "../components/chat/GroupChatAdminPanel";
 import GroupChatSidebar from "../components/chat/GroupChatSidebar";
 import ChatSidebar from "../components/chat/ChatSidebar";
@@ -225,12 +225,12 @@ const ChatPage = ({ currentUser }) => {
               {/* Chat Window - Make sure isGroup prop is passed correctly */}
               <div className="flex-1 overflow-hidden flex flex-col">
                 <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-                  <ChatWindow
-                    currentUser={currentUser}
-                    selectedChat={selectedChat}
-                    isGroup={isGroupSelected} // This should be true for groups
-                    onToggleGroupInfo={() => setShowGroupInfo((prev) => !prev)}
-                  />
+
+<TestChatWindow
+  currentUser={currentUser}
+  selectedChat={selectedChat}
+  isGroup={isGroupSelected}
+/>
                 </div>
               </div>
 
