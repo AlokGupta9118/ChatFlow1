@@ -122,7 +122,7 @@ export default function AdvancedCompatibilityGame() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Game states
+  // Game states - FIXED: Initialize bothAnswers as empty object
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [answers, setAnswers] = useState<any[]>([]);
@@ -175,10 +175,8 @@ export default function AdvancedCompatibilityGame() {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
       
-      // Add mobile-specific class to body
       if (mobile) {
         document.body.classList.add('mobile-device');
-        // Prevent horizontal scroll on mobile
         document.body.style.overflowX = 'hidden';
       } else {
         document.body.classList.remove('mobile-device');
@@ -206,7 +204,6 @@ export default function AdvancedCompatibilityGame() {
         setRoomId(state.roomId || '');
         setDarkMode(state.darkMode !== undefined ? state.darkMode : true);
         
-        // If we were in a room, try to rejoin
         if (state.roomId && state.playerName && state.joined) {
           setTimeout(() => {
             if (socket.connected) {
@@ -219,7 +216,6 @@ export default function AdvancedCompatibilityGame() {
         }
       } catch (error) {
         console.error('Error loading saved state:', error);
-        // Clear corrupted state
         localStorage.removeItem('compatibilityGameState');
       }
     }
@@ -245,7 +241,7 @@ export default function AdvancedCompatibilityGame() {
     }
   }, [playerName, roomId, darkMode, joined, gameStarted, currentQuestion, answers, advancedAnswers, gameState]);
 
-  // FIXED: Enhanced socket connection management with proper cleanup
+  // FIXED: Enhanced socket connection management
   useEffect(() => {
     const handleConnect = () => {
       setConnectionStatus("connected");
@@ -258,7 +254,6 @@ export default function AdvancedCompatibilityGame() {
 
     const handleReconnect = () => {
       setConnectionStatus("connected");
-      // Try to rejoin room if we were in one
       if (joined && roomId && playerName) {
         socket.emit("rejoin-room", { 
           roomId, 
@@ -278,7 +273,7 @@ export default function AdvancedCompatibilityGame() {
     };
   }, [joined, roomId, playerName]);
 
-  // FIXED: Enhanced socket event handlers with proper error handling
+  // FIXED: Enhanced socket event handlers with comprehensive error handling
   useEffect(() => {
     const handleRoomCreated = (room: any) => {
       if (!room) return;
@@ -297,7 +292,6 @@ export default function AdvancedCompatibilityGame() {
       setJoined(true);
       setGameState(room.gameState || null);
       
-      // If game is already in progress, sync state
       if (room.gameState?.gameStarted) {
         setGameStarted(true);
         setCurrentQuestion(room.gameState.currentQuestion || 0);
@@ -331,11 +325,6 @@ export default function AdvancedCompatibilityGame() {
 
     const handleUpdatePlayers = (playersList: any[]) => {
       if (!Array.isArray(playersList)) return;
-      
-      const newPlayers = playersList.filter(p => !players.map(prev => prev.name).includes(p.name));
-      if (newPlayers.length > 0) {
-        playSound("notification");
-      }
       setPlayers(playersList);
     };
 
@@ -352,6 +341,7 @@ export default function AdvancedCompatibilityGame() {
       setCurrentQuestion(0);
       setAnswers([]);
       setCurrentAnswer("");
+      setBothAnswers({});
       setAdvancedAnswers({
         communicationStyle: "",
         loveLanguage: "",
@@ -372,15 +362,28 @@ export default function AdvancedCompatibilityGame() {
       setGameState(data.gameState || null);
     };
 
+    // FIXED: Critical fix for show-results handler
     const handleShowResults = (data: any) => {
-      if (!data) return;
+      console.log("Show results data received:", data);
       
-      // FIXED: Ensure bothAnswers is always an object
-      const results = data.results || {};
-      setBothAnswers(results);
+      // Ensure data is always an object
+      const safeData = data || {};
+      
+      // FIXED: Ensure results is always an object, never null or undefined
+      const results = safeData.results || safeData || {};
+      
+      // Validate that results is actually an object
+      if (typeof results !== 'object' || results === null) {
+        console.error("Results is not an object, setting empty object:", results);
+        setBothAnswers({});
+      } else {
+        console.log("Setting bothAnswers to:", results);
+        setBothAnswers(results);
+      }
+      
       setShowResults(true);
       setIsSubmitting(false);
-      setGameState(data.gameState || null);
+      setGameState(safeData.gameState || null);
       playSound("victory");
       triggerConfetti();
     };
@@ -459,7 +462,6 @@ export default function AdvancedCompatibilityGame() {
     if (gameStarted && !showResults && currentQuestion < questions.length) {
       setTimeLeft(25);
       
-      // Scroll to top on mobile when question changes
       if (isMobile && questionContainerRef.current) {
         setTimeout(() => {
           questionContainerRef.current?.scrollIntoView({ 
@@ -476,7 +478,6 @@ export default function AdvancedCompatibilityGame() {
     if (!soundEnabled) return;
     
     try {
-      // Simple beep sounds as fallback
       const sounds: {[key: string]: number} = {
         select: 800,
         success: 1200,
@@ -526,7 +527,7 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // FIXED: Enhanced mobile screenshot capture with better error handling
+  // FIXED: Enhanced mobile screenshot capture
   const captureScreenshot = async () => {
     if (!screenshotRef.current) return;
     
@@ -649,7 +650,6 @@ export default function AdvancedCompatibilityGame() {
 
     setTimeout(() => {
       if (currentQuestion < questions.length - 1) {
-        // Emit answer submitted event
         socket.emit("answer-submitted", {
           roomId,
           playerName,
@@ -709,7 +709,6 @@ export default function AdvancedCompatibilityGame() {
     setCurrentAnswer(option);
     playSound("select");
     
-    // Auto-scroll to submit button on mobile after selection
     if (isMobile) {
       setTimeout(() => {
         const submitButton = document.querySelector('button[type="button"]');
@@ -723,11 +722,34 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // FIXED: Enhanced compatibility calculation with null checks
+  // FIXED: Enhanced compatibility calculation with comprehensive null checks
   const calculateCompatibility = () => {
-    // FIXED: Ensure bothAnswers is always an object and has keys
-    const allPlayers = bothAnswers && typeof bothAnswers === 'object' ? Object.keys(bothAnswers) : [];
-    if (allPlayers.length < 2) return { score: 0, breakdown: {}, insights: [], advancedAnalysis: {}, advancedFactors: {} };
+    console.log("Calculating compatibility with bothAnswers:", bothAnswers);
+    
+    // FIXED: Comprehensive check for bothAnswers to prevent TypeError
+    if (!bothAnswers || typeof bothAnswers !== 'object' || bothAnswers === null) {
+      console.error("bothAnswers is invalid, returning default:", bothAnswers);
+      return { 
+        score: 0, 
+        breakdown: {}, 
+        insights: ["No results available yet"], 
+        advancedAnalysis: {}, 
+        advancedFactors: {} 
+      };
+    }
+
+    const allPlayers = Object.keys(bothAnswers);
+    console.log("Players found:", allPlayers);
+    
+    if (allPlayers.length < 2) {
+      return { 
+        score: 0, 
+        breakdown: {}, 
+        insights: ["Waiting for both players to complete the test"], 
+        advancedAnalysis: {}, 
+        advancedFactors: {} 
+      };
+    }
 
     const [p1, p2] = allPlayers;
     const ans1 = bothAnswers[p1] || [];
@@ -743,9 +765,8 @@ export default function AdvancedCompatibilityGame() {
       const weight = question.weight || 1;
       maxPossibleScore += weight;
       
-      // FIXED: Add null checks for answers
-      const answer1 = ans1[i]?.answer;
-      const answer2 = ans2[i]?.answer;
+      const answer1 = Array.isArray(ans1) ? ans1[i]?.answer : null;
+      const answer2 = Array.isArray(ans2) ? ans2[i]?.answer : null;
       
       if (answer1 && answer2 && answer1 === answer2) {
         totalScore += weight;
@@ -758,9 +779,8 @@ export default function AdvancedCompatibilityGame() {
     let maxAdvancedScore = 0;
     const advancedMatches: string[] = [];
 
-    // FIXED: Safe advanced answers access
-    const adv1 = ans1.advancedAnswers || {};
-    const adv2 = ans2.advancedAnswers || {};
+    const adv1 = (typeof ans1 === 'object' && !Array.isArray(ans1) ? ans1.advancedAnswers : {}) || {};
+    const adv2 = (typeof ans2 === 'object' && !Array.isArray(ans2) ? ans2.advancedAnswers : {}) || {};
 
     Object.keys(advancedCompatibilityFactors).forEach(factor => {
       if (adv1[factor] && adv2[factor]) {
@@ -802,7 +822,7 @@ export default function AdvancedCompatibilityGame() {
     advancedAnalysis.energyCompatibility = adv1.energyLevel === adv2.energyLevel;
     advancedAnalysis.socialCompatibility = adv1.socialPreference === adv2.socialPreference;
 
-    return {
+    const result = {
       score: finalScore,
       breakdown: categoryScores,
       insights,
@@ -814,6 +834,9 @@ export default function AdvancedCompatibilityGame() {
         social: adv1.socialPreference === adv2.socialPreference ? "Social harmony" : "Different preferences"
       }
     };
+
+    console.log("Final compatibility result:", result);
+    return result;
   };
 
   const getCompatibilityMessage = (score: number) => {
@@ -942,10 +965,42 @@ export default function AdvancedCompatibilityGame() {
     </Card>
   );
 
-  // Enhanced Results Screen with mobile support
+  // FIXED: Enhanced ResultsScreen with comprehensive error handling
   const ResultsScreen = () => {
     const compatibility = calculateCompatibility();
     const { score, breakdown, insights, advancedAnalysis, advancedFactors } = compatibility;
+
+    // FIXED: Check if we have valid results to display
+    const hasValidResults = bothAnswers && 
+                           typeof bothAnswers === 'object' && 
+                           bothAnswers !== null && 
+                           Object.keys(bothAnswers).length >= 2;
+
+    if (!hasValidResults) {
+      return (
+        <div className={`min-h-screen flex flex-col items-center justify-center p-6 ${
+          darkMode ? 'bg-slate-900' : 'bg-gray-100'
+        }`}>
+          <Card className={`p-8 max-w-2xl w-full text-center ${
+            darkMode ? 'bg-slate-800' : 'bg-white'
+          }`}>
+            <div className="flex justify-center mb-6">
+              <Loader2 className="w-16 h-16 animate-spin text-purple-500" />
+            </div>
+            <h2 className="text-2xl font-bold mb-4">Processing Results...</h2>
+            <p className={`mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              Please wait while we calculate your compatibility results.
+            </p>
+            <Button 
+              onClick={() => window.location.reload()}
+              className="bg-purple-500 hover:bg-purple-600 text-white"
+            >
+              Return to Home
+            </Button>
+          </Card>
+        </div>
+      );
+    }
 
     return (
       <div 
@@ -1136,7 +1191,7 @@ export default function AdvancedCompatibilityGame() {
                     </Button>
                     
                     <Button
-                      onClick={() => capturedImage && navigator.clipboard?.writeText(`Check out our compatibility score: ${calculateCompatibility().score}%! 🎉`)}
+                      onClick={() => capturedImage && navigator.clipboard?.writeText(`Check out our compatibility score: ${score}%! 🎉`)}
                       size={isMobile ? "sm" : "default"}
                       className="py-3 md:py-4"
                     >
@@ -1506,7 +1561,7 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // FIXED: Join/Create Screen with proper input handling
+  // Join/Create Screen
   const JoinCreateScreen = () => {
     return (
       <div 
@@ -1760,7 +1815,6 @@ export default function AdvancedCompatibilityGame() {
         clearTimeout(submitTimeoutRef.current);
       }
       
-      // Clean up any remaining confetti
       const confettiElements = document.querySelectorAll('div[style*="confetti-fall"]');
       confettiElements.forEach(el => {
         if (document.body.contains(el)) {

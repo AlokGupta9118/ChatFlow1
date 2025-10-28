@@ -20,7 +20,7 @@ const socket = io(import.meta.env.VITE_API_URL, {
   timeout: 10000
 });
 
-// ChatInput component
+// Updated ChatInput component with colorful design
 const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef(null);
@@ -86,29 +86,29 @@ const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
   }, []);
 
   return (
-    <div className="flex gap-2 p-3 bg-white/95 border-t border-gray-200 safe-area-inset-bottom">
+    <div className="flex gap-3 p-4 bg-transparent safe-area-inset-bottom">
       <Input
         ref={inputRef}
         value={inputValue}
         onChange={handleChange}
         onKeyPress={handleKeyPress}
-        placeholder="Type a message..."
-        className="flex-1 bg-white border-gray-300 min-h-[44px] text-sm"
+        placeholder={disabled ? "Connecting..." : "Type your message..."}
+        className="flex-1 bg-gray-700 border-2 border-purple-500/50 text-white placeholder-gray-400 min-h-[48px] text-sm rounded-xl focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 transition-all"
         disabled={disabled}
       />
       <Button
         onClick={handleSubmit}
         disabled={!inputValue.trim() || disabled}
-        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white flex-shrink-0 min-w-[60px] min-h-[44px] shadow-lg"
+        className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white flex-shrink-0 min-w-[60px] min-h-[48px] shadow-lg rounded-xl border-2 border-purple-400/30 transition-all transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
         size="sm"
       >
-        <Send className="w-4 h-4" />
+        <Send className="w-5 h-5" />
       </Button>
     </div>
   );
 };
 
-// ChatPanel component
+// Updated ChatPanel component with colorful design
 const ChatPanel = React.memo(({ 
   chatMessages, 
   playerName, 
@@ -126,6 +126,22 @@ const ChatPanel = React.memo(({
     });
   };
 
+  // Get user color based on name for consistent coloring
+  const getUserColor = (username) => {
+    const colors = [
+      'from-purple-500 to-pink-500',
+      'from-blue-500 to-cyan-500',
+      'from-green-500 to-emerald-500',
+      'from-orange-500 to-red-500',
+      'from-indigo-500 to-purple-500',
+      'from-teal-500 to-blue-500',
+      'from-yellow-500 to-orange-500',
+      'from-pink-500 to-rose-500'
+    ];
+    const index = username.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
+
   // Improved scroll to bottom function
   const scrollToBottom = useCallback(() => {
     if (chatContainerRef.current) {
@@ -141,71 +157,114 @@ const ChatPanel = React.memo(({
   }, [chatMessages, scrollToBottom]);
 
   return (
-    <Card className="h-full flex flex-col bg-white/95 backdrop-blur-sm shadow-xl rounded-xl border border-gray-200">
-      <div className="p-3 border-b border-gray-200 bg-white/80 flex-shrink-0">
+    <Card className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm shadow-2xl rounded-xl border-2 border-purple-500/30">
+      {/* Chat Header */}
+      <div className="p-4 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-xl">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold text-gray-900 flex items-center">
-            <MessageCircle className="w-4 h-4 mr-2 text-blue-600" />
-            Game Chat
-          </h3>
-          <Badge variant="outline" className="text-xs">
-            {isConnected ? "Online" : "Offline"}
+          <div className="flex items-center space-x-3">
+            <div className="relative">
+              <MessageCircle className="w-6 h-6 text-white" />
+              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+                isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'
+              }`} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">Game Chat</h3>
+              <p className="text-blue-100 text-xs">
+                {isConnected ? "Live with players" : "Connecting..."}
+              </p>
+            </div>
+          </div>
+          <Badge className={`${
+            isConnected 
+              ? "bg-green-500 hover:bg-green-600 text-white" 
+              : "bg-red-500 hover:bg-red-600 text-white"
+          } shadow-lg`}>
+            {isConnected ? "🟢 Online" : "🔴 Offline"}
           </Badge>
         </div>
         
         {/* Typing indicators */}
         {typingUsers.size > 0 && (
-          <div className="text-xs text-gray-500 mt-1 truncate">
-            {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
+          <div className="flex items-center mt-3 p-2 bg-white/10 rounded-lg border border-white/20">
+            <div className="flex space-x-1 mr-2">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span className="text-green-300 text-sm font-medium">
+              {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
+            </span>
           </div>
         )}
       </div>
 
+      {/* Chat Messages */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0 scroll-smooth"
+        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scroll-smooth bg-gradient-to-b from-gray-800/50 to-gray-900/50 custom-scrollbar"
         style={{ 
           WebkitOverflowScrolling: 'touch',
           overflowY: 'auto'
         }}
       >
         {chatMessages.length === 0 ? (
-          <div className="text-center text-gray-500 py-8">
-            <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No messages yet</p>
-            <p className="text-xs">Start the conversation!</p>
+          <div className="text-center text-gray-300 py-12">
+            <div className="bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+              <MessageCircle className="w-8 h-8 text-purple-300" />
+            </div>
+            <p className="text-lg font-semibold text-white mb-2">No messages yet</p>
+            <p className="text-purple-200 text-sm">Start the conversation!</p>
           </div>
         ) : (
-          chatMessages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.sender === playerName ? 'justify-end' : 'justify-start'}`}
-            >
+          chatMessages.map((message, index) => {
+            const isOwnMessage = message.sender === playerName;
+            const userColor = getUserColor(message.sender);
+            
+            return (
               <div
-                className={`max-w-[85%] rounded-xl p-2 ${
-                  message.sender === playerName
-                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-md'
-                    : 'bg-gray-100 text-gray-900 rounded-bl-md'
-                }`}
+                key={message.id}
+                className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
               >
-                {message.sender !== playerName && (
-                  <div className="text-xs font-semibold mb-1 opacity-75">
-                    {message.sender}
-                  </div>
-                )}
-                <div className="text-sm break-words">{message.content}</div>
-                <div className={`text-xs mt-1 ${
-                  message.sender === playerName ? 'text-blue-100' : 'text-gray-500'
+                <div className={`max-w-[85%] rounded-2xl p-4 shadow-lg ${
+                  isOwnMessage
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md'
+                    : 'bg-gradient-to-r from-gray-700 to-gray-800 border border-gray-600 text-white rounded-bl-md'
                 }`}>
-                  {formatChatTime(message.timestamp)}
+                  {/* Sender name for others' messages */}
+                  {!isOwnMessage && (
+                    <div className="flex items-center space-x-2 mb-2">
+                      <div className={`w-6 h-6 rounded-full bg-gradient-to-r ${userColor} flex items-center justify-center text-xs font-bold text-white`}>
+                        {message.sender.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="font-bold text-sm text-gray-200">
+                        {message.sender}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Message content */}
+                  <div className="text-sm break-words leading-relaxed">
+                    {message.content}
+                  </div>
+                  
+                  {/* Message time */}
+                  <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mt-2`}>
+                    <div className={`text-xs ${
+                      isOwnMessage ? 'text-blue-200' : 'text-gray-400'
+                    }`}>
+                      {formatChatTime(message.timestamp)}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      <div className="border-t border-gray-200 flex-shrink-0">
+      {/* Chat Input */}
+      <div className="border-t border-purple-500/30 bg-gradient-to-r from-gray-800 to-gray-900 rounded-b-xl">
         <ChatInput 
           onSendMessage={onSendMessage} 
           disabled={!isConnected}
@@ -248,6 +307,73 @@ const WhosMostLikely = () => {
 
   const audioRef = useRef(null);
   const mainContainerRef = useRef(null);
+
+  // Add CSS for animations and custom scrollbar
+  useEffect(() => {
+    const styles = `
+      @keyframes fade-in {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.3s ease-out forwards;
+      }
+
+      .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(168, 85, 247, 0.5) transparent;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+        border-radius: 10px;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: linear-gradient(to bottom, #8b5cf6, #3b82f6);
+        border-radius: 10px;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(to bottom, #7c3aed, #2563eb);
+      }
+
+      .safe-area-padding {
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      
+      .safe-area-inset-bottom {
+        margin-bottom: env(safe-area-inset-bottom);
+      }
+      
+      @media (max-width: 1024px) {
+        .safe-area-padding {
+          padding-left: max(1rem, env(safe-area-inset-left));
+          padding-right: max(1rem, env(safe-area-inset-right));
+        }
+      }
+    `;
+
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = styles;
+    document.head.appendChild(styleSheet);
+    
+    return () => {
+      document.head.removeChild(styleSheet);
+    };
+  }, []);
 
   // Fixed scrolling implementation
   useEffect(() => {
@@ -1077,44 +1203,6 @@ const WhosMostLikely = () => {
       </div>
 
       <audio ref={audioRef} preload="auto" />
-      
-      {/* Add CSS for safe areas */}
-      <style jsx>{`
-        .safe-area-padding {
-          padding-left: env(safe-area-inset-left);
-          padding-right: env(safe-area-inset-right);
-          padding-bottom: env(safe-area-inset-bottom);
-        }
-        
-        .safe-area-inset-bottom {
-          margin-bottom: env(safe-area-inset-bottom);
-        }
-        
-        .custom-scrollbar {
-          scrollbar-width: thin;
-          scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background-color: rgba(255, 255, 255, 0.3);
-          border-radius: 20px;
-        }
-        
-        @media (max-width: 1024px) {
-          .safe-area-padding {
-            padding-left: max(1rem, env(safe-area-inset-left));
-            padding-right: max(1rem, env(safe-area-inset-right));
-          }
-        }
-      `}</style>
     </div>
   );
 };

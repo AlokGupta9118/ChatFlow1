@@ -74,7 +74,7 @@ const ChatPage = ({ currentUser }) => {
         
         {/* Sidebar Content */}
         <div className={`
-          absolute left-0 top-0 h-full w-80 max-w-[85vw]
+          absolute left-0 top-0 h-full w-80 max-w-[65vw]
           bg-white dark:bg-gray-900 shadow-2xl
           transform transition-transform duration-300 ease-in-out
           ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full'}
