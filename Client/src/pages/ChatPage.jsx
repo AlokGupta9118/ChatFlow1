@@ -191,13 +191,13 @@ const ChatPage = ({ currentUser }) => {
                 </button>
               </div>
 
-              {/* Chat Window - FIXED: Added isGroup prop */}
+              {/* Chat Window - FIXED: Make sure isGroup prop is passed correctly */}
               <div className="flex-1 overflow-hidden flex flex-col">
                 <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
                   <ChatWindow
                     currentUser={currentUser}
                     selectedChat={selectedChat}
-                    isGroup={isGroupSelected} // This was missing!
+                    isGroup={isGroupSelected} // Make sure this is passed
                     onToggleGroupInfo={() => setShowGroupInfo((prev) => !prev)}
                   />
                 </div>
