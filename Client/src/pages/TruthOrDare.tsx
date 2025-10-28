@@ -62,7 +62,7 @@ export default function TruthOrDare({ currentUser }) {
   const [currentProof, setCurrentProof] = useState(null);
   const [truthCompletionText, setTruthCompletionText] = useState("");
 
-  // 🔥 CHAT STATE
+  // 🔥 CHAT STATE - FIXED: Better mobile handling
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [showChat, setShowChat] = useState(false);
@@ -70,6 +70,10 @@ export default function TruthOrDare({ currentUser }) {
 
   // FIXED: New state for next round loading
   const [nextRoundLoading, setNextRoundLoading] = useState(false);
+
+  // NEW: Reconnection state
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
 
   const promptsRef = useRef([]);
   const timerRef = useRef(null);
@@ -81,17 +85,22 @@ export default function TruthOrDare({ currentUser }) {
 
   promptsRef.current = prompts;
 
-  // FIXED: Auto-scroll to top when game state changes
+  // FIXED: Better mobile scrolling
   useEffect(() => {
     if (mainContainerRef.current) {
       mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [stage, selectedPlayer, chosenPrompt, showChat]);
 
-  // FIXED: Scroll chat to bottom when new messages arrive
+  // FIXED: Better chat scrolling for mobile
   useEffect(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      const scrollToBottom = () => {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      };
+      
+      // Small delay to ensure DOM is updated
+      setTimeout(scrollToBottom, 100);
     }
   }, [chatMessages]);
 
@@ -152,14 +161,72 @@ export default function TruthOrDare({ currentUser }) {
     }
   }, [selectedPlayer, chosenPrompt, roomId, localName]);
 
-  // 🔌 Socket initialization with CHAT HANDLERS - FIXED SPINNER ISSUES
+  // 🔌 Socket initialization with IMPROVED RECONNECTION & CHAT HANDLERS
   useEffect(() => {
-    const sock = io(DEFAULT_SOCKET_URL, { autoConnect: true });
+    const sock = io(DEFAULT_SOCKET_URL, { 
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000
+    });
 
     sock.on("connect", () => {
       console.log("✅ Socket connected:", sock.id);
+      setIsReconnecting(false);
+      setReconnectAttempts(0);
       addToast("Connected to game server", 2000);
-      if (roomId && localName) sock.emit("rejoin-room", { roomId, name: localName });
+      
+      // NEW: Improved rejoin logic
+      const savedRoomId = localStorage.getItem("roomId");
+      const savedName = localStorage.getItem("localName");
+      
+      if (savedRoomId && savedName && stage !== "lobby") {
+        console.log("🔄 Attempting to rejoin room:", savedRoomId);
+        sock.emit("rejoin-room", { 
+          roomId: savedRoomId, 
+          name: savedName,
+          isHost: localStorage.getItem("isHost") === "true"
+        });
+      }
+    });
+
+    sock.on("reconnecting", (attempt) => {
+      console.log("🔄 Reconnecting attempt:", attempt);
+      setIsReconnecting(true);
+      setReconnectAttempts(attempt);
+      addToast(`Reconnecting... (${attempt}/5)`, 3000, "warning");
+    });
+
+    sock.on("reconnect_failed", () => {
+      console.log("❌ Reconnection failed");
+      setIsReconnecting(false);
+      addToast("Failed to reconnect. Please refresh the page.", 5000, "error");
+    });
+
+    sock.on("reconnect_error", (error) => {
+      console.log("⚠️ Reconnection error:", error);
+    });
+
+    // NEW: Improved room rejoin handling
+    sock.on("room-rejoined", (room) => {
+      console.log("🎉 Successfully rejoined room:", room);
+      setRoomId(room.roomId);
+      setPlayers(room.players);
+      setPrevPlayers(room.players);
+      setIsHost(room.players[0]?.name === localName);
+      setStage(room.gameState?.stage || "waiting");
+      
+      // Restore game state if available
+      if (room.gameState) {
+        setSelectedPlayer(room.gameState.selectedPlayer || null);
+        setTruthDareChoice(room.gameState.truthDareChoice || null);
+        setChosenPrompt(room.gameState.chosenPrompt || null);
+        setSpinning(room.gameState.spinning || false);
+      }
+      
+      addToast("Successfully rejoined the game!", 3000, "success");
     });
 
     sock.on("room-created", (room) => {
@@ -171,6 +238,7 @@ export default function TruthOrDare({ currentUser }) {
 
       localStorage.setItem("roomId", room.roomId);
       localStorage.setItem("isHost", "true");
+      localStorage.setItem("players", JSON.stringify(room.players));
       playSound("success");
     });
 
@@ -183,6 +251,7 @@ export default function TruthOrDare({ currentUser }) {
 
       localStorage.setItem("roomId", room.roomId);
       localStorage.setItem("isHost", "false");
+      localStorage.setItem("players", JSON.stringify(room.players));
       playSound("success");
     });
 
@@ -398,21 +467,53 @@ export default function TruthOrDare({ currentUser }) {
       }
     });
 
-    sock.on("disconnect", () => {
-      console.log("🔴 Socket disconnected");
-      addToast("Disconnected from server", 3000, "error");
+    sock.on("disconnect", (reason) => {
+      console.log("🔴 Socket disconnected:", reason);
+      if (reason === "io server disconnect") {
+        // Server forced disconnect, need to manually reconnect
+        addToast("Disconnected from server. Reconnecting...", 3000, "warning");
+        sock.connect();
+      } else {
+        addToast("Disconnected from server", 3000, "error");
+      }
     });
 
     setSocket(sock);
-    return () => sock.disconnect();
+    
+    // Cleanup on unmount
+    return () => {
+      if (sock) {
+        sock.off();
+        sock.disconnect();
+      }
+    };
   }, []);
 
-  // Persist localName
+  // Persist localName and game state
   useEffect(() => {
-    if (localName) localStorage.setItem("localName", localName);
+    if (localName) {
+      localStorage.setItem("localName", localName);
+    }
   }, [localName]);
 
-  // 🔥 CHAT FUNCTIONS
+  // NEW: Save game state to localStorage for reconnection
+  useEffect(() => {
+    if (stage !== "lobby") {
+      const gameState = {
+        stage,
+        selectedPlayer,
+        truthDareChoice,
+        chosenPrompt,
+        spinning,
+        roomId,
+        localName,
+        isHost
+      };
+      localStorage.setItem("truthOrDareGameState", JSON.stringify(gameState));
+    }
+  }, [stage, selectedPlayer, truthDareChoice, chosenPrompt, spinning, roomId, localName, isHost]);
+
+  // 🔥 CHAT FUNCTIONS - IMPROVED MOBILE HANDLING
   const sendChatMessage = () => {
     if (!chatInput.trim() || !socket) return;
 
@@ -466,6 +567,15 @@ export default function TruthOrDare({ currentUser }) {
     });
   };
 
+  // NEW: Manual reconnection function
+  const manualReconnect = () => {
+    if (socket) {
+      socket.connect();
+      setIsReconnecting(true);
+      addToast("Attempting to reconnect...", 3000);
+    }
+  };
+
   // NEW: Submit truth completion - FIXED to broadcast to everyone
   const submitTruthCompletion = () => {
     if (!truthCompletionText.trim()) {
@@ -505,7 +615,7 @@ export default function TruthOrDare({ currentUser }) {
     }
   };
 
-  // 🎮 Room actions
+  // 🎮 Room actions with IMPROVED RECONNECTION
   const createRoom = () => {
     if (!socket || !localName.trim()) return addToast("Please enter your name", 3000, "error");
     socket.emit("create-room", { player: { name: localName } });
@@ -517,9 +627,11 @@ export default function TruthOrDare({ currentUser }) {
   };
 
   const leaveRoom = () => {
+    // Clear all game-related localStorage
     localStorage.removeItem("roomId");
     localStorage.removeItem("players");
     localStorage.removeItem("isHost");
+    localStorage.removeItem("truthOrDareGameState");
 
     setRoomId("");
     setPlayers([]);
@@ -537,7 +649,8 @@ export default function TruthOrDare({ currentUser }) {
     setProofs({});
     setChatMessages([]);
     setNextRoundLoading(false);
-    setSpinning(false); // Ensure spinner stops
+    setSpinning(false);
+    setShowChat(false);
 
     if (socket && roomId) socket.emit("leave-room", roomId);
     addToast("Left the room", 2000);
@@ -866,6 +979,24 @@ export default function TruthOrDare({ currentUser }) {
     <div className="h-screen w-full flex overflow-hidden bg-background">
       <div className="flex-1 overflow-y-auto" ref={mainContainerRef}>
         <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-3 md:p-6 relative">
+          {/* Reconnection Banner */}
+          {isReconnecting && (
+            <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 z-50">
+              <div className="flex items-center justify-center space-x-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Reconnecting to game... Attempt {reconnectAttempts}/5</span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={manualReconnect}
+                  className="ml-2 bg-white text-yellow-600 hover:bg-gray-100 h-6 text-xs"
+                >
+                  Retry Now
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Animated background */}
           <div className="absolute inset-0 overflow-hidden">
             {[...Array(10)].map((_, i) => (
@@ -931,6 +1062,11 @@ export default function TruthOrDare({ currentUser }) {
                         className="text-white hover:bg-white/20 h-8 w-8 md:h-10 md:w-10"
                       >
                         <MessageCircle className="w-4 h-4 md:w-5 md:h-5" />
+                        {chatMessages.length > 0 && (
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-xs w-4 h-4 flex items-center justify-center">
+                            {chatMessages.filter(m => m.sender !== localName && !m.read).length}
+                          </span>
+                        )}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -1557,36 +1693,48 @@ export default function TruthOrDare({ currentUser }) {
                 )}
               </div>
 
-              {/* RIGHT COLUMN - CHAT */}
+              {/* RIGHT COLUMN - CHAT - FIXED MOBILE RESPONSIVENESS */}
               {showChat && (
                 <div className="space-y-4 md:space-y-6">
-                  <Card className="h-[400px] md:h-[600px] flex flex-col bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0">
-                    <div className="p-3 md:p-4 border-b border-gray-200">
+                  <Card className="h-[400px] md:h-[600px] flex flex-col bg-white/95 backdrop-blur-sm shadow-xl rounded-2xl border-0 overflow-hidden">
+                    <div className="p-3 md:p-4 border-b border-gray-200 bg-white/80">
                       <div className="flex items-center justify-between">
                         <h3 className="text-base md:text-lg font-semibold text-gray-900 flex items-center">
                           <MessageCircle className="w-4 h-4 md:w-5 md:h-5 mr-2 text-blue-600" />
                           Game Chat
                         </h3>
-                        <Badge variant="outline" className="text-xs">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowChat(false)}
+                          className="md:hidden h-6 w-6 p-0"
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                        <Badge variant="outline" className="text-xs hidden md:flex">
                           {players.length} online
                         </Badge>
                       </div>
                       
                       {/* Typing indicators */}
                       {typingUsers.size > 0 && (
-                        <div className="text-xs text-gray-500 mt-1">
+                        <div className="text-xs text-gray-500 mt-1 truncate">
                           {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
                         </div>
                       )}
                     </div>
 
-                    {/* Chat Messages */}
+                    {/* Chat Messages - FIXED SCROLLING */}
                     <div 
                       ref={chatContainerRef}
-                      className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 md:space-y-3"
+                      className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 md:space-y-3 bg-gray-50/50"
+                      style={{ 
+                        WebkitOverflowScrolling: 'touch',
+                        overflowX: 'hidden'
+                      }}
                     >
                       {chatMessages.length === 0 ? (
-                        <div className="text-center text-gray-500 mt-4 md:mt-8">
+                        <div className="text-center text-gray-500 mt-8 md:mt-16">
                           <MessageCircle className="w-8 h-8 md:w-12 md:h-12 mx-auto mb-2 opacity-50" />
                           <p className="text-sm">No messages yet</p>
                           <p className="text-xs">Start the conversation!</p>
@@ -1598,18 +1746,18 @@ export default function TruthOrDare({ currentUser }) {
                             className={`flex ${message.sender === localName ? 'justify-end' : 'justify-start'}`}
                           >
                             <div
-                              className={`max-w-[85%] rounded-2xl p-2 md:p-3 ${
+                              className={`max-w-[85%] md:max-w-[75%] rounded-2xl p-2 md:p-3 ${
                                 message.sender === localName
                                   ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-md'
                                   : 'bg-gray-100 text-gray-900 rounded-bl-md'
                               }`}
                             >
                               {message.sender !== localName && (
-                                <div className="text-xs font-semibold mb-1 opacity-75">
+                                <div className="text-xs font-semibold mb-1 opacity-75 truncate">
                                   {message.sender}
                                 </div>
                               )}
-                              <div className="text-xs md:text-sm break-words">{message.content}</div>
+                              <div className="text-xs md:text-sm break-words whitespace-pre-wrap">{message.content}</div>
                               <div className={`text-xs mt-1 ${
                                 message.sender === localName ? 'text-blue-100' : 'text-gray-500'
                               }`}>
@@ -1621,22 +1769,23 @@ export default function TruthOrDare({ currentUser }) {
                       )}
                     </div>
 
-                    {/* Chat Input */}
-                    <div className="p-3 md:p-4 border-t border-gray-200">
+                    {/* Chat Input - FIXED MOBILE INPUT */}
+                    <div className="p-3 md:p-4 border-t border-gray-200 bg-white/80">
                       <div className="flex gap-2">
                         <Input
                           value={chatInput}
                           onChange={handleChatInputChange}
                           onKeyPress={handleChatKeyPress}
                           placeholder="Type a message..."
-                          className="flex-1 text-sm md:text-base"
+                          className="flex-1 text-sm md:text-base min-h-[40px]"
                         />
                         <Button
                           onClick={sendChatMessage}
                           disabled={!chatInput.trim()}
-                          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white"
+                          className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white min-h-[40px] min-w-[40px] p-0 md:px-4"
                         >
-                          <Send className="w-3 h-3 md:w-4 md:h-4" />
+                          <Send className="w-4 h-4" />
+                          <span className="hidden md:inline ml-1">Send</span>
                         </Button>
                       </div>
                     </div>
@@ -1649,7 +1798,7 @@ export default function TruthOrDare({ currentUser }) {
           {/* Proof Viewing Modal */}
           {showProofModal && (
             <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-3 md:p-4">
-              <Card className="max-w-md md:max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0">
+              <Card className="max-w-md md:max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border-0 max-h-[90vh] overflow-hidden">
                 <div className="p-4 md:p-6">
                   <div className="flex justify-between items-center mb-3 md:mb-4">
                     <h3 className="text-lg md:text-xl font-bold text-gray-900">Proof Submission</h3>
@@ -1666,13 +1815,13 @@ export default function TruthOrDare({ currentUser }) {
                     </Button>
                   </div>
                   
-                  <div className="text-center">
+                  <div className="text-center max-h-[60vh] overflow-y-auto">
                     {currentProof ? (
                       <div className="space-y-3 md:space-y-4">
                         <img
                           src={currentProof}
                           alt="Proof submission"
-                          className="max-w-full h-48 md:h-96 object-contain rounded-lg border-2 border-gray-200 mx-auto"
+                          className="max-w-full max-h-[50vh] object-contain rounded-lg border-2 border-gray-200 mx-auto"
                         />
                         <p className="text-xs md:text-sm text-gray-600">
                           This is the proof submitted by the player for their dare
