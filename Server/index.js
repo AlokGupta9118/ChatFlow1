@@ -17,7 +17,6 @@ import { getProfile } from "./controllers/settingController.js";
 import { protect } from "./middleware/authMiddleware.js";
 import gameSocket from "./socket/gameSocket.js";
 import statusRoutes from "./routes/statusRoutes.js";
-import { setupChatSockets } from "./socket/messageSocket.js";
 import chatRoutes from "./routes/chat.js";
 dotenv.config();
 
