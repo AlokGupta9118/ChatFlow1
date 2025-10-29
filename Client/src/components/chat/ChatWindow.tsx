@@ -1,4 +1,4 @@
-// ChatWindow.jsx - DEBUG ONLY VERSION
+// ChatWindow.jsx - DEBUG ONLY VERSION (WITH NAME FIXES)
 import { useEffect, useState, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 
@@ -12,7 +12,7 @@ const createSocket = () => {
 const ChatWindow = () => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [typingUsers, setTypingUsers] = useState(new Set());
+  const [typingUsers, setTypingUsers] = useState(new Map()); // ✅ CHANGED: Using Map to store userId -> userName
   const [logs, setLogs] = useState([]);
   const [testUserId, setTestUserId] = useState("user123");
   const [testUserName, setTestUserName] = useState("Test User");
@@ -27,6 +27,14 @@ const ChatWindow = () => {
   const addLog = (message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
     setLogs(prev => [...prev, { timestamp, message, type }]);
+  };
+
+  // ✅ ADDED: Test user names mapping for quick testing
+  const TEST_USER_NAMES = {
+    'user123': 'Alice',
+    'user456': 'Bob',
+    'user789': 'Charlie',
+    '68e1a7358455f4adf45ee208': 'Alokk'
   };
 
   // Socket connection management
@@ -54,19 +62,25 @@ const ChatWindow = () => {
       setIsConnected(false);
     };
 
-    // Typing listener
+    // ✅ FIXED: Typing listener - Store both userId and userName
     const handleUserTyping = (data) => {
       addLog(`🎯 TYPING EVENT RECEIVED: ${JSON.stringify(data)}`);
       
       if (data.isTyping) {
-        setTypingUsers(prev => new Set(prev).add(data.userId));
-        addLog(`➕ Added typing user: ${data.userName || data.userId}`);
+        // ✅ Store both user ID and name
+        setTypingUsers(prev => {
+          const newMap = new Map(prev);
+          newMap.set(data.userId, data.userName || TEST_USER_NAMES[data.userId] || `User ${data.userId}`);
+          addLog(`➕ Added typing user: ${newMap.get(data.userId)} (ID: ${data.userId})`);
+          return newMap;
+        });
       } else {
         setTypingUsers(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(data.userId);
-          addLog(`➖ Removed typing user: ${data.userName || data.userId}`);
-          return newSet;
+          const newMap = new Map(prev);
+          const userName = newMap.get(data.userId) || data.userName || `User ${data.userId}`;
+          newMap.delete(data.userId);
+          addLog(`➖ Removed typing user: ${userName} (ID: ${data.userId})`);
+          return newMap;
         });
       }
     };
@@ -103,7 +117,7 @@ const ChatWindow = () => {
     const typingData = {
       chatId: testChatId,
       userId: testUserId,
-      userName: testUserName,
+      userName: testUserName, // ✅ This will be sent to backend and forwarded to other users
       isGroup: isGroup,
       chatRoomId: testChatRoomId
     };
@@ -146,9 +160,24 @@ const ChatWindow = () => {
     setLogs([]);
   };
 
+  // ✅ ADDED: Function to get typing display text with names
+  const getTypingDisplayText = () => {
+    if (typingUsers.size === 0) return null;
+    
+    const typingArray = Array.from(typingUsers.entries());
+    
+    if (typingArray.length === 1) {
+      const [userId, userName] = typingArray[0];
+      return `${userName} is typing...`;
+    } else {
+      const names = typingArray.map(([_, userName]) => userName).join(', ');
+      return `${names} are typing...`;
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white p-4">
-      <h1 className="text-2xl font-bold mb-4 text-center">🎯  CHAT WINDOW - DEBUG MODE</h1>
+      <h1 className="text-2xl font-bold mb-4 text-center">🎯 CHAT WINDOW - DEBUG MODE</h1>
       
       {/* Control Panel */}
       <div className="bg-gray-800 p-4 rounded-lg mb-4">
@@ -162,6 +191,7 @@ const ChatWindow = () => {
               value={testUserId}
               onChange={(e) => setTestUserId(e.target.value)}
               className="w-full p-2 bg-gray-700 rounded text-white"
+              placeholder="user123, user456, etc."
             />
           </div>
           <div>
@@ -171,6 +201,7 @@ const ChatWindow = () => {
               value={testUserName}
               onChange={(e) => setTestUserName(e.target.value)}
               className="w-full p-2 bg-gray-700 rounded text-white"
+              placeholder="This name will be shown to others"
             />
           </div>
           <div>
@@ -242,17 +273,20 @@ const ChatWindow = () => {
           </div>
         </div>
         
-        {/* Typing Indicator Display */}
+        {/* ✅ FIXED: Typing Indicator Display with Names */}
         {typingUsers.size > 0 && (
           <div className="mt-4 p-3 bg-yellow-600 rounded">
             <div className="flex items-center gap-3">
               <div className="text-lg">⌨️</div>
               <div>
                 <div className="font-bold">
-                  {typingUsers.size === 1 ? 'Someone is typing...' : `${typingUsers.size} people are typing...`}
+                  {getTypingDisplayText()}
                 </div>
                 <div className="text-sm opacity-75">
-                  User IDs: {Array.from(typingUsers).join(', ')}
+                  User IDs: {Array.from(typingUsers.keys()).join(', ')}
+                </div>
+                <div className="text-sm opacity-75">
+                  User Names: {Array.from(typingUsers.values()).join(', ')}
                 </div>
               </div>
               <div className="flex space-x-1 ml-auto">
@@ -270,7 +304,7 @@ const ChatWindow = () => {
         <div className="p-4 border-b border-gray-700 flex justify-between items-center">
           <h2 className="text-lg font-bold">📝 Event Logs</h2>
           <div className="text-sm text-gray-400">
-            Total: {logs.length} events
+            Total: {logs.length} events | Typing Users: {typingUsers.size}
           </div>
         </div>
         <div 
@@ -303,13 +337,23 @@ const ChatWindow = () => {
       <div className="mt-4 p-4 bg-blue-900/30 rounded-lg">
         <h3 className="font-bold mb-2">🚀 Quick Test Instructions:</h3>
         <ol className="list-decimal list-inside text-sm space-y-1">
-          <li>Click "Join Chat Room" to join the test room</li>
-          <li>Click "Test Typing" to simulate typing</li>
-          <li>Open another browser window with this same page</li>
-          <li>Use different User IDs in each window</li>
-          <li>Test typing between windows</li>
-          <li>Check backend logs for "BACKEND: TYPING START" messages</li>
+          <li><strong>Window 1:</strong> User ID: "user123", Name: "Alice"</li>
+          <li><strong>Window 2:</strong> User ID: "user456", Name: "Bob"</li>
+          <li>Both windows: Use same Chat ID and Chat Room ID</li>
+          <li>Click "Join Chat Room" in both windows</li>
+          <li>Click "Test Typing" in one window - should see name in other window</li>
+          <li><strong>Expected:</strong> Should see "Alice is typing..." instead of "Someone is typing..."</li>
         </ol>
+        
+        <div className="mt-3 p-2 bg-green-900/30 rounded">
+          <h4 className="font-bold mb-1">✅ What's Fixed:</h4>
+          <ul className="list-disc list-inside text-sm space-y-1">
+            <li>Using Map to store userId → userName pairs</li>
+            <li>Backend forwards userName to other users</li>
+            <li>Display shows actual names instead of "Someone"</li>
+            <li>Added test user name mappings for common IDs</li>
+          </ul>
+        </div>
       </div>
     </div>
   );

@@ -52,34 +52,34 @@ export const setupChatSockets = (io) => {
     });
 
     // ✅ FIXED: Enhanced typing indicators with BETTER debugging
-    socket.on('typing_start', (data) => {
-      console.log('🎯 BACKEND: TYPING START received:', JSON.stringify(data, null, 2));
-      
-      const { chatId, userId, userName, isGroup = false, chatRoomId } = data;
-      
-      if (!chatId || !userId) {
-        console.log('❌ BACKEND: Missing required typing data');
-        return;
-      }
+    // In your messageSocket.js - Update the typing_start handler:
+socket.on('typing_start', (data) => {
+  console.log('🎯 BACKEND: TYPING START received:', JSON.stringify(data, null, 2));
+  
+  const { chatId, userId, userName, isGroup = false, chatRoomId } = data;
+  
+  if (!chatId || !userId) {
+    console.log('❌ BACKEND: Missing required typing data');
+    return;
+  }
 
-      // Calculate room ID
-      const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
-      
-      console.log(`🎯 BACKEND: ${userName} started typing in ${roomId} (User: ${userId})`);
-      
-      // ✅ FIXED: Use socket.to(roomId) to broadcast to others in the room
-      socket.to(roomId).emit('user_typing', {
-        userId,
-        userName: userName || 'Someone',
-        isTyping: true,
-        chatId: chatId,
-        roomId: roomId,
-        isGroup: isGroup,
-        timestamp: new Date().toISOString()
-      });
+  const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
+  
+  console.log(`🎯 BACKEND: ${userName} started typing in ${roomId} (User: ${userId})`);
+  
+  // ✅ FIXED: Ensure we send ALL user data
+  socket.to(roomId).emit('user_typing', {
+    userId,
+    userName: userName || 'Unknown User', // Fallback name
+    isTyping: true,
+    chatId: chatId,
+    roomId: roomId,
+    isGroup: isGroup,
+    timestamp: new Date().toISOString()
+  });
 
-      console.log(`📢 BACKEND: Emitted typing start to room: ${roomId} (excluding sender)`);
-    });
+  console.log(`📢 BACKEND: Emitted typing start to room: ${roomId}`);
+});
 
     socket.on('typing_stop', (data) => {
       console.log('🎯 BACKEND: TYPING STOP received:', JSON.stringify(data, null, 2));
