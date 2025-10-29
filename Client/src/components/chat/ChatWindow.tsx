@@ -262,43 +262,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   }, [messages, typingUsers.size]);
 
   // ✅ FIXED: Enhanced typing handler
-  const handleTyping = useCallback(() => {
-    if (!socket || !isConnected || !selectedChat?._id) {
-      console.log('❌ Typing: Missing requirements');
-      return;
-    }
-
-    // Clear existing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    const typingData = {
-      chatId: selectedChat._id,
-      userId: userId,
-      userName: user.name || user.username || 'User',
-      isGroup: isGroup,
-      chatRoomId: currentChatRoomId
-    };
-
-    console.log('🎯 EMITTING TYPING START:', typingData);
-    socket.emit("typing_start", typingData);
-
-    // Set timeout to stop typing
-    typingTimeoutRef.current = setTimeout(() => {
-      const stopData = {
-        chatId: selectedChat._id,
-        userId: userId,
-        isGroup: isGroup,
-        chatRoomId: currentChatRoomId
-      };
-      
-      console.log('🎯 EMITTING TYPING STOP:', stopData);
-      socket.emit("typing_stop", stopData);
-      typingTimeoutRef.current = null;
-    }, 2000);
-  }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, user.username, currentChatRoomId]);
-
+  
   // Enhanced input change handler
   const handleInputChange = (e) => {
     const value = e.target.value;
@@ -397,6 +361,64 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       setIsSending(false);
     }
   };
+
+    // ✅ Add this debugging function to check socket room status
+const checkRoomStatus = useCallback(() => {
+  if (!socket || !selectedChat?._id) return;
+  
+  console.log('🔍 CHECKING ROOM STATUS:');
+  console.log('🔍 Current User ID:', userId);
+  console.log('🔍 Selected Chat ID:', selectedChat._id);
+  console.log('🔍 Current Chat Room ID:', currentChatRoomId);
+  console.log('🔍 Is Group:', isGroup);
+  console.log('🔍 Expected Room ID:', isGroup ? `group_${selectedChat._id}` : `private_${currentChatRoomId || selectedChat._id}`);
+  console.log('🔍 Socket Connected:', isConnected);
+  console.log('🔍 Socket ID:', socket?.id);
+}, [socket, selectedChat?._id, userId, currentChatRoomId, isGroup, isConnected]);
+
+// Call this when component mounts or when chat changes
+useEffect(() => {
+  checkRoomStatus();
+}, [checkRoomStatus]);
+
+// ✅ Enhanced typing handler with debugging
+const handleTyping = useCallback(() => {
+  if (!socket || !isConnected || !selectedChat?._id) {
+    console.log('❌ Typing: Missing requirements');
+    checkRoomStatus();
+    return;
+  }
+
+  if (typingTimeoutRef.current) {
+    clearTimeout(typingTimeoutRef.current);
+  }
+
+  const typingData = {
+    chatId: selectedChat._id,
+    userId: userId,
+    userName: user.name || user.username || 'User',
+    isGroup: isGroup,
+    chatRoomId: currentChatRoomId
+  };
+
+  console.log('🎯 EMITTING TYPING START:', typingData);
+  socket.emit("typing_start", typingData);
+
+  typingTimeoutRef.current = setTimeout(() => {
+    const stopData = {
+      chatId: selectedChat._id,
+      userId: userId,
+      isGroup: isGroup,
+      chatRoomId: currentChatRoomId
+    };
+    
+    console.log('🎯 EMITTING TYPING STOP:', stopData);
+    socket.emit("typing_stop", stopData);
+    typingTimeoutRef.current = null;
+  }, 2000);
+}, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, user.username, currentChatRoomId, checkRoomStatus]);
+
+  
 
   // ✅ FIXED: Enhanced typing indicator display
   const getStatusText = () => {
@@ -519,6 +541,17 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         >
           <Info className="w-5 h-5" />
         </Button>
+        {/* Add this temporary debug button */}
+<Button
+  onClick={() => {
+    console.log('🧪 MANUAL TYPING TEST TRIGGERED');
+    handleTyping();
+  }}
+  className="bg-yellow-600 text-white"
+>
+  Test Typing
+</Button>
+
       </div>
 
       {/* Messages Area */}
