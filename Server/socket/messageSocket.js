@@ -1,4 +1,7 @@
-// socketSetup.js
+// Server/socket/messageSocket.js
+import ChatRoom from "../../models/ChatRoom.js";
+import Message from "../../models/Message.js";
+
 export const setupChatSockets = (io) => {
   io.on('connection', (socket) => {
     console.log('✅ User connected:', socket.id);
@@ -146,6 +149,44 @@ export const setupChatSockets = (io) => {
       });
     });
 
+    // ✅ FIXED: Message read receipts
+    socket.on('mark_messages_read', async (data) => {
+      try {
+        const { messageIds, chatRoomId, userId } = data;
+        
+        // Update messages as read in database
+        await Message.updateMany(
+          { _id: { $in: messageIds }, readBy: { $ne: userId } },
+          { $addToSet: { readBy: userId } }
+        );
+
+        // Notify other users in the chat room
+        const roomId = chatRoomId.startsWith('group_') ? chatRoomId : `private_${chatRoomId}`;
+        socket.to(roomId).emit('messages_read', {
+          messageIds,
+          userId,
+          readAt: new Date().toISOString()
+        });
+
+      } catch (error) {
+        console.error('❌ Error marking messages as read:', error);
+      }
+    });
+
+    // ✅ FIXED: Handle user presence
+    socket.on('user_presence', (data) => {
+      const { userId, status, currentChat } = data;
+      
+      if (currentChat) {
+        const roomId = currentChat.isGroup ? `group_${currentChat.roomId}` : `private_${currentChat.chatRoomId || currentChat.roomId}`;
+        socket.to(roomId).emit('user_presence_update', {
+          userId,
+          status,
+          lastSeen: new Date().toISOString()
+        });
+      }
+    });
+
     // ✅ FIXED: Enhanced disconnect handling
     socket.on('disconnect', (reason) => {
       console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
@@ -157,10 +198,32 @@ export const setupChatSockets = (io) => {
           lastSeen: new Date().toISOString()
         });
       }
+
+      // Clean up user rooms
+      socket.userRooms.forEach(room => {
+        socket.leave(room);
+      });
+      socket.userRooms.clear();
     });
 
     socket.on('error', (error) => {
       console.error('❌ Socket error:', error);
     });
+
+    // ✅ FIXED: Handle connection testing
+    socket.on('ping', (data) => {
+      socket.emit('pong', {
+        timestamp: new Date().toISOString(),
+        userId: socket.userId,
+        ...data
+      });
+    });
+  });
+
+  // ✅ FIXED: Add global error handling for the IO instance
+  io.engine.on("connection_error", (err) => {
+    console.log('❌ Socket.IO connection error:', err);
   });
 };
+
+export default setupChatSockets;
