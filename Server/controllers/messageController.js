@@ -1,112 +1,131 @@
-import mongoose from "mongoose";
+// controllers/chatController.js
 import ChatRoom from "../models/ChatRoom.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 
-export const sendMessage = async (req, res) => {
+// ✅ Get messages for private chat
+export const getPrivateMessages = async (req, res) => {
   try {
-    const senderId = req.user._id; // correct _id usage
-    const { receiverId, content, messageType } = req.body;
+    const { chatId } = req.params;
+    const userId = req.user._id;
 
-    if (!receiverId || !content) {
-      return res.status(400).json({ message: "Receiver and content required" });
-    }
-
-    const receiverObjId = mongoose.Types.ObjectId(receiverId);
-
-    // Check friend exists
-    const friend = await User.findById(receiverObjId);
-    if (!friend) return res.status(404).json({ message: "Friend not found" });
-
-    // Find existing direct chat room
-    let chatRoom = await ChatRoom.findOne({
-      type: "direct",
-      "participants.user": { $all: [senderId, receiverObjId] },
-    });
-
-    // If no room, create one
-    if (!chatRoom) {
-      chatRoom = new ChatRoom({
-        type: "direct",
-        createdBy: senderId,
-        participants: [
-          { user: senderId, role: "owner" },
-          { user: receiverObjId, role: "member" },
-        ],
-      });
-      await chatRoom.save();
-    }
-
-    // Create message
-    const newMessage = new Message({
-      chatRoom: chatRoom._id,
-      sender: senderId,
-      type: messageType || "text",
-      content,
-    });
-    await newMessage.save();
-
-    // Update chatRoom
-    chatRoom.messages.push(newMessage._id);
-    chatRoom.lastMessage = newMessage._id;
-    await chatRoom.save();
-
-    // Populate message
-    const populatedMessage = await Message.findById(newMessage._id)
-      .populate("sender", "name profilePicture")
-      .lean();
-
-    // Emit via socket if io exists
-    if (req.io) {
-      req.io.to(receiverId.toString()).emit("receive_message", {
-        ...populatedMessage,
-        senderId: senderId.toString(),
-        receiverId: receiverId.toString(),
-      });
-    }
-
-    res.status(201).json({ message: populatedMessage });
-  } catch (error) {
-    console.error("SendMessage ERROR:", error);
-    res.status(500).json({ message: error.message, stack: error.stack });
-  }
-};
-
-/**
- * Get messages for a chat room (direct chat)
- */
-export const getMessages = async (req, res) => {
-  try {
-    const currentUserId = req.user.id;
-    const friendId = req.params.friendId;
-
-    if (!friendId) return res.status(400).json({ message: "Friend ID required" });
-
-    // ✅ Find the direct chat room
-    const chatRoom = await ChatRoom.findOne({
-      type: "direct",
-      "participants.user": { $all: [currentUserId, friendId] },
-      $expr: { $eq: [{ $size: "$participants" }, 2] },
+    // Find messages between current user and the other user
+    const messages = await Message.find({
+      $or: [
+        { sender: userId, receiver: chatId },
+        { sender: chatId, receiver: userId }
+      ]
     })
-      .populate({
-        path: "messages",
-        populate: { path: "sender", select: "name profilePicture" },
-        options: { sort: { createdAt: 1 } }, // oldest first
-      })
-      .populate("participants.user", "name profilePicture status");
+    .populate('sender', 'name profilePicture')
+    .populate('receiver', 'name profilePicture')
+    .sort({ createdAt: 1 });
 
-    if (!chatRoom) {
-      return res.status(404).json({ message: "No chat room found" });
-    }
-
-    res.json({ 
-      roomId: chatRoom._id,
-      messages: chatRoom.messages,
-      participants: chatRoom.participants,
-    });
+    res.status(200).json({ messages });
   } catch (error) {
-    console.error("Error in getMessages:", error);
+    console.error("Error fetching private messages:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+// ✅ Get messages for group chat
+export const getGroupMessages = async (req, res) => {
+  try {
+    const { chatRoomId } = req.params;
+    const userId = req.user._id;
+
+    // Check if user is member of the group
+    const chatRoom = await ChatRoom.findById(chatRoomId);
+    if (!chatRoom) {
+      return res.status(404).json({ message: "Chat room not found" });
+    }
+
+    const isMember = chatRoom.members.some(member => 
+      member.user.toString() === userId.toString()
+    );
+
+    if (!isMember) {
+      return res.status(403).json({ message: "Not a member of this group" });
+    }
+
+    const messages = await Message.find({ chatRoom: chatRoomId })
+      .populate('sender', 'name profilePicture')
+      .sort({ createdAt: 1 });
+
+    res.status(200).json({ messages });
+  } catch (error) {
+    console.error("Error fetching group messages:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ✅ Send private message
+export const sendPrivateMessage = async (req, res) => {
+  try {
+    const { receiverId, content, messageType = "text" } = req.body;
+    const senderId = req.user._id;
+
+    // Create new message
+    const newMessage = new Message({
+      sender: senderId,
+      receiver: receiverId,
+      content,
+      messageType
+    });
+
+    await newMessage.save();
+
+    // Populate sender info for real-time delivery
+    await newMessage.populate('sender', 'name profilePicture');
+
+    res.status(201).json({ 
+      message: newMessage,
+      success: true 
+    });
+  } catch (error) {
+    console.error("Error sending private message:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ✅ Send group message
+export const sendGroupMessage = async (req, res) => {
+  try {
+    const { chatRoomId, content, messageType = "text" } = req.body;
+    const senderId = req.user._id;
+
+    // Check if user is member of the group
+    const chatRoom = await ChatRoom.findById(chatRoomId);
+    if (!chatRoom) {
+      return res.status(404).json({ message: "Chat room not found" });
+    }
+
+    const isMember = chatRoom.members.some(member => 
+      member.user.toString() === senderId.toString()
+    );
+
+    if (!isMember) {
+      return res.status(403).json({ message: "Not a member of this group" });
+    }
+
+    // Create new message
+    const newMessage = new Message({
+      sender: senderId,
+      chatRoom: chatRoomId,
+      content,
+      messageType
+    });
+
+    await newMessage.save();
+
+    // Populate sender info for real-time delivery
+    await newMessage.populate('sender', 'name profilePicture');
+
+    res.status(201).json({ 
+      message: newMessage,
+      success: true 
+    });
+  } catch (error) {
+    console.error("Error sending group message:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};

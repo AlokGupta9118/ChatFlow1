@@ -132,9 +132,81 @@ export default function gameSocket(io) {
       console.log(`💬 User ${userId} leaving chat room: ${roomId}`);
       socket.leave(roomId);
     });
+    // Add to your existing socket connection handler:
+
+// ✅ CHAT: Handle real-time messaging WITHOUT duplicates
+socket.on("send-chat-message", async ({ roomId, message, chatType = "private" }) => {
+  try {
+    console.log('💬 Processing chat message for real-time delivery:', message);
+    
+    // Create message object for real-time delivery
+    const chatMessage = {
+      _id: message._id || Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      sender: message.sender,
+      senderId: message.senderId,
+      content: message.content,
+      createdAt: message.createdAt || new Date().toISOString(),
+      type: message.type || "text",
+      chatType: chatType,
+      roomId: roomId,
+      isRealTime: true // Flag to identify real-time messages
+    };
+
+    // ✅ CRITICAL: Broadcast to ALL users in the room EXCEPT the sender
+    socket.to(roomId).emit("receive-chat-message", chatMessage);
+    console.log(`📨 Real-time message sent to room ${roomId} (excluding sender: ${message.senderId})`);
+    
+  } catch (error) {
+    console.error('❌ Error in send-chat-message:', error);
+    socket.emit("chat-error", "Failed to send message");
+  }
+});
+
+// ✅ TYPING: Enhanced typing indicators
+socket.on("chat-typing-start", ({ roomId, userId, userName }) => {
+  console.log(`⌨️ ${userName} started typing in ${roomId}`);
+  
+  // Broadcast to all other users in the room
+  socket.to(roomId).emit("user-typing", { 
+    userId, 
+    userName, 
+    isTyping: true,
+    roomId,
+    timestamp: new Date().toISOString()
+  });
+});
+
+socket.on("chat-typing-stop", ({ roomId, userId, userName }) => {
+  console.log(`⌨️ ${userName || userId} stopped typing in ${roomId}`);
+  
+  // Broadcast to all other users in the room
+  socket.to(roomId).emit("user-typing", { 
+    userId, 
+    userName,
+    isTyping: false,
+    roomId 
+  });
+});
+
+// ✅ MESSAGE STATUS: For delivery/read receipts
+socket.on("message-delivered", ({ messageId, roomId }) => {
+  socket.to(roomId).emit("message-delivery-update", {
+    messageId,
+    status: 'delivered',
+    timestamp: new Date().toISOString()
+  });
+});
+
+socket.on("message-read", ({ messageId, roomId }) => {
+  socket.to(roomId).emit("message-delivery-update", {
+    messageId,
+    status: 'read',
+    timestamp: new Date().toISOString()
+  });
+});
 
     // ✅ CHAT: Send message to chat room
-    socket.on("send-chat-message", ({ roomId, message, chatType = "private" }) => {
+    socket.on("send-gamechat-message", ({ roomId, message, chatType = "private" }) => {
       try {
         console.log(`💬 Chat message in ${roomId}:`, message);
         
@@ -175,7 +247,7 @@ export default function gameSocket(io) {
     });
 
     // ✅ CHAT: Typing indicators for chat
-    socket.on("chat-typing-start", ({ roomId, userId, userName }) => {
+    socket.on("chat-gametyping-start", ({ roomId, userId, userName }) => {
       socket.to(roomId).emit("user-typing", { 
         userId, 
         userName, 
@@ -183,7 +255,7 @@ export default function gameSocket(io) {
       });
     });
 
-    socket.on("chat-typing-stop", ({ roomId, userId }) => {
+    socket.on("chat-gametyping-stop", ({ roomId, userId }) => {
       socket.to(roomId).emit("user-typing", { 
         userId, 
         isTyping: false 

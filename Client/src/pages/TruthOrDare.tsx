@@ -370,14 +370,15 @@ export default function TruthOrDare({ currentUser }) {
 
   promptsRef.current = prompts;
 
-  // Add CSS for mobile scrolling and chat container fixes
+  // FIXED: Enhanced mobile CSS with better viewport handling
   useEffect(() => {
     const styles = `
-      /* Fix mobile scrolling and viewport height */
+      /* Enhanced mobile viewport handling */
       .mobile-viewport-fix {
         height: 100vh;
         height: calc(var(--vh, 1vh) * 100);
         overflow: hidden;
+        position: relative;
       }
       
       .mobile-scroll-container {
@@ -385,6 +386,7 @@ export default function TruthOrDare({ currentUser }) {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
+        position: relative;
       }
       
       .chat-container-fix {
@@ -392,6 +394,7 @@ export default function TruthOrDare({ currentUser }) {
         flex-direction: column;
         height: 100%;
         min-height: 0;
+        position: relative;
       }
       
       .chat-messages-fix {
@@ -399,16 +402,17 @@ export default function TruthOrDare({ currentUser }) {
         overflow-y: auto;
         min-height: 0;
         -webkit-overflow-scrolling: touch;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
       }
       
       .safe-area-padding {
-        padding-left: env(safe-area-inset-left);
-        padding-right: env(safe-area-inset-right);
-        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left, 1rem);
+        padding-right: env(safe-area-inset-right, 1rem);
+        padding-bottom: env(safe-area-inset-bottom, 1rem);
       }
       
       .safe-area-inset-bottom {
-        margin-bottom: env(safe-area-inset-bottom);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
       }
 
       .custom-scrollbar {
@@ -434,17 +438,51 @@ export default function TruthOrDare({ currentUser }) {
         background: linear-gradient(to bottom, #7c3aed, #2563eb);
       }
       
-      /* Fix for mobile address bar */
+      /* Enhanced mobile responsiveness */
       @media (max-width: 768px) {
         .mobile-viewport-fix {
           height: 100vh;
           height: -webkit-fill-available;
+          overflow: hidden;
+        }
+        
+        .mobile-scroll-container {
+          height: 100%;
+          overflow-y: auto;
         }
         
         .safe-area-padding {
-          padding-left: max(1rem, env(safe-area-inset-left));
-          padding-right: max(1rem, env(safe-area-inset-right));
+          padding-left: max(1rem, env(safe-area-inset-left, 1rem));
+          padding-right: max(1rem, env(safe-area-inset-right, 1rem));
+          padding-bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
         }
+        
+        /* Fix for bottom content being cut off */
+        .game-content-container {
+          min-height: calc(100vh - env(safe-area-inset-bottom, 0px));
+          padding-bottom: env(safe-area-inset-bottom, 1rem);
+        }
+        
+        /* Ensure inputs are accessible */
+        input, textarea, select {
+          font-size: 16px !important; /* Prevent zoom on iOS */
+        }
+        
+        /* Better touch targets */
+        button, [role="button"] {
+          min-height: 44px;
+          min-width: 44px;
+        }
+      }
+
+      /* Prevent content shift when keyboard appears */
+      @keyframes keyboardAppear {
+        from { transform: translateY(0); }
+        to { transform: translateY(-100px); }
+      }
+
+      .keyboard-open {
+        animation: keyboardAppear 0.3s ease-out;
       }
     `;
 
@@ -452,27 +490,68 @@ export default function TruthOrDare({ currentUser }) {
     styleSheet.innerText = styles;
     document.head.appendChild(styleSheet);
     
-    // Update viewport height for mobile
+    // Enhanced viewport height calculation for mobile
     const updateViewportHeight = () => {
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
+      
+      // Add keyboard detection
+      const visualViewport = window.visualViewport;
+      if (visualViewport) {
+        const viewportHeight = visualViewport.height;
+        const windowHeight = window.innerHeight;
+        
+        if (viewportHeight < windowHeight) {
+          document.body.classList.add('keyboard-open');
+        } else {
+          document.body.classList.remove('keyboard-open');
+        }
+      }
     };
     
     updateViewportHeight();
     window.addEventListener('resize', updateViewportHeight);
     window.addEventListener('orientationchange', updateViewportHeight);
     
+    // Visual viewport for keyboard detection
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', updateViewportHeight);
+    }
+    
     return () => {
       document.head.removeChild(styleSheet);
       window.removeEventListener('resize', updateViewportHeight);
       window.removeEventListener('orientationchange', updateViewportHeight);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', updateViewportHeight);
+      }
     };
   }, []);
 
-  // FIXED: Better mobile scrolling
+  // FIXED: Enhanced mobile scrolling with keyboard handling
   useEffect(() => {
-    if (mainContainerRef.current) {
-      mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    const handleScrollToBottom = () => {
+      if (mainContainerRef.current) {
+        setTimeout(() => {
+          mainContainerRef.current?.scrollTo({ 
+            top: mainContainerRef.current.scrollHeight, 
+            behavior: 'smooth' 
+          });
+        }, 300);
+      }
+    };
+
+    // Scroll to important sections when they change
+    if (stage === "playing" && selectedPlayer) {
+      handleScrollToBottom();
+    }
+    
+    if (chosenPrompt) {
+      handleScrollToBottom();
+    }
+    
+    if (showChat) {
+      handleScrollToBottom();
     }
   }, [stage, selectedPlayer, chosenPrompt, showChat]);
 
@@ -688,14 +767,16 @@ export default function TruthOrDare({ currentUser }) {
       }));
     });
 
-    // 🔥 NEW: Truth completion handler - shows to everyone
+    // 🔥 FIXED: Truth completion handler - shows to everyone with proper state management
     sock.on("truth-completed", ({ player, completionText }) => {
       console.log("✅ Truth completed by:", player, completionText);
       addToast(`${player} completed their truth!`, 3000, "success");
       
-      // Show the truth completion to everyone
+      // Update the truth completion text for everyone to see
+      setTruthCompletionText(completionText);
+      
+      // Mark as completed for the selected player
       if (player === selectedPlayer) {
-        setTruthCompletionText(completionText);
         setProofUploaded(true);
       }
     });
@@ -897,7 +978,7 @@ export default function TruthOrDare({ currentUser }) {
       type: "text"
     };
 
-    socket.emit("send-chat-message", { roomId, message });
+    socket.emit("send-gamechat-message", { roomId, message });
     setChatInput("");
     
     // Clear typing indicator
@@ -921,7 +1002,7 @@ export default function TruthOrDare({ currentUser }) {
     }
   };
 
-  // NEW: Submit truth completion - FIXED to broadcast to everyone
+  // FIXED: Submit truth completion - Now properly broadcasts to everyone
   const submitTruthCompletion = () => {
     if (!truthCompletionText.trim()) {
       addToast("Please write your truth completion message", 3000, "error");
@@ -934,9 +1015,11 @@ export default function TruthOrDare({ currentUser }) {
         player: localName,
         completionText: truthCompletionText 
       });
+      
+      // Update local state immediately for better UX
+      setProofUploaded(true);
     }
     
-    // Don't set proofUploaded locally - wait for server broadcast
     addToast("Truth completion submitted!", 2000, "success");
   };
 
@@ -970,6 +1053,7 @@ export default function TruthOrDare({ currentUser }) {
     if (!socket || !roomId.trim() || !localName.trim()) return addToast("Please enter name and room ID", 3000, "error");
     socket.emit("join-room", { roomId, player: { name: localName } });
   };
+
   const leaveRoom = () => {
     // Clear all game-related localStorage
     localStorage.removeItem("roomId");
@@ -1215,9 +1299,9 @@ export default function TruthOrDare({ currentUser }) {
   // 🧩 Lobby UI
   if (stage === "lobby") {
     return (
-      <div className="h-screen w-full flex overflow-hidden bg-background">
-        <div className="flex-1 overflow-y-auto" ref={mainContainerRef}>
-          <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4 md:p-6 flex items-center justify-center relative">
+      <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
+        <div className="flex-1 overflow-y-auto mobile-scroll-container" ref={mainContainerRef}>
+          <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4 md:p-6 flex items-center justify-center relative game-content-container">
             {/* Animated background elements */}
             <div className="absolute inset-0 overflow-hidden">
               {[...Array(15)].map((_, i) => (
@@ -1318,11 +1402,11 @@ export default function TruthOrDare({ currentUser }) {
     );
   }
 
-  // 🧩 Game UI
+  // 🧩 Game UI - FIXED: Enhanced mobile responsiveness
   return (
-    <div className="h-screen w-full flex overflow-hidden bg-background">
-      <div className="flex-1 overflow-y-auto" ref={mainContainerRef}>
-        <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-3 md:p-6 relative safe-area-padding">
+    <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
+      <div className="flex-1 overflow-y-auto mobile-scroll-container" ref={mainContainerRef}>
+        <div className="min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-3 md:p-6 relative safe-area-padding game-content-container">
           {/* Reconnection Banner */}
           {isReconnecting && (
             <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 z-50">
@@ -1494,6 +1578,7 @@ export default function TruthOrDare({ currentUser }) {
               </div>
             </div>
 
+            {/* FIXED: Enhanced grid layout for mobile */}
             <div className={`grid gap-4 md:gap-6 ${showChat ? 'grid-cols-1 lg:grid-cols-4' : 'grid-cols-1 lg:grid-cols-3'}`}>
               {/* Left Column - Players & Controls */}
               <div className="space-y-4 md:space-y-6">
@@ -1834,7 +1919,7 @@ export default function TruthOrDare({ currentUser }) {
                         </Card>
                       )}
 
-                      {/* FIXED: Truth Completion Section - Shows to everyone */}
+                      {/* FIXED: Truth Completion Section - Shows to everyone properly */}
                       {chosenPrompt && !shouldRequireProof && (
                         <Card className="p-4 md:p-6 bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200">
                           <h4 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4 text-center">

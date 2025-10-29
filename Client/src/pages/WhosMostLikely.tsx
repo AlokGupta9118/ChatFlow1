@@ -11,9 +11,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { 
   ArrowLeft, Users, Crown, Target, Timer, Sparkles, 
   Volume2, VolumeX, Gamepad2, RefreshCw, MessageCircle, Send,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Home
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const socket = io(import.meta.env.VITE_API_URL, {
   transports: ['websocket', 'polling'],
@@ -276,6 +276,8 @@ const ChatPanel = React.memo(({
 });
 
 const WhosMostLikely = () => {
+  const navigate = useNavigate();
+  
   // Game states
   const [roomId, setRoomId] = useState("");
   const [playerName, setPlayerName] = useState("");
@@ -358,10 +360,43 @@ const WhosMostLikely = () => {
         margin-bottom: env(safe-area-inset-bottom);
       }
       
+      /* Responsive improvements */
+      .game-container {
+        min-height: 100vh;
+        min-height: 100dvh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      .content-wrapper {
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      
       @media (max-width: 1024px) {
         .safe-area-padding {
           padding-left: max(1rem, env(safe-area-inset-left));
           padding-right: max(1rem, env(safe-area-inset-right));
+        }
+        
+        .mobile-full-height {
+          height: 100vh;
+          height: 100dvh;
+        }
+      }
+      
+      @media (max-width: 768px) {
+        .mobile-stack {
+          flex-direction: column;
+        }
+        
+        .mobile-padding {
+          padding: 1rem;
+        }
+        
+        .mobile-margin {
+          margin: 0.5rem;
         }
       }
     `;
@@ -433,7 +468,7 @@ const WhosMostLikely = () => {
       type: "text"
     };
 
-    socket.emit("send-chat-message", { roomId, message });
+    socket.emit("send-gamechat-message", { roomId, message });
   }, [roomId, playerName]);
 
   // Typing handler
@@ -627,6 +662,11 @@ const WhosMostLikely = () => {
     window.location.reload();
   };
 
+  // Back to main menu function
+  const backToMainMenu = () => {
+    navigate("/game");
+  };
+
   // Player Card Component
   const PlayerCard = ({ player, index, showVotes = false, voteCounts = {} }) => (
     <div className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
@@ -681,86 +721,100 @@ const WhosMostLikely = () => {
   // Join/Create Screen
   if (!joined) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
+      <div className="game-container bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-y-auto">
         <ConnectionStatus />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-2xl mx-auto relative z-10 h-full flex flex-col justify-center overflow-y-auto safe-area-padding">
-          <Link to="/Games" className="mb-4">
-            <Button variant="ghost" className="text-white hover:bg-white/20 backdrop-blur-sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Games
+        <div ref={mainContainerRef} className="max-w-2xl mx-auto relative z-10 min-h-full flex flex-col safe-area-padding overflow-y-auto">
+          {/* Back Button */}
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-6 pt-4">
+            <Button
+              variant="ghost"
+              onClick={backToMainMenu}
+              className="text-white hover:bg-white/20 backdrop-blur-sm self-start h-10"
+            >
+              <Home className="mr-2 h-4 w-4" />
+              Back to Main Menu
             </Button>
-          </Link>
+            
+            <Link to="/Games" className="self-start sm:self-auto">
+              <Button variant="ghost" className="text-white hover:bg-white/20 backdrop-blur-sm h-10">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Games
+              </Button>
+            </Link>
+          </div>
 
-          <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl mx-2 mb-8">
-            <h1 className="text-3xl md:text-5xl font-bold mb-6 text-center bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Who's Most Likely?
-            </h1>
+          <div className="flex-1 flex items-center justify-center py-8">
+            <Card className="p-6 bg-white/10 backdrop-blur-lg border-0 shadow-2xl w-full max-w-md mx-2">
+              <h1 className="text-3xl md:text-4xl font-bold mb-6 text-center bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Who's Most Likely?
+              </h1>
 
-            <div className="space-y-4 mb-6">
-              <div>
-                <Label htmlFor="playerName" className="text-white font-medium mb-2 block">
-                  Your Name
-                </Label>
-                <Input
-                  id="playerName"
-                  placeholder="Enter your name"
-                  value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
-                  className="bg-white/10 border-white/20 text-white placeholder-white/50 h-12 text-base"
-                />
+              <div className="space-y-4 mb-6">
+                <div>
+                  <Label htmlFor="playerName" className="text-white font-medium mb-2 block">
+                    Your Name
+                  </Label>
+                  <Input
+                    id="playerName"
+                    placeholder="Enter your name"
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    className="bg-white/10 border-white/20 text-white placeholder-white/50 h-12 text-base"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="roomId" className="text-white font-medium mb-2 block">
+                    Room Code (optional)
+                  </Label>
+                  <Input
+                    id="roomId"
+                    placeholder="Enter room code to join"
+                    value={roomId}
+                    onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                    className="bg-white/10 border-white/20 text-white placeholder-white/50 h-12 text-base"
+                  />
+                </div>
               </div>
 
-              <div>
-                <Label htmlFor="roomId" className="text-white font-medium mb-2 block">
-                  Room Code (optional)
-                </Label>
-                <Input
-                  id="roomId"
-                  placeholder="Enter room code to join"
-                  value={roomId}
-                  onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                  className="bg-white/10 border-white/20 text-white placeholder-white/50 h-12 text-base"
-                />
+              <div className="space-y-3">
+                <Button
+                  onClick={createRoom}
+                  disabled={!playerName.trim()}
+                  className="w-full py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg h-14"
+                >
+                  <Crown className="w-4 h-4 mr-2" />
+                  Create New Room
+                </Button>
+
+                <Button
+                  onClick={joinRoom}
+                  disabled={!playerName.trim() || !roomId.trim()}
+                  className="w-full py-4 text-base bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg h-14"
+                >
+                  <Users className="w-4 h-4 mr-2" />
+                  Join Existing Room
+                </Button>
               </div>
-            </div>
 
-            <div className="space-y-3">
-              <Button
-                onClick={createRoom}
-                disabled={!playerName.trim()}
-                className="w-full py-4 text-base bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg h-14"
-              >
-                <Crown className="w-4 h-4 mr-2" />
-                Create New Room
-              </Button>
-
-              <Button
-                onClick={joinRoom}
-                disabled={!playerName.trim() || !roomId.trim()}
-                className="w-full py-4 text-base bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg h-14"
-              >
-                <Users className="w-4 h-4 mr-2" />
-                Join Existing Room
-              </Button>
-            </div>
-
-            <div className="mt-6 p-3 bg-white/5 rounded-lg border border-white/10">
-              <h4 className="font-semibold text-white mb-2 flex items-center justify-center text-sm">
-                <Sparkles className="w-3 h-3 mr-2 text-yellow-400" />
-                How it works
-              </h4>
-              <ul className="text-xs text-white/70 space-y-1 text-left">
-                <li>• Create a room and share the code with friends</li>
-                <li>• Vote for who's most likely to do something</li>
-                <li>• Can't vote for yourself!</li>
-                <li>• Most votes wins the round</li>
-                <li>• Play multiple rounds to find the most likely person</li>
-                <li className="text-blue-300">• 💬 Real-time chat with other players!</li>
-              </ul>
-            </div>
-          </Card>
+              <div className="mt-6 p-3 bg-white/5 rounded-lg border border-white/10">
+                <h4 className="font-semibold text-white mb-2 flex items-center justify-center text-sm">
+                  <Sparkles className="w-3 h-3 mr-2 text-yellow-400" />
+                  How it works
+                </h4>
+                <ul className="text-xs text-white/70 space-y-1 text-left">
+                  <li>• Create a room and share the code with friends</li>
+                  <li>• Vote for who's most likely to do something</li>
+                  <li>• Can't vote for yourself!</li>
+                  <li>• Most votes wins the round</li>
+                  <li>• Play multiple rounds to find the most likely person</li>
+                  <li className="text-blue-300">• 💬 Real-time chat with other players!</li>
+                </ul>
+              </div>
+            </Card>
+          </div>
         </div>
 
         <audio ref={audioRef} preload="auto" />
@@ -771,12 +825,12 @@ const WhosMostLikely = () => {
   // Waiting Room
   if (!gameStarted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
+      <div className="game-container bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-y-auto">
         <ConnectionStatus />
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col safe-area-padding">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-full flex flex-col safe-area-padding">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 px-2 pt-4">
             <Button
               variant="ghost"
@@ -877,12 +931,12 @@ const WhosMostLikely = () => {
   // Game Finished Screen
   if (gameFinished) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
+      <div className="game-container bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-y-auto">
         <ConnectionStatus />
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col safe-area-padding">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-full flex flex-col safe-area-padding">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 px-2 pb-6">
             {/* Main Content */}
             <div className="lg:col-span-2 flex flex-col min-h-0">
@@ -958,12 +1012,12 @@ const WhosMostLikely = () => {
   // Round Results Screen
   if (roundResults) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
+      <div className="game-container bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-y-auto">
         <ConnectionStatus />
         <MobileChatToggle />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
         
-        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col safe-area-padding">
+        <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-full flex flex-col safe-area-padding">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 px-2 pb-6">
             {/* Main Content */}
             <div className="lg:col-span-2 flex flex-col min-h-0">
@@ -1055,12 +1109,12 @@ const WhosMostLikely = () => {
 
   // Main Game Screen
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-hidden" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
+    <div className="game-container bg-gradient-to-br from-blue-900 via-purple-800 to-pink-900 p-4 relative overflow-y-auto">
       <ConnectionStatus />
       <MobileChatToggle />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
       
-      <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 h-full flex flex-col safe-area-padding">
+      <div ref={mainContainerRef} className="max-w-6xl mx-auto relative z-10 min-h-full flex flex-col safe-area-padding">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0 px-2 pb-6">
           {/* Main Game Content */}
           <div className="lg:col-span-2 flex flex-col min-h-0">
