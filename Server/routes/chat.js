@@ -8,7 +8,7 @@ import {
   getMessages,
 } from "../controllers/chatController.js";
 import { sendMessage, deleteMessage, markAsRead } from "../controllers/messageController.js";
-import { protect } from "../middleware/auth.js";
+import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
