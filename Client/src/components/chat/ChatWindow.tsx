@@ -1,4 +1,4 @@
-// ChatWindow.jsx (COMPLETELY FIXED - REAL-TIME FOR BOTH PRIVATE & GROUP)
+// ChatWindow.jsx (FINAL FIXED VERSION - REAL-TIME MESSAGES & TYPING INDICATORS)
 import { useEffect, useState, useRef, useCallback } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -182,37 +182,58 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     };
   }, [socket, isConnected, selectedChat?._id, isGroup, currentChatRoomId]);
 
-  // ✅ FIXED: Enhanced typing listeners
+  // ✅ FIXED: Enhanced typing listeners with PROPER debugging
   useEffect(() => {
     if (!socket || !isConnected || !selectedChat?._id) return;
+
+    console.log('👂 Setting up typing listeners for chat:', selectedChat._id);
 
     const handleUserTyping = (data) => {
       console.log('⌨️ Typing event received:', data);
       
-      // ✅ FIXED: Exact room matching
-      const expectedRoomId = isGroup ? 
-        `group_${selectedChat._id}` : 
-        `private_${currentChatRoomId || selectedChat._id}`;
+      // ✅ FIXED: Calculate expected room ID exactly like backend
+      let expectedRoomId;
+      if (isGroup) {
+        expectedRoomId = `group_${selectedChat._id}`;
+      } else {
+        expectedRoomId = `private_${currentChatRoomId || selectedChat._id}`;
+      }
       
-      console.log('⌨️ Expected room:', expectedRoomId, 'Received room:', data.roomId);
+      console.log('⌨️ Room check:', {
+        expected: expectedRoomId,
+        received: data.roomId,
+        matches: data.roomId === expectedRoomId,
+        isCurrentUser: data.userId === userId
+      });
       
+      // Only process if it's for current chat AND not from current user
       if (data.roomId === expectedRoomId && data.userId !== userId) {
-        console.log('⌨️ Typing event for current chat:', data.userName, data.isTyping);
+        console.log('⌨️ Processing typing event for current chat:', data.userName, data.isTyping);
+        
         if (data.isTyping) {
-          setTypingUsers(prev => new Set(prev).add(data.userId));
+          setTypingUsers(prev => {
+            const newSet = new Set(prev);
+            newSet.add(data.userId);
+            console.log('⌨️ Added typing user:', data.userId, 'Total:', newSet.size);
+            return newSet;
+          });
         } else {
           setTypingUsers(prev => {
             const newSet = new Set(prev);
             newSet.delete(data.userId);
+            console.log('⌨️ Removed typing user:', data.userId, 'Remaining:', newSet.size);
             return newSet;
           });
         }
+      } else {
+        console.log('⌨️ Ignoring typing event - wrong room or own typing');
       }
     };
 
     socket.on('user_typing', handleUserTyping);
 
     return () => {
+      console.log('🧹 Cleaning up typing listeners');
       socket.off('user_typing', handleUserTyping);
       setTypingUsers(new Set());
     };
@@ -311,10 +332,18 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     });
   };
 
-  // ✅ FIXED: Enhanced typing handler with proper room IDs
+  // ✅ FIXED: Enhanced typing handler with PROPER data
   const handleTyping = useCallback(() => {
-    if (!socket || !isConnected || !selectedChat?._id) return;
+    if (!socket || !isConnected || !selectedChat?._id) {
+      console.log('❌ Typing: Missing requirements', { 
+        socket: !!socket, 
+        connected: isConnected, 
+        chat: !!selectedChat 
+      });
+      return;
+    }
 
+    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
@@ -323,26 +352,45 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     const typingData = {
       chatId: selectedChat._id,
       userId: userId,
-      userName: user.name,
+      userName: user.name || 'User',
       isGroup: isGroup,
-      chatRoomId: currentChatRoomId // ✅ CRITICAL for private chats
+      chatRoomId: currentChatRoomId
     };
 
     console.log('⌨️ Emitting typing start:', typingData);
     socket.emit("typing_start", typingData);
 
+    // Set timeout to stop typing
     typingTimeoutRef.current = setTimeout(() => {
       const stopData = {
         chatId: selectedChat._id,
         userId: userId,
         isGroup: isGroup,
-        chatRoomId: currentChatRoomId // ✅ CRITICAL for private chats
+        chatRoomId: currentChatRoomId
       };
       
       console.log('⌨️ Emitting typing stop:', stopData);
       socket.emit("typing_stop", stopData);
-    }, 1500);
+    }, 2000);
   }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, currentChatRoomId]);
+
+  // ✅ FIXED: Enhanced input change handler
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setNewMessage(value);
+    
+    // Only trigger typing if there's content and we're connected
+    if (value.trim() && socket && isConnected) {
+      handleTyping();
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
 
   // ✅ FIXED: Send message with proper room ID handling
   const handleSendMessage = async () => {
@@ -358,6 +406,20 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     setIsSending(true);
 
     try {
+      // ✅ FIXED: Immediately stop typing when sending
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      
+      // Emit typing stop immediately
+      socket.emit("typing_stop", {
+        chatId: selectedChat._id,
+        userId: userId,
+        isGroup: isGroup,
+        chatRoomId: currentChatRoomId
+      });
+
       // Optimistic update
       const tempMessageId = `temp_${Date.now()}`;
       const optimisticMessage = {
@@ -374,17 +436,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
       setMessages(prev => [...prev, optimisticMessage]);
       setNewMessage("");
-      
-      // Stop typing
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-        socket.emit("typing_stop", {
-          chatId: selectedChat._id,
-          userId: userId,
-          isGroup: isGroup,
-          chatRoomId: currentChatRoomId
-        });
-      }
 
       // Prepare API data
       const msgData = isGroup
@@ -454,32 +505,25 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  const handleInputChange = (e) => {
-    setNewMessage(e.target.value);
-    handleTyping();
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  // ✅ Get online status text
+  // ✅ FIXED: Enhanced typing indicator display
   const getStatusText = () => {
     if (typingUsers.size > 0) {
       const typingArray = Array.from(typingUsers);
+      console.log('⌨️ Currently typing users:', typingArray);
+      
       if (typingArray.length === 1) {
         const typingUserId = typingArray[0];
         let userName = 'Someone';
         
         if (isGroup) {
-          const typingUser = selectedChat.participants?.find(p => 
-            p.user?._id === typingUserId || p.user === typingUserId
-          );
+          // Find the typing user in group participants
+          const typingUser = selectedChat.participants?.find(p => {
+            const participantId = p.user?._id || p.user;
+            return participantId === typingUserId;
+          });
           userName = typingUser?.user?.name || typingUser?.name || 'Someone';
         } else {
+          // For private chats, it's the other person
           userName = selectedChat.name || 'Someone';
         }
         
@@ -489,6 +533,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       }
     }
     
+    // Default status text when no one is typing
     if (isGroup) {
       const onlineCount = selectedChat.participants?.filter(p => 
         onlineUsers.has(p.user?._id || p.user)
@@ -659,6 +704,15 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm relative">
       <ConnectionStatus />
+
+      {/* Debug info for development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="absolute top-12 left-2 bg-black/70 text-white text-xs p-2 rounded z-10">
+          <div>Typing Users: {Array.from(typingUsers).join(', ') || 'None'}</div>
+          <div>ChatRoomId: {currentChatRoomId || 'None'}</div>
+          <div>Room: {isGroup ? `group_${selectedChat._id}` : `private_${currentChatRoomId}`}</div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-xl border-b border-purple-500/30 shadow-lg z-10">

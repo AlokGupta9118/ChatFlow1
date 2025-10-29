@@ -4,53 +4,43 @@ export const setupChatSockets = (io) => {
     console.log('✅ User connected:', socket.id);
 
     // Store user's current rooms
-    socket.userRooms = new Set();
+      socket.userRooms = new Set();
 
-    // ✅ FIXED: Join user's personal room
+    // Join user's personal room
     socket.on('join_user', (userId) => {
       if (userId) {
         socket.userId = userId;
         const userRoom = `user_${userId}`;
         
-        // Leave previous user room if any
-        if (socket.userRooms.has(userRoom)) {
-          socket.leave(userRoom);
-        }
+        socket.userRooms.forEach(room => {
+          if (room.startsWith('user_')) socket.leave(room);
+        });
         
         socket.join(userRoom);
         socket.userRooms.add(userRoom);
         
         console.log(`👤 User ${userId} joined personal room: ${userRoom}`);
-        
-        // Broadcast online status
-        socket.broadcast.emit('user_status_change', { 
-          userId,
-          status: 'online',
-          lastSeen: new Date().toISOString()
-        });
       }
     });
 
-    // ✅ FIXED: Enhanced chat room joining
+    // Enhanced chat room joining
     socket.on('join_chat', (data) => {
       const { roomId, isGroup = false, chatRoomId } = data;
       if (!roomId) return;
 
-      // ✅ CRITICAL: Consistent room naming
+      // ✅ CRITICAL: Consistent room naming for typing
       const actualRoomId = isGroup ? `group_${roomId}` : `private_${chatRoomId || roomId}`;
       
       console.log(`🚪 User ${socket.userId} joining room: ${actualRoomId}`);
 
-      // Leave previous chat rooms (only one active chat at a time)
+      // Leave previous chat rooms
       socket.userRooms.forEach(room => {
         if (room.startsWith('group_') || room.startsWith('private_')) {
           socket.leave(room);
           socket.userRooms.delete(room);
-          console.log(`🚪 Left previous room: ${room}`);
         }
       });
       
-      // Join new room
       socket.join(actualRoomId);
       socket.userRooms.add(actualRoomId);
       socket.currentChat = { 
@@ -65,17 +55,19 @@ export const setupChatSockets = (io) => {
 
     // ✅ FIXED: Enhanced typing indicators with PROPER room handling
     socket.on('typing_start', (data) => {
+      console.log('⌨️ Typing start received:', data);
+      
       const { chatId, userId, userName, isGroup = false, chatRoomId } = data;
       
       // ✅ CRITICAL: Use EXACT same room logic as join_chat
       const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
       
-      console.log(`⌨️ ${userName} started typing in ${roomId}`);
+      console.log(`⌨️ ${userName} started typing in ${roomId} (User: ${userId})`);
       
-      // Broadcast to all OTHER users in the room
-      socket.to(roomId).emit('user_typing', {
+      // ✅ FIXED: Broadcast to ALL users in the room (including sender for testing)
+      io.to(roomId).emit('user_typing', {
         userId,
-        userName,
+        userName: userName || 'Someone',
         isTyping: true,
         chatId: chatId,
         roomId: roomId,
@@ -85,6 +77,8 @@ export const setupChatSockets = (io) => {
     });
 
     socket.on('typing_stop', (data) => {
+      console.log('⌨️ Typing stop received:', data);
+      
       const { chatId, userId, isGroup = false, chatRoomId } = data;
       
       // ✅ CRITICAL: Use EXACT same room logic as join_chat
@@ -92,7 +86,8 @@ export const setupChatSockets = (io) => {
       
       console.log(`⌨️ User ${userId} stopped typing in ${roomId}`);
       
-      socket.to(roomId).emit('user_typing', {
+      // ✅ FIXED: Broadcast to ALL users in the room
+      io.to(roomId).emit('user_typing', {
         userId,
         isTyping: false,
         chatId: chatId,
