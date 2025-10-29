@@ -5,8 +5,7 @@ import User from "../models/User.js";
 import GroupJoinRequest from "../models/GroupJoinRequest.js";
 
 
-
-// ✅ IMPROVED: Send message with immediate DB storage and real-time delivery
+// ✅ FIXED: Send private message
 export const sendMessage = async (req, res) => {
   try {
     const senderId = req.user._id;
@@ -16,13 +15,17 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
+    console.log('📤 Sending message from:', senderId, 'to:', receiverId);
+
     // Find or create chat room
     let chatRoom = await ChatRoom.findOne({
       type: "direct",
-      $and: [
-        { "participants.user": senderId },
-        { "participants.user": receiverId },
-      ],
+      participants: {
+        $all: [
+          { $elemMatch: { user: senderId } },
+          { $elemMatch: { user: receiverId } }
+        ]
+      }
     });
 
     if (!chatRoom) {
@@ -35,9 +38,10 @@ export const sendMessage = async (req, res) => {
         createdBy: senderId,
       });
       await chatRoom.save();
+      console.log('✅ Created new chat room:', chatRoom._id);
     }
 
-    // ✅ Create and save message immediately
+    // Create and save message
     const newMessage = new Message({
       chatRoom: chatRoom._id,
       sender: senderId,
@@ -59,27 +63,37 @@ export const sendMessage = async (req, res) => {
       .populate("sender", "name profilePicture")
       .lean();
 
-    // ✅ Enhanced message object for real-time
+    // ✅ FIXED: Enhanced message object for real-time
+    const roomId = `private_${chatRoom._id}`;
     const messageForRealTime = {
       ...populatedMessage,
       senderId: senderId,
-      roomId: `private_${chatRoom._id}`,
-      isRealTime: false
+      receiverId: receiverId, // ✅ CRITICAL: Include receiverId
+      roomId: roomId,
+      chatRoom: chatRoom._id, // ✅ Include chatRoom ID
+      isRealTime: true, // ✅ Set to true for real-time
+      chatType: 'private'
     };
 
-    // ✅ Emit socket message for real-time delivery
+    console.log('📨 Emitting to room:', roomId);
+
+    // ✅ FIXED: Emit socket message for real-time delivery
     const io = req.app.get('io');
     if (io) {
-      // Emit to both users' personal rooms and the chat room
-      io.to(`user_${receiverId}`).to(`user_${senderId}`).emit('receive_message', messageForRealTime);
+      // 1. Emit to the private chat room
+      io.to(roomId).emit('receive_message', messageForRealTime);
       
-      // Also emit to the chat room for consistency
-      io.to(`private_${chatRoom._id}`).emit('receive_message', messageForRealTime);
+      // 2. Emit to both users' personal rooms as backup
+      io.to(`user_${receiverId}`).emit('receive_message', messageForRealTime);
+      io.to(`user_${senderId}`).emit('receive_message', messageForRealTime);
+      
+      console.log('✅ Message emitted to all channels');
     }
 
     res.status(201).json({ 
       success: true, 
-      message: populatedMessage 
+      message: populatedMessage,
+      chatRoomId: chatRoom._id // ✅ Return chatRoom ID for frontend
     });
 
   } catch (err) {
@@ -88,7 +102,7 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-// ✅ IMPROVED: Send group message
+// ✅ FIXED: Send group message
 export const sendGroupMessage = async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -98,6 +112,8 @@ export const sendGroupMessage = async (req, res) => {
     if (!content?.trim() && !mediaUrl) {
       return res.status(400).json({ message: "Message content cannot be empty" });
     }
+
+    console.log('📤 Sending group message to room:', roomId);
 
     // Find the chat room
     const room = await ChatRoom.findById(roomId);
@@ -111,7 +127,7 @@ export const sendGroupMessage = async (req, res) => {
       return res.status(403).json({ message: "You are not a participant of this room" });
     }
 
-    // ✅ Create and save message immediately
+    // Create and save message
     const newMessage = await Message.create({
       chatRoom: roomId,
       sender: userId,
@@ -132,23 +148,31 @@ export const sendGroupMessage = async (req, res) => {
       .populate("sender", "name profilePicture")
       .lean();
 
-    // ✅ Enhanced message object for real-time
+    // ✅ FIXED: Enhanced message object for real-time
+    const groupRoomId = `group_${roomId}`;
     const messageForRealTime = {
       ...populatedMessage,
       senderId: userId,
-      roomId: `group_${roomId}`,
-      isRealTime: false
+      roomId: groupRoomId,
+      chatRoom: roomId,
+      isRealTime: true, // ✅ Set to true for real-time
+      chatType: 'group'
     };
 
-    // ✅ Emit socket message for real-time delivery
+    console.log('📨 Emitting group message to room:', groupRoomId);
+
+    // ✅ FIXED: Emit socket message for real-time delivery
     const io = req.app.get('io');
     if (io) {
-      io.to(`group_${roomId}`).emit('receive_message', messageForRealTime);
+      // Primary: Emit to group room
+      io.to(groupRoomId).emit('receive_message', messageForRealTime);
       
-      // Also emit to all participants' personal rooms
+      // Secondary: Emit to all participants' personal rooms
       room.participants.forEach(participant => {
         io.to(`user_${participant.user}`).emit('receive_message', messageForRealTime);
       });
+      
+      console.log('✅ Group message emitted to all channels');
     }
 
     return res.status(201).json({ 
@@ -162,7 +186,7 @@ export const sendGroupMessage = async (req, res) => {
   }
 };
 
-/// ✅ FIXED: Get private messages with proper query
+// ✅ FIXED: Get private messages
 export const getMessages = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -174,7 +198,7 @@ export const getMessages = async (req, res) => {
     const friend = await User.findById(friendId);
     if (!friend) return res.status(404).json({ message: "Friend not found" });
 
-    // ✅ FIXED: Proper query for direct chat room
+    // Find chat room
     let chatRoom = await ChatRoom.findOne({
       type: "direct",
       participants: {
@@ -194,7 +218,7 @@ export const getMessages = async (req, res) => {
         sort: { createdAt: 1 } 
       }
     })
-    .lean(); // ✅ Added lean for better performance
+    .lean();
 
     console.log('✅ Chat room found:', chatRoom?._id);
 
@@ -203,14 +227,14 @@ export const getMessages = async (req, res) => {
       return res.status(200).json({ 
         success: true,
         messages: [],
-        chatRoomId: null // ✅ Important for frontend
+        chatRoomId: null
       });
     }
 
     res.status(200).json({ 
       success: true,
       messages: chatRoom.messages || [],
-      chatRoomId: chatRoom._id // ✅ CRITICAL: Return chatRoom ID for socket rooms
+      chatRoomId: chatRoom._id // ✅ CRITICAL: Return chatRoom ID
     });
 
   } catch (err) {
@@ -246,7 +270,7 @@ export const getGroupMessages = async (req, res) => {
       return res.status(404).json({ message: "Room not found" });
     }
 
-    // ✅ FIXED: Consistent participant checking
+    // Check if user is participant
     const isParticipant = room.participants.some(participant => {
       const participantId = participant.user?._id?.toString() || participant.user?.toString();
       return participantId === userId.toString();
@@ -264,7 +288,6 @@ export const getGroupMessages = async (req, res) => {
     return res.status(200).json({
       success: true,
       messages: room.messages || [],
-      // ✅ chatRoomId not needed for groups as we already have roomId
     });
 
   } catch (err) {
@@ -272,6 +295,7 @@ export const getGroupMessages = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch messages", error: err.message });
   }
 };
+
 
 // 🔹 Send join request
 export const requestToJoinGroup = async (req, res) => {

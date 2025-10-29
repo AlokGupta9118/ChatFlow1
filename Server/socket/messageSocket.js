@@ -2,23 +2,17 @@ export const setupChatSockets = (io) => {
   io.on('connection', (socket) => {
     console.log('✅ User connected:', socket.id);
 
-    // ✅ FIXED: Track user's rooms and user data
     socket.userRooms = new Set();
-    socket.userData = {};
 
     // ✅ FIXED: Join user's personal room
     socket.on('join_user', (userId) => {
       if (userId) {
         socket.userId = userId;
-        socket.userData.userId = userId;
-        
         const userRoom = `user_${userId}`;
         
-        // Leave previous user room if exists
+        // Leave previous user room
         socket.userRooms.forEach(room => {
-          if (room.startsWith('user_')) {
-            socket.leave(room);
-          }
+          if (room.startsWith('user_')) socket.leave(room);
         });
         
         socket.join(userRoom);
@@ -26,8 +20,8 @@ export const setupChatSockets = (io) => {
         
         console.log(`👤 User ${userId} joined personal room: ${userRoom}`);
         
-        // ✅ FIXED: Notify ALL users that this user is online
-        io.emit('user_status_change', { 
+        // ✅ FIXED: Broadcast online status to ALL users
+        socket.broadcast.emit('user_status_change', { 
           userId,
           status: 'online',
           lastSeen: new Date().toISOString()
@@ -35,12 +29,13 @@ export const setupChatSockets = (io) => {
       }
     });
 
-    // ✅ FIXED: Join chat room - SIMPLIFIED
+    // ✅ FIXED: Join chat room with BOTH room types
     socket.on('join_chat', (data) => {
-      const { roomId, isGroup = false } = data;
+      const { roomId, isGroup = false, chatRoomId } = data;
       if (!roomId) return;
 
-      const formattedRoomId = isGroup ? `group_${roomId}` : `private_${roomId}`;
+      // ✅ CRITICAL: For private chats, use chatRoomId if available
+      const actualRoomId = isGroup ? `group_${roomId}` : (chatRoomId ? `private_${chatRoomId}` : `private_${roomId}`);
       
       // Leave previous chat rooms
       socket.userRooms.forEach(room => {
@@ -50,19 +45,19 @@ export const setupChatSockets = (io) => {
         }
       });
       
-      socket.join(formattedRoomId);
-      socket.userRooms.add(formattedRoomId);
-      socket.currentChat = { roomId, isGroup, formattedRoomId };
+      socket.join(actualRoomId);
+      socket.userRooms.add(actualRoomId);
+      socket.currentChat = { roomId, isGroup, actualRoomId };
       
-      console.log(`🚪 User ${socket.userId} joined room: ${formattedRoomId}`);
+      console.log(`🚪 User ${socket.userId} joined room: ${actualRoomId}`);
     });
 
-    // ✅ FIXED: REAL-TIME Message handling - SIMPLIFIED
+    // ✅ FIXED: REAL-TIME Message handling
     socket.on('send_message', async (data) => {
       try {
         const { roomId, message, chatType = "private" } = data;
         
-        console.log('💬 Processing real-time message to room:', roomId);
+        console.log('💬 Processing real-time message to room:', roomId, 'Type:', chatType);
 
         if (!roomId) {
           console.error('❌ No roomId provided for message');
@@ -79,22 +74,28 @@ export const setupChatSockets = (io) => {
           type: message.type || "text",
           chatType: chatType,
           roomId: roomId,
-          isRealTime: true,
+          isRealTime: true, // ✅ Always true for socket messages
           status: 'sent'
         };
 
-        // ✅ CRITICAL FIX: Broadcast to the room AND to user's personal rooms
-        console.log(`📨 Broadcasting to room: ${roomId}`);
-        io.to(roomId).emit('receive_message', chatMessage);
-
-        // ✅ ALSO send to sender's personal room for backup
-        if (message.senderId) {
-          io.to(`user_${message.senderId}`).emit('receive_message', chatMessage);
+        // ✅ CRITICAL: Add receiverId for private messages
+        if (chatType === "private" && message.receiverId) {
+          chatMessage.receiverId = message.receiverId;
         }
 
-        // ✅ For private messages, also send to receiver's personal room
-        if (chatType === "private" && message.receiverId) {
-          io.to(`user_${message.receiverId}`).emit('receive_message', chatMessage);
+        console.log(`📨 Broadcasting to room: ${roomId}`);
+        
+        // Primary: Emit to the specific room
+        io.to(roomId).emit('receive_message', chatMessage);
+
+        // ✅ FIXED: For private messages, also emit to personal rooms
+        if (chatType === "private") {
+          if (message.senderId) {
+            io.to(`user_${message.senderId}`).emit('receive_message', chatMessage);
+          }
+          if (message.receiverId) {
+            io.to(`user_${message.receiverId}`).emit('receive_message', chatMessage);
+          }
         }
 
       } catch (error) {
@@ -138,7 +139,7 @@ export const setupChatSockets = (io) => {
     // ✅ FIXED: User status management
     socket.on('user_online', (data) => {
       console.log('👤 User online:', data.userId);
-      io.emit('user_status_change', {
+      socket.broadcast.emit('user_status_change', {
         userId: data.userId,
         status: 'online',
         lastSeen: new Date().toISOString()
@@ -146,7 +147,7 @@ export const setupChatSockets = (io) => {
     });
 
     socket.on('user_away', (data) => {
-      io.emit('user_status_change', {
+      socket.broadcast.emit('user_status_change', {
         userId: data.userId,
         status: 'away',
         lastSeen: new Date().toISOString()
@@ -158,8 +159,7 @@ export const setupChatSockets = (io) => {
       console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
       
       if (socket.userId) {
-        // Notify ALL users that this user went offline
-        io.emit('user_status_change', {
+        socket.broadcast.emit('user_status_change', {
           userId: socket.userId,
           status: 'offline',
           lastSeen: new Date().toISOString()
@@ -167,7 +167,6 @@ export const setupChatSockets = (io) => {
       }
     });
 
-    // ✅ Error handling
     socket.on('error', (error) => {
       console.error('❌ Socket error:', error);
     });

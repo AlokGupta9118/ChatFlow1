@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import GroupChatAdminPanel from "@/components/chat/GroupChatAdminPanel";
 import { toast } from "sonner";
 
-// ✅ Enhanced socket configuration
+// Socket configuration
 const createSocket = () => {
   return io(import.meta.env.VITE_API_URL, {
     transports: ['websocket', 'polling'],
@@ -22,7 +22,6 @@ const createSocket = () => {
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
-    randomizationFactor: 0.5,
   });
 };
 
@@ -54,6 +53,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [isSending, setIsSending] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [userStatus, setUserStatus] = useState({});
+  const [currentChatRoomId, setCurrentChatRoomId] = useState(null); // ✅ Store actual chatRoom ID
   
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -63,7 +63,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
 
-  // ✅ Enhanced Socket.IO connection management
+  // ✅ Socket connection management
   useEffect(() => {
     console.log('🔌 Initializing socket connection...');
     const newSocket = createSocket();
@@ -78,6 +78,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       if (userId) {
         console.log('👤 Joining user room after connect:', userId);
         newSocket.emit('join_user', userId);
+        newSocket.emit('user_online', { userId });
       }
     };
 
@@ -102,46 +103,94 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       newSocket.off('connect_error', handleConnectError);
       newSocket.disconnect();
     };
-  }, []);
+  }, [userId]);
 
-  // ✅ Join user room when connected or userId changes
+  // ✅ Join user room when connected
   useEffect(() => {
     if (socket && isConnected && userId) {
       console.log('👤 Joining user room:', userId);
       socket.emit('join_user', userId);
-      
-      // Also emit user online status
       socket.emit('user_online', { userId });
     }
   }, [socket, isConnected, userId]);
 
-  // ✅ FIXED: Enhanced chat room management with proper room naming
+  // ✅ FIXED: Enhanced message fetching
+  const fetchMessages = useCallback(async () => {
+    if (!selectedChat?._id) return;
+
+    const token = getToken();
+    if (!token) {
+      toast.error("Authentication required");
+      return;
+    }
+
+    try {
+      console.log('📋 Fetching messages for chat:', selectedChat._id);
+      
+      const endpoint = isGroup
+        ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/getGroupmessages`
+        : `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}`;
+
+      const res = await axios.get(endpoint, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000
+      });
+
+      console.log('✅ Messages fetched:', res.data.messages?.length);
+      console.log('✅ ChatRoom ID:', res.data.chatRoomId);
+      
+      const sortedMessages = (res.data.messages || []).sort((a, b) => 
+        new Date(a.createdAt) - new Date(b.createdAt)
+      );
+      
+      setMessages(sortedMessages);
+
+      // ✅ CRITICAL: Store chatRoomId for private chats
+      if (!isGroup && res.data.chatRoomId) {
+        setCurrentChatRoomId(res.data.chatRoomId);
+        console.log('💾 Stored chatRoomId for private chat:', res.data.chatRoomId);
+      } else {
+        setCurrentChatRoomId(null);
+      }
+
+    } catch (err) {
+      console.error("❌ Error fetching messages:", err);
+      toast.error("Failed to load messages");
+    }
+  }, [selectedChat?._id, isGroup]);
+
+  // ✅ Initial messages load
+  useEffect(() => {
+    fetchMessages();
+  }, [fetchMessages]);
+
+  // ✅ FIXED: Enhanced chat room joining with actual chatRoomId
   useEffect(() => {
     if (!socket || !isConnected || !selectedChat?._id) return;
 
     const roomData = {
       roomId: selectedChat._id,
-      isGroup: isGroup
+      isGroup: isGroup,
+      chatRoomId: currentChatRoomId // ✅ Include actual chatRoom ID for private chats
     };
     
     console.log('🚪 Joining chat room with data:', roomData);
     socket.emit('join_chat', roomData);
 
     return () => {
-      console.log('🚪 Leaving chat room:', roomData);
+      console.log('🚪 Leaving chat room');
       socket.emit('leave_chat', roomData);
-      setTypingUsers(new Set()); // Clear typing when leaving
+      setTypingUsers(new Set());
     };
-  }, [socket, isConnected, selectedChat?._id, isGroup]);
+  }, [socket, isConnected, selectedChat?._id, isGroup, currentChatRoomId]);
 
-  // ✅ FIXED: User status listener for BOTH private and group
+  // ✅ FIXED: User status listener
   useEffect(() => {
     if (!socket || !isConnected) return;
 
     const handleUserStatusChange = (data) => {
       console.log('👤 User status changed:', data);
       
-      // Update user status
       setUserStatus(prev => ({
         ...prev,
         [data.userId]: {
@@ -150,7 +199,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         }
       }));
       
-      // Update online users set
       setOnlineUsers(prev => {
         const newSet = new Set(prev);
         if (data.status === 'online') {
@@ -169,17 +217,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     };
   }, [socket, isConnected]);
 
-  // ✅ FIXED: Enhanced typing listeners for BOTH private and group
+  // ✅ FIXED: Enhanced typing listeners
   useEffect(() => {
     if (!socket || !isConnected || !selectedChat?._id) return;
 
     const handleUserTyping = (data) => {
       console.log('⌨️ Typing event received:', data);
       
-      // Check if this typing event is for our current chat
       const isForCurrentChat = 
         data.chatId === selectedChat._id || 
-        data.roomId === `private_${selectedChat._id}` || 
+        data.roomId === `private_${currentChatRoomId || selectedChat._id}` || 
         data.roomId === `group_${selectedChat._id}`;
       
       if (isForCurrentChat && data.userId !== userId) {
@@ -202,9 +249,9 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socket.off('user_typing', handleUserTyping);
       setTypingUsers(new Set());
     };
-  }, [socket, isConnected, selectedChat?._id, userId]);
+  }, [socket, isConnected, selectedChat?._id, userId, currentChatRoomId]);
 
-  // ✅ FIXED: REAL-TIME: Enhanced message listeners for BOTH private and group
+  // ✅ FIXED: REAL-TIME Message listener
   useEffect(() => {
     if (!socket || !isConnected) return;
 
@@ -213,43 +260,34 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     const handleReceiveMessage = (msg) => {
       console.log('📨 Received real-time message:', msg);
       
-      // ✅ Check if this message is for our current chat
+      // ✅ SIMPLIFIED: Check if message is for current chat
       let isForCurrentChat = false;
       
       if (isGroup) {
         // For group chats
-        isForCurrentChat = 
-          msg.roomId === `group_${selectedChat?._id}` ||
-          msg.chatRoom === selectedChat?._id;
+        isForCurrentChat = msg.roomId === `group_${selectedChat?._id}`;
       } else {
-        // For private chats
+        // For private chats - check multiple possibilities
         isForCurrentChat = 
-          msg.roomId === `private_${selectedChat?._id}` ||
-          msg.chatRoom === selectedChat?._id ||
-          (msg.senderId === selectedChat?._id && !isGroup) ||
-          (msg.receiverId === userId && msg.senderId === selectedChat?._id);
+          msg.roomId === `private_${currentChatRoomId}` ||
+          msg.receiverId === selectedChat?._id ||
+          msg.senderId === selectedChat?._id ||
+          (msg.chatRoom === currentChatRoomId);
       }
       
-      if (!isForCurrentChat) {
+      if (isForCurrentChat) {
+        console.log('✅ Adding message to current chat');
+        setMessages(prev => {
+          const messageExists = prev.some(m => m._id === msg._id);
+          if (messageExists) {
+            console.log('🔄 Skipping duplicate message');
+            return prev;
+          }
+          return [...prev, { ...msg, displayTimestamp: new Date().toISOString() }];
+        });
+      } else {
         console.log('📨 Message not for current chat, ignoring');
-        return;
       }
-      
-      console.log('✅ Adding message to current chat');
-      setMessages(prev => {
-        // ✅ Enhanced duplicate prevention
-        const messageExists = prev.some(m => 
-          m._id === msg._id || 
-          (m.isRealTime && msg.isRealTime && m.content === msg.content && m.senderId === msg.senderId && Math.abs(new Date(m.createdAt) - new Date(msg.createdAt)) < 1000)
-        );
-        
-        if (messageExists) {
-          console.log('🔄 Skipping duplicate message');
-          return prev;
-        }
-        
-        return [...prev, { ...msg, displayTimestamp: new Date().toISOString() }];
-      });
     };
 
     socket.on('receive_message', handleReceiveMessage);
@@ -257,54 +295,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     return () => {
       socket.off('receive_message', handleReceiveMessage);
     };
-  }, [socket, isConnected, selectedChat?._id, isGroup, userId]);
-
-  // ✅ FIXED: Enhanced message fetching in ChatWindow.jsx
-const fetchMessages = useCallback(async () => {
-  if (!selectedChat?._id) return;
-
-  const token = getToken();
-  if (!token) {
-    toast.error("Authentication required");
-    return;
-  }
-
-  try {
-    console.log('📋 Fetching messages for chat:', selectedChat._id);
-    
-    const endpoint = isGroup
-      ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/getGroupmessages`
-      : `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}`;
-
-    const res = await axios.get(endpoint, {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 10000
-    });
-
-    console.log('✅ Messages fetched:', res.data.messages?.length);
-    console.log('✅ ChatRoom ID:', res.data.chatRoomId); // Debug log
-    
-    const sortedMessages = (res.data.messages || []).sort((a, b) => 
-      new Date(a.createdAt) - new Date(b.createdAt)
-    );
-    
-    setMessages(sortedMessages);
-
-    // ✅ Store chatRoomId for private chats
-    if (!isGroup && res.data.chatRoomId) {
-      // You might want to store this in state or ref for later use
-      console.log('💾 Storing chatRoomId for private chat:', res.data.chatRoomId);
-    }
-
-  } catch (err) {
-    console.error("❌ Error fetching messages:", err);
-    toast.error("Failed to load messages");
-  }
-}, [selectedChat?._id, isGroup]);
-  // ✅ Initial messages load
-  useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
+  }, [socket, isConnected, selectedChat?._id, isGroup, currentChatRoomId]);
 
   // ✅ Auto-scroll to bottom
   useEffect(() => {
@@ -318,16 +309,14 @@ const fetchMessages = useCallback(async () => {
     });
   };
 
-  // ✅ FIXED: Enhanced typing handler with proper debouncing
+  // ✅ FIXED: Enhanced typing handler
   const handleTyping = useCallback(() => {
     if (!socket || !isConnected || !selectedChat?._id) return;
 
-    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Emit typing start
     socket.emit("typing_start", {
       chatId: selectedChat._id,
       userId: userId,
@@ -337,7 +326,6 @@ const fetchMessages = useCallback(async () => {
 
     console.log('⌨️ Emitted typing start');
 
-    // Set timeout to stop typing
     typingTimeoutRef.current = setTimeout(() => {
       socket.emit("typing_stop", {
         chatId: selectedChat._id,
@@ -348,7 +336,7 @@ const fetchMessages = useCallback(async () => {
     }, 1500);
   }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name]);
 
-  // ✅ FIXED: ULTRA-IMPROVED: Send message with optimistic UI update
+  // ✅ FIXED: Send message with proper room ID
   const handleSendMessage = async () => {
     const messageContent = newMessage.trim();
     if (!messageContent || !socket || !isConnected || isSending) return;
@@ -362,8 +350,8 @@ const fetchMessages = useCallback(async () => {
     setIsSending(true);
 
     try {
-      // ✅ Create optimistic message for immediate UI update
-      const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Optimistic update
+      const tempMessageId = `temp_${Date.now()}`;
       const optimisticMessage = {
         _id: tempMessageId,
         sender: { _id: userId, name: user.name, profilePicture: user.profilePicture },
@@ -376,11 +364,10 @@ const fetchMessages = useCallback(async () => {
         isOptimistic: true
       };
 
-      // ✅ Immediately update UI with optimistic message
       setMessages(prev => [...prev, optimisticMessage]);
       setNewMessage("");
       
-      // ✅ Stop typing
+      // Stop typing
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
         socket.emit("typing_stop", {
@@ -390,7 +377,7 @@ const fetchMessages = useCallback(async () => {
         });
       }
 
-      // ✅ Prepare API data
+      // Prepare API data
       const msgData = isGroup
         ? { 
             content: messageContent, 
@@ -406,7 +393,7 @@ const fetchMessages = useCallback(async () => {
         ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/sendGroupmessages`
         : `${import.meta.env.VITE_API_URL}/chatroom/messages/send`;
 
-      // ✅ Send to backend
+      // Send to backend
       const res = await axios.post(endpoint, msgData, {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 10000
@@ -415,57 +402,49 @@ const fetchMessages = useCallback(async () => {
       const sentMessage = res.data.message;
       console.log('✅ Message saved to DB:', sentMessage);
 
-      // ✅ Replace optimistic message with real message
+      // Replace optimistic message
       setMessages(prev => 
         prev.map(msg => 
           msg._id === tempMessageId ? { ...sentMessage, status: 'sent' } : msg
         )
       );
 
-      // ✅ FIXED: Emit socket event for real-time delivery with consistent room naming
-      const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
-      const socketMessage = {
+      // ✅ FIXED: Use proper room ID for private messages
+      const roomId = isGroup ? 
+        `group_${selectedChat._id}` : 
+        `private_${res.data.chatRoomId || currentChatRoomId || selectedChat._id}`;
+
+      socket.emit("send_message", {
         roomId: roomId,
         message: {
           ...sentMessage,
           senderId: userId,
+          receiverId: isGroup ? null : selectedChat._id,
           isRealTime: true
         },
         chatType: isGroup ? "group" : "private"
-      };
+      });
 
-      socket.emit("send_message", socketMessage);
-      console.log('📤 Socket message emitted:', socketMessage);
+      console.log('📤 Socket message emitted to room:', roomId);
 
     } catch (err) {
       console.error("❌ Error sending message:", err);
-      
-      // ✅ Update optimistic message to show error
       setMessages(prev => 
         prev.map(msg => 
           msg.isOptimistic ? { ...msg, status: 'error', error: true } : msg
         )
       );
-
-      if (err.response?.status === 403) {
-        toast.error("You don't have permission to send messages in this chat");
-      } else if (err.code === 'NETWORK_ERROR' || !navigator.onLine) {
-        toast.error("Network error. Please check your connection.");
-      } else {
-        toast.error("Failed to send message. Please try again.");
-      }
+      toast.error("Failed to send message");
     } finally {
       setIsSending(false);
     }
   };
 
-  // ✅ Enhanced input handler
   const handleInputChange = (e) => {
     setNewMessage(e.target.value);
     handleTyping();
   };
 
-  // ✅ Handle Enter key press
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -479,7 +458,9 @@ const fetchMessages = useCallback(async () => {
       const typingArray = Array.from(typingUsers);
       if (typingArray.length === 1) {
         const typingUserId = typingArray[0];
-        const typingUser = selectedChat.participants?.find(p => p.user?._id === typingUserId || p.user === typingUserId);
+        const typingUser = selectedChat.participants?.find(p => 
+          p.user?._id === typingUserId || p.user === typingUserId
+        );
         const userName = typingUser?.name || 'Someone';
         return `${userName} is typing...`;
       } else {
@@ -497,14 +478,11 @@ const fetchMessages = useCallback(async () => {
     // For private chats
     const friendId = selectedChat._id;
     const status = userStatus[friendId]?.status || 'offline';
-    const lastSeen = userStatus[friendId]?.lastSeen;
     
     if (status === 'online') {
       return 'Online';
     } else if (status === 'away') {
       return 'Away';
-    } else if (lastSeen) {
-      return `Last seen ${new Date(lastSeen).toLocaleTimeString()}`;
     } else {
       return 'Offline';
     }
