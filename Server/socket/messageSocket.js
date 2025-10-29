@@ -1,4 +1,4 @@
-// socketHandlers.js (Updated)
+// socket/messageSocket.js - COMPLETE FIXED VERSION
 export const setupChatSockets = (io) => {
   io.on('connection', (socket) => {
     console.log('✅ User connected:', socket.id);
@@ -13,8 +13,15 @@ export const setupChatSockets = (io) => {
         socket.join(userRoom);
         userRooms.add(userRoom);
         
+        // Store userId in socket for later use
+        socket.userId = userId;
+        
         // Notify others that user is online
-        socket.broadcast.emit('user_online', { userId });
+        socket.broadcast.emit('user_status_change', { 
+          userId,
+          status: 'online',
+          lastSeen: new Date().toISOString()
+        });
         console.log(`👤 User ${userId} joined personal room`);
       }
     });
@@ -31,75 +38,11 @@ export const setupChatSockets = (io) => {
       });
     });
 
-    // ✅ Enhanced typing indicators with proper data structure
-    socket.on('typing_start', (data) => {
-      const { chatId, userId, userName, isGroup = false } = data;
-      const roomId = isGroup ? `group_${chatId}` : `private_${chatId}`;
-      
-      console.log(`⌨️ ${userName} started typing in ${roomId}`);
-      
-      // Broadcast to all other users in the room
-      socket.to(roomId).emit('user_typing', {
-        userId,
-        userName,
-        isTyping: true,
-        roomId: chatId,
-        timestamp: new Date().toISOString()
-      });
+    // ✅ Leave chat room
+    socket.on('leave_chat', (roomId) => {
+      socket.leave(roomId);
+      console.log(`🚪 User left room: ${roomId}`);
     });
-
-    socket.on('typing_stop', (data) => {
-      const { chatId, userId, userName, isGroup = false } = data;
-      const roomId = isGroup ? `group_${chatId}` : `private_${chatId}`;
-      
-      console.log(`⌨️ ${userName || userId} stopped typing in ${roomId}`);
-      
-      // Broadcast to all other users in the room
-      socket.to(roomId).emit('user_typing', {
-        userId,
-        userName,
-        isTyping: false,
-        roomId: chatId
-      });
-    });
-
-    // ✅ User status management
-    socket.on('user_online', (userId) => {
-      socket.broadcast.emit('user_status_change', {
-        userId,
-        status: 'online',
-        lastSeen: new Date().toISOString()
-      });
-    });
-
-    socket.on('user_away', (userId) => {
-      socket.broadcast.emit('user_status_change', {
-        userId,
-        status: 'away',
-        lastSeen: new Date().toISOString()
-      });
-    });
-
-    socket.on('user_offline', (userId) => {
-      socket.broadcast.emit('user_status_change', {
-        userId,
-        status: 'offline',
-        lastSeen: new Date().toISOString()
-      });
-    });
-
-    // ✅ Handle disconnect
-    socket.on('disconnect', (reason) => {
-      console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
-      
-      // Notify all rooms that user went offline
-      userRooms.forEach(room => {
-        socket.to(room).emit('user_offline', { userId: socket.userId });
-      });
-    });
-
-    // ... rest of your existing socket code for messages
-  });
 
     // ✅ REAL-TIME: Send message with proper room handling
     socket.on('send_message', async (data) => {
@@ -132,26 +75,80 @@ export const setupChatSockets = (io) => {
       }
     });
 
-
-    // ✅ MESSAGE STATUS: For delivery/read receipts
-    socket.on('message_delivered', ({ messageId, roomId }) => {
-      socket.to(roomId).emit('message_delivery_update', {
-        messageId,
-        status: 'delivered',
+    // ✅ TYPING: Enhanced typing indicators
+    socket.on('typing_start', (data) => {
+      const { chatId, userId, userName, isGroup = false } = data;
+      const roomId = isGroup ? `group_${chatId}` : `private_${chatId}`;
+      
+      console.log(`⌨️ ${userName} started typing in ${roomId}`);
+      
+      // Broadcast to all other users in the room
+      socket.to(roomId).emit('user_typing', {
+        userId,
+        userName,
+        isTyping: true,
+        roomId: chatId,
         timestamp: new Date().toISOString()
       });
     });
 
-    socket.on('message_read', ({ messageId, roomId }) => {
-      socket.to(roomId).emit('message_delivery_update', {
-        messageId,
-        status: 'read',
-        timestamp: new Date().toISOString()
+    socket.on('typing_stop', (data) => {
+      const { chatId, userId, userName, isGroup = false } = data;
+      const roomId = isGroup ? `group_${chatId}` : `private_${chatId}`;
+      
+      console.log(`⌨️ ${userName || userId} stopped typing in ${roomId}`);
+      
+      // Broadcast to all other users in the room
+      socket.to(roomId).emit('user_typing', {
+        userId,
+        userName,
+        isTyping: false,
+        roomId: chatId
       });
     });
 
-    socket.on('disconnect', () => {
-      console.log('❌ User disconnected:', socket.id);
+    // ✅ User status management
+    socket.on('user_online', (data) => {
+      socket.broadcast.emit('user_status_change', {
+        userId: data.userId,
+        status: 'online',
+        lastSeen: new Date().toISOString()
+      });
     });
-  
+
+    socket.on('user_away', (data) => {
+      socket.broadcast.emit('user_status_change', {
+        userId: data.userId,
+        status: 'away',
+        lastSeen: new Date().toISOString()
+      });
+    });
+
+    socket.on('user_offline', (data) => {
+      socket.broadcast.emit('user_status_change', {
+        userId: data.userId,
+        status: 'offline',
+        lastSeen: new Date().toISOString()
+      });
+    });
+
+    // ✅ Handle disconnect
+    socket.on('disconnect', (reason) => {
+      console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
+      
+      // Notify all rooms that user went offline
+      if (socket.userId) {
+        socket.broadcast.emit('user_status_change', {
+          userId: socket.userId,
+          status: 'offline',
+          lastSeen: new Date().toISOString()
+        });
+      }
+    });
+
+    // ✅ Error handling
+    socket.on('error', (error) => {
+      console.error('❌ Socket error:', error);
+    });
+  });
 };
