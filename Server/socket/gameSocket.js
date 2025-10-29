@@ -1,6 +1,4 @@
-
-// socket/gameSocket.js
-import UserModel from "../models/User";
+import UserModel from "../models/User.js";
 
 export default function gameSocket(io) {
   const rooms = {}; // { roomId: { roomId, players: [], status, currentPlayer, currentPrompt, currentChoice, answers: {}, proofs: {}, scores: {}, playerStats: {}, roundNumber: 1 } }
