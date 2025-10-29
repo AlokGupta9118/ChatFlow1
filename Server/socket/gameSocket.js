@@ -1145,16 +1145,7 @@ export default function gameSocket(io) {
       for (const roomId in rooms) {
         const room = rooms[roomId];
         const disconnectedPlayer = room.players.find(p => p.socketId === socket.id);
-        
-         const userId = socket.userId;
-      if (userId) {
-        try {
-          await User.findByIdAndUpdate(userId, { status: "offline", lastSeen: new Date() });
-          console.log(`❌ ${userId} set to offline`);
-        } catch (err) {
-          console.error("Error setting user offline:", err.message);
-        }
-      }
+      
       
         
         if (disconnectedPlayer) {
@@ -1195,8 +1186,18 @@ export default function gameSocket(io) {
           }
         }
       }
+
+      if (socket.userId) {
+      // Update user status to offline
+      User.update({ status: 'offline' }, { where: { id: socket.userId } });
+      
+      // Broadcast to others that user is offline
+      socket.broadcast.emit('user_status_change', {
+        userId: socket.userId,
+        status: 'offline'
+      });
+    }
       console.log("❌ Disconnected:", socket.id);
       
     });
-  });
-}
+  };

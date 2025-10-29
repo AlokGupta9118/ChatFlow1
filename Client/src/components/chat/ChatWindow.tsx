@@ -1,4 +1,3 @@
-// components/chat/ChatWindow.jsx - NO RESTRICTIONS VERSION
 import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -42,12 +41,79 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [groupMembers, setGroupMembers] = useState([]);
   const [showMenu, setShowMenu] = useState(false);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [friendStatus, setFriendStatus] = useState('offline'); // ✅ Track friend status
+  const [friendLastSeen, setFriendLastSeen] = useState(null); // ✅ Track last seen
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const menuRef = useRef(null);
 
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
+
+  // ✅ Fetch friend status for private chats
+  const fetchFriendStatus = async () => {
+    if (!selectedChat?._id || isGroup) return;
+    
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/status/statuses`,
+        { userIds: [selectedChat._id] },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      const statusData = res.data.statuses?.[selectedChat._id];
+      setFriendStatus(statusData?.status || 'offline');
+      setFriendLastSeen(statusData?.lastSeen || null);
+    } catch (err) {
+      console.error("Error fetching friend status:", err);
+      setFriendStatus('offline');
+      setFriendLastSeen(null);
+    }
+  };
+
+  // ✅ Listen for real-time status changes
+  useEffect(() => {
+    if (!selectedChat) return;
+
+    if (!isGroup) {
+      // For private chats, fetch initial status and listen for changes
+      fetchFriendStatus();
+      
+      socket.on("user-status-change", ({ userId, status, lastSeen }) => {
+        if (userId === selectedChat._id) {
+          setFriendStatus(status);
+          setFriendLastSeen(lastSeen);
+        }
+      });
+    } else {
+      // For group chats, listen for member status changes
+      socket.on("user-status-change", ({ userId, status, lastSeen }) => {
+        setGroupMembers(prev => 
+          prev.map(member => {
+            const memberId = member.user?._id || member.user;
+            if (memberId === userId) {
+              return {
+                ...member,
+                user: {
+                  ...member.user,
+                  status,
+                  lastSeen
+                }
+              };
+            }
+            return member;
+          })
+        );
+      });
+    }
+
+    return () => {
+      socket.off("user-status-change");
+    };
+  }, [selectedChat?._id, isGroup]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -65,7 +131,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // SIMPLIFIED: Fetch group members and user role - NO RESTRICTIONS
+  // ✅ Fetch group members with status
   const fetchGroupMembers = async () => {
     if (!selectedChat?._id || !isGroup) return;
 
@@ -79,9 +145,34 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       );
 
       const members = res.data.members || [];
-      setGroupMembers(members);
+      
+      // ✅ Fetch statuses for all group members
+      const memberIds = members.map(m => m.user?._id || m.user).filter(id => id);
+      if (memberIds.length > 0) {
+        const statusRes = await axios.post(
+          `${import.meta.env.VITE_API_URL}/api/status/statuses`,
+          { userIds: memberIds },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        
+        const statuses = statusRes.data.statuses || {};
+        
+        // Merge status data with members
+        const membersWithStatus = members.map(member => ({
+          ...member,
+          user: {
+            ...member.user,
+            status: statuses[member.user?._id || member.user]?.status || 'offline',
+            lastSeen: statuses[member.user?._id || member.user]?.lastSeen || new Date()
+          }
+        }));
+        
+        setGroupMembers(membersWithStatus);
+      } else {
+        setGroupMembers(members);
+      }
 
-      // Find current user role for admin panel display only
+      // Find current user role
       let currentUserMember = members.find(m => {
         if (m.user && typeof m.user === 'object' && m.user._id) {
           return String(m.user._id) === String(userId);
@@ -95,16 +186,23 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       if (currentUserMember) {
         setUserRole(currentUserMember.role || 'member');
       } else {
-        setUserRole('member'); // Default role
+        setUserRole('member');
       }
 
     } catch (err) {
       console.error("Error fetching group members:", err);
-      setUserRole('member'); // Default role on error
+      setUserRole('member');
     }
   };
 
-  // Fetch pending join requests (for admins/owners display only)
+  // ✅ Get online members count
+  const getOnlineMembersCount = () => {
+    return groupMembers.filter(member => {
+      const status = member.user?.status || 'offline';
+      return status === 'online';
+    }).length;
+  };
+
   const fetchPendingRequests = async () => {
     if (!selectedChat?._id || !isGroup || !isUserAdmin()) return;
 
@@ -132,7 +230,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // Check if user is admin/owner (for UI display only)
+  // Check if user is admin/owner
   const isUserAdmin = () => {
     return userRole === 'admin' || userRole === 'owner';
   };
@@ -152,6 +250,28 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       case "owner": return <Crown className="w-3 h-3" />;
       case "admin": return <Shield className="w-3 h-3" />;
       default: return <Users className="w-3 h-3" />;
+    }
+  };
+
+  // ✅ Get status color for private chats
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "online": return "bg-green-500";
+      case "away": return "bg-yellow-400";
+      case "busy": return "bg-red-500";
+      case "offline": return "bg-gray-400";
+      default: return "bg-gray-400";
+    }
+  };
+
+  // ✅ Get status text for private chats
+  const getStatusText = (status) => {
+    switch (status) {
+      case "online": return "Online";
+      case "away": return "Away";
+      case "busy": return "Busy";
+      case "offline": return "Offline";
+      default: return "Offline";
     }
   };
 
@@ -215,7 +335,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim()) return; // Only check for empty message
+    if (!newMessage.trim()) return;
 
     const token = getToken();
     if (!token) return;
@@ -240,7 +360,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socket.emit("typing_stop", selectedChat._id);
     } catch (err) {
       console.error("Error sending message:", err);
-      // Only show error if it's not a permission issue
       if (err.response?.status !== 403) {
         toast.error("Failed to send message");
       }
@@ -252,6 +371,19 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       hour: '2-digit', 
       minute: '2-digit' 
     });
+  };
+
+  // ✅ Format last seen time
+  const formatLastSeen = (lastSeen) => {
+    if (!lastSeen) return '';
+    const now = new Date();
+    const lastSeenDate = new Date(lastSeen);
+    const diffInMinutes = Math.floor((now - lastSeenDate) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return lastSeenDate.toLocaleDateString();
   };
 
   if (!selectedChat)
@@ -288,7 +420,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                 {selectedChat.name?.[0]?.toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+            {/* ✅ Dynamic status indicator */}
+            <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
+              isGroup ? 'bg-indigo-500' : getStatusColor(friendStatus)
+            }`}></div>
             <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
               <Eye className="w-4 h-4 text-white" />
             </div>
@@ -312,7 +447,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                 </div>
               ) : isGroup ? (
                 <div className="flex items-center gap-2">
-                  <span>{groupMembers.length} members</span>
+                  <span>{getOnlineMembersCount()} online • {groupMembers.length} total</span>
                   {userRole && (
                     <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getRoleColor(userRole)}`}>
                       {getRoleIcon(userRole)}
@@ -320,12 +455,25 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                     </span>
                   )}
                 </div>
-              ) : "Online"}
+              ) : (
+                // ✅ Show actual friend status with last seen
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${getStatusColor(friendStatus)}`}></span>
+                  <span className="capitalize">
+                    {getStatusText(friendStatus)}
+                    {friendStatus === 'offline' && friendLastSeen && (
+                      <span className="ml-1 text-blue-200">
+                        • {formatLastSeen(friendLastSeen)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
             </p>
           </div>
         </div>
 
-        {/* Header Actions - Different icons based on chat type and user role */}
+        {/* Header Actions */}
         <div className="flex items-center gap-2">
           {!isGroup ? (
             // Private Chat - Show User Profile Icon
@@ -528,7 +676,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         <div ref={messagesEndRef} />
       </div>
 
-      {/* SIMPLIFIED: Input Area - ALWAYS ALLOW MESSAGES */}
+      {/* Input Area */}
       <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gradient-to-r from-gray-800 to-gray-900 backdrop-blur-xl border-t border-purple-500/30 shadow-lg">
         <div className="flex gap-1">
           <motion.button 

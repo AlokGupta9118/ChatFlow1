@@ -404,11 +404,11 @@ const WhosMostLikely = () => {
     if (!soundEnabled) return;
     
     const sounds = {
-      select: "/sounds/select.mp3",
-      success: "/sounds/success.mp3",
-      notification: "/sounds/notification.mp3",
-      victory: "/sounds/victory.mp3",
-      message: "/sounds/message.mp3"
+      select : "../components/sounds/select.mp3",
+      success: "../components/sounds/success.mp3",
+      notification: "../components/sounds/notification.mp3",
+      victory: "../components/sounds/victory.mp3",
+      message: "../components/sounds/message.mp3"
     };
     
     if (audioRef.current && sounds[soundName]) {

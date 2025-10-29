@@ -488,11 +488,11 @@ export default function TruthOrDare({ currentUser }) {
     if (!gameSettings.soundEnabled) return;
     
     const sounds = {
-      spin: "/sounds/spin-start.mp3",
-      select: "/sounds/select.mp3",
-      success: "/sounds/success.mp3",
-      notification: "/sounds/notification.mp3",
-      message: "/sounds/message.mp3"
+      spin: "../components/sounds/spin-start.mp3",
+      select: "../components/sounds/select.mp3",
+      success: "../components/sounds/success.mp3",
+      notification: "../components/sounds/notification.mp3",
+      message: "../components/sounds/message.mp3"
     };
     
     if (audioRef.current) {
@@ -2144,7 +2144,7 @@ function SpinnerWheel({ players, selectedPlayer, spinning, soundEnabled }) {
       setHighlight(selectedPlayer);
       
       if (soundEnabled) {
-        const audio = new Audio("/sounds/spin-end.mp3");
+        const audio = new Audio("../components/sounds/spin-end.mp3");
         audio.play().catch(() => {});
       }
     }, 3000);

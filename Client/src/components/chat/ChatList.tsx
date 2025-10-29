@@ -19,6 +19,26 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   const [showAdminPanel, setShowAdminPanel] = useState(null);
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
+  // ✅ Fetch user statuses for friends
+  const fetchUserStatuses = async (friendIds: string[]) => {
+    if (!friendIds.length) return {};
+    
+    const token = getToken();
+    if (!token) return {};
+
+    try {
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/status/statuses`,
+        { userIds: friendIds },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return res.data.statuses || {};
+    } catch (err) {
+      console.error("Error fetching user statuses:", err);
+      return {};
+    }
+  };
+
   const fetchFriends = async () => {
     const token = getToken();
     if (!token) return;
@@ -26,7 +46,21 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/friends`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setFriends(res.data.friends || []);
+      
+      const friendsList = res.data.friends || [];
+      
+      // ✅ Fetch statuses for all friends
+      const friendIds = friendsList.map(f => f._id).filter(id => id);
+      const statuses = await fetchUserStatuses(friendIds);
+      
+      // ✅ Merge status data with friends
+      const friendsWithStatus = friendsList.map(friend => ({
+        ...friend,
+        status: statuses[friend._id]?.status || 'offline',
+        lastSeen: statuses[friend._id]?.lastSeen || new Date()
+      }));
+      
+      setFriends(friendsWithStatus);
     } catch (err) {
       console.error("Error fetching friends:", err);
       setFriends([]);
@@ -43,7 +77,40 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       const safeGroups = (res.data.groups || []).filter(
         (g) => Array.isArray(g.participants)
       );
-      setGroups(safeGroups);
+      
+      // ✅ Fetch statuses for all group members
+      const allMemberIds = [];
+      safeGroups.forEach(group => {
+        if (group.participants) {
+          group.participants.forEach(participant => {
+            const memberId = participant.user?._id || participant.user;
+            if (memberId && !allMemberIds.includes(memberId)) {
+              allMemberIds.push(memberId);
+            }
+          });
+        }
+      });
+      
+      const statuses = await fetchUserStatuses(allMemberIds);
+      
+      // ✅ Merge status data with group participants
+      const groupsWithMemberStatus = safeGroups.map(group => ({
+        ...group,
+        participants: group.participants?.map(participant => {
+          const memberId = participant.user?._id || participant.user;
+          const memberStatus = statuses[memberId];
+          return {
+            ...participant,
+            user: {
+              ...participant.user,
+              status: memberStatus?.status || 'offline',
+              lastSeen: memberStatus?.lastSeen || new Date()
+            }
+          };
+        }) || []
+      }));
+      
+      setGroups(groupsWithMemberStatus);
     } catch (err) {
       console.error("Error fetching groups:", err);
       setGroups([]);
@@ -66,16 +133,43 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       setUnreadCounts((prev) => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
     });
 
-    socket.on("update_status", ({ userId, status }) => {
+    // ✅ Listen for real-time status changes
+    socket.on("user-status-change", ({ userId, status, lastSeen }) => {
+      console.log(`🔄 Status update: ${userId} is now ${status}`);
+      
+      // Update friends list
       setFriends((prev) =>
-        prev.map((f) => (f._id === userId ? { ...f, status } : f))
+        prev.map((f) => 
+          f._id === userId ? { ...f, status, lastSeen } : f
+        )
+      );
+      
+      // Update group participants status
+      setGroups((prev) =>
+        prev.map((group) => ({
+          ...group,
+          participants: group.participants?.map((p) => {
+            const participantId = p.user?._id || p.user;
+            if (participantId === userId) {
+              return {
+                ...p,
+                user: {
+                  ...p.user,
+                  status,
+                  lastSeen
+                }
+              };
+            }
+            return p;
+          })
+        }))
       );
     });
 
     return () => {
       mounted = false;
       socket.off("receive_message");
-      socket.off("update_status");
+      socket.off("user-status-change");
     };
   }, []);
 
@@ -99,7 +193,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     const key = chat._id;
     setUnreadCounts((prev) => ({ ...prev, [key]: 0 }));
     
-    // Make sure to pass the isGroup parameter to the parent
     if (onSelectChat) {
       onSelectChat(chat, isGroup);
     } else {
@@ -112,6 +205,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       case "online": return "bg-green-500";
       case "away": return "bg-yellow-400";
       case "busy": return "bg-red-500";
+      case "offline": return "bg-gray-400";
       default: return "bg-gray-400";
     }
   };
@@ -121,8 +215,19 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       case "online": return "Online";
       case "away": return "Away";
       case "busy": return "Busy";
+      case "offline": return "Offline";
       default: return "Offline";
     }
+  };
+
+  // ✅ Get online members count for groups
+  const getOnlineMembersCount = (group) => {
+    if (!group.participants) return 0;
+    return group.participants.filter(p => {
+      const user = p.user;
+      const status = user?.status || 'offline';
+      return status === 'online';
+    }).length;
   };
 
   const getUserRoleInGroup = (group) => {
@@ -222,6 +327,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                 );
                 const role = participant?.role || "Member";
                 const memberCount = item.participants?.length || 0;
+                const onlineMembers = getOnlineMembersCount(item);
                 const isAdmin = isGroupAdmin(item);
 
                 return (
@@ -242,7 +348,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                     <div
                       onClick={() => {
                         console.log("🎯 Clicked on GROUP:", itemName);
-                        handleSelect(item, true); // Explicitly pass true for groups
+                        handleSelect(item, true);
                       }}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
@@ -302,7 +408,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                             </span>
                             <span className="text-gray-400">•</span>
                             <span className="text-gray-500 dark:text-gray-400">
-                              {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                              {onlineMembers} online • {memberCount} total
                             </span>
                           </div>
                         </div>
@@ -372,7 +478,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                     <div
                       onClick={() => {
                         console.log("🎯 Clicked on PRIVATE CHAT:", itemName);
-                        handleSelect(item, false); // Explicitly pass false for private chats
+                        handleSelect(item, false);
                       }}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
@@ -412,6 +518,11 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                             <span className={`w-2 h-2 rounded-full ${getStatusColor(item.status)}`} />
                             <span className="text-gray-500 dark:text-gray-400">
                               {getStatusText(item.status)}
+                              {item.status === 'offline' && item.lastSeen && (
+                                <span className="ml-1">
+                                  • Last seen {new Date(item.lastSeen).toLocaleDateString()}
+                                </span>
+                              )}
                             </span>
                           </div>
                         </div>

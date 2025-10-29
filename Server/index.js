@@ -16,6 +16,7 @@ import settingRoutes from "./routes/settingRoutes.js";
 import { getProfile } from "./controllers/settingController.js";
 import { protect } from "./middleware/authMiddleware.js";
 import gameSocket from "./socket/gameSocket.js";
+import statusRoutes from "./routes/statusRoutes.js";
 
 dotenv.config();
 
@@ -57,7 +58,7 @@ app.use("/messages", messageRoutes);
 app.use("/chatroom", chatRoomRoutes);
 app.use("/api/user", settingRoutes);
 app.get("/api/user/profile", protect, getProfile);
-
+app.use("/api/status", statusRoutes);
 // HTTP server + Socket.IO
 const server = http.createServer(app);
 
