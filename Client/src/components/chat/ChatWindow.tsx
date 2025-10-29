@@ -259,47 +259,48 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     };
   }, [socket, isConnected, selectedChat?._id, isGroup, userId]);
 
-  // ✅ Enhanced message fetching
-  const fetchMessages = useCallback(async () => {
-    if (!selectedChat?._id) return;
+  // ✅ FIXED: Enhanced message fetching in ChatWindow.jsx
+const fetchMessages = useCallback(async () => {
+  if (!selectedChat?._id) return;
 
-    const token = getToken();
-    if (!token) {
-      console.error('❌ No token found');
-      toast.error("Authentication required");
-      return;
+  const token = getToken();
+  if (!token) {
+    toast.error("Authentication required");
+    return;
+  }
+
+  try {
+    console.log('📋 Fetching messages for chat:', selectedChat._id);
+    
+    const endpoint = isGroup
+      ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/getGroupmessages`
+      : `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}`;
+
+    const res = await axios.get(endpoint, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 10000
+    });
+
+    console.log('✅ Messages fetched:', res.data.messages?.length);
+    console.log('✅ ChatRoom ID:', res.data.chatRoomId); // Debug log
+    
+    const sortedMessages = (res.data.messages || []).sort((a, b) => 
+      new Date(a.createdAt) - new Date(b.createdAt)
+    );
+    
+    setMessages(sortedMessages);
+
+    // ✅ Store chatRoomId for private chats
+    if (!isGroup && res.data.chatRoomId) {
+      // You might want to store this in state or ref for later use
+      console.log('💾 Storing chatRoomId for private chat:', res.data.chatRoomId);
     }
 
-    try {
-      console.log('📋 Fetching messages for chat:', selectedChat._id);
-      
-      const endpoint = isGroup
-        ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/getGroupmessages`
-        : `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}`;
-
-      const res = await axios.get(endpoint, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000
-      });
-
-      console.log('✅ Messages fetched:', res.data.messages?.length);
-      
-      const sortedMessages = (res.data.messages || []).sort((a, b) => 
-        new Date(a.createdAt) - new Date(b.createdAt)
-      );
-      
-      setMessages(sortedMessages);
-
-    } catch (err) {
-      console.error("❌ Error fetching messages:", err);
-      if (err.response?.status === 404) {
-        setMessages([]);
-      } else {
-        toast.error("Failed to load messages");
-      }
-    }
-  }, [selectedChat?._id, isGroup]);
-
+  } catch (err) {
+    console.error("❌ Error fetching messages:", err);
+    toast.error("Failed to load messages");
+  }
+}, [selectedChat?._id, isGroup]);
   // ✅ Initial messages load
   useEffect(() => {
     fetchMessages();
