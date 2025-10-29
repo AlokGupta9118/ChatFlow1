@@ -405,10 +405,6 @@ export const rejectRequest = async (req, res) => {
   }
 };
 
-// controllers/chatController.js
-import ChatRoom from "../models/ChatRoom.js";
-import Message from "../models/Message.js";
-import User from "../models/User.js";
 
 export const getChatRooms = async (req, res) => {
   try {
