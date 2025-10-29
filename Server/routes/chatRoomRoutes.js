@@ -1,7 +1,6 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
-import {getAllGroups,requestToJoinGroup,getMyPendingRequests,sendJoinRequest,getMyJoinRequests, getGroupMembers,getMyGroups,sendMessage,
-  getMessages,createGroupChat, addParticipant,
+import {getAllGroups,requestToJoinGroup,getMyPendingRequests,sendJoinRequest,getMyJoinRequests, getGroupMembers,getMyGroups,createGroupChat, addParticipant,
   removeParticipant,
   getPendingRequests,
   approveRequest,
@@ -40,14 +39,6 @@ router.get("/my-join-requests", protect, getMyJoinRequests);
 
 
 
-
-
-
-
-
-// Messages
-router.post('/messages/send',protect, sendMessage);
-router.get('/messages/:chatId',protect, getMessages);
 
 // Groups
 router.get('/groups/my', getMyGroups);
