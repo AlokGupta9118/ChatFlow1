@@ -2,59 +2,75 @@ export const setupChatSockets = (io) => {
   io.on('connection', (socket) => {
     console.log('✅ User connected:', socket.id);
 
-    socket.userRooms = new Set();
-    socket.currentChat = null;
+    // Store user info
+    socket.userData = {
+      rooms: new Set(),
+      userId: null
+    };
 
     // Join user's personal room
     socket.on('join_user', (userId) => {
       if (userId) {
-        socket.userId = userId;
+        socket.userData.userId = userId;
         const userRoom = `user_${userId}`;
         
-        // Leave previous user rooms
-        socket.userRooms.forEach(room => {
-          if (room.startsWith('user_')) socket.leave(room);
-        });
+        // Leave previous user room if exists
+        if (socket.userData.rooms.has(userRoom)) {
+          socket.leave(userRoom);
+        }
         
         socket.join(userRoom);
-        socket.userRooms.add(userRoom);
+        socket.userData.rooms.add(userRoom);
         
         console.log(`👤 User ${userId} joined personal room: ${userRoom}`);
       }
     });
 
-    // Enhanced chat room joining
+    // ✅ FIXED: Enhanced chat room joining with PROPER room management
     socket.on('join_chat', (data) => {
       const { roomId, isGroup = false, chatRoomId } = data;
-      if (!roomId) return;
-
-      const actualRoomId = isGroup ? `group_${roomId}` : `private_${chatRoomId || roomId}`;
       
-      console.log(`🚪 User ${socket.userId} joining room: ${actualRoomId}`);
+      if (!roomId) {
+        console.log('❌ join_chat: Missing roomId');
+        return;
+      }
 
-      // Leave previous chat rooms
-      socket.userRooms.forEach(room => {
+      // ✅ CRITICAL: Calculate room ID EXACTLY like message emission
+      let actualRoomId;
+      if (isGroup) {
+        actualRoomId = `group_${roomId}`;
+      } else {
+        // For private chats, use chatRoomId if available, otherwise use roomId
+        actualRoomId = `private_${chatRoomId || roomId}`;
+      }
+      
+      console.log(`🚪 User ${socket.userData.userId} joining room:`, {
+        originalRoomId: roomId,
+        actualRoomId: actualRoomId,
+        isGroup: isGroup,
+        chatRoomId: chatRoomId
+      });
+
+      // Leave previous chat rooms (only group/private rooms, not user rooms)
+      socket.userData.rooms.forEach(room => {
         if (room.startsWith('group_') || room.startsWith('private_')) {
           socket.leave(room);
-          socket.userRooms.delete(room);
+          socket.userData.rooms.delete(room);
+          console.log(`🚪 Left previous room: ${room}`);
         }
       });
       
+      // Join new room
       socket.join(actualRoomId);
-      socket.userRooms.add(actualRoomId);
-      socket.currentChat = { 
-        roomId: roomId, 
-        isGroup: isGroup, 
-        actualRoomId: actualRoomId,
-        chatRoomId: chatRoomId 
-      };
+      socket.userData.rooms.add(actualRoomId);
       
-      console.log(`✅ User ${socket.userId} successfully joined: ${actualRoomId}`);
+      console.log(`✅ User ${socket.userData.userId} successfully joined: ${actualRoomId}`);
+      console.log(`📊 User ${socket.userData.userId} current rooms:`, Array.from(socket.userData.rooms));
     });
 
-    // Typing indicators
+    // ✅ FIXED: Typing indicators with PROPER room emission
     socket.on('typing_start', (data) => {
-      console.log('🎯 BACKEND: TYPING START received:', JSON.stringify(data, null, 2));
+      console.log('🎯 BACKEND: TYPING START received:', data);
       
       const { chatId, userId, userName, isGroup = false, chatRoomId } = data;
       
@@ -63,24 +79,32 @@ export const setupChatSockets = (io) => {
         return;
       }
 
-      const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
+      // ✅ CRITICAL: Calculate room ID EXACTLY like join_chat and message emission
+      let roomId;
+      if (isGroup) {
+        roomId = `group_${chatId}`;
+      } else {
+        roomId = `private_${chatRoomId || chatId}`;
+      }
       
-      console.log(`🎯 BACKEND: ${userName} started typing in ${roomId} (User: ${userId})`);
+      console.log(`🎯 BACKEND: ${userName} (${userId}) started typing in ${roomId}`);
       
-      // Broadcast to others in the room
+      // ✅ CRITICAL: Broadcast to ALL OTHER users in the room (excluding sender)
       socket.to(roomId).emit('user_typing', {
-        userId,
+        userId: userId,
         userName: userName || 'Unknown User',
         isTyping: true,
         chatId: chatId,
-        roomId: roomId,
+        roomId: roomId, // Include roomId for frontend validation
         isGroup: isGroup,
         timestamp: new Date().toISOString()
       });
+      
+      console.log(`📤 BACKEND: Typing start emitted to room: ${roomId} (excluding user ${userId})`);
     });
 
     socket.on('typing_stop', (data) => {
-      console.log('🎯 BACKEND: TYPING STOP received:', JSON.stringify(data, null, 2));
+      console.log('🎯 BACKEND: TYPING STOP received:', data);
       
       const { chatId, userId, isGroup = false, chatRoomId } = data;
       
@@ -89,22 +113,36 @@ export const setupChatSockets = (io) => {
         return;
       }
 
-      const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
+      // ✅ CRITICAL: Calculate room ID EXACTLY like typing_start
+      let roomId;
+      if (isGroup) {
+        roomId = `group_${chatId}`;
+      } else {
+        roomId = `private_${chatRoomId || chatId}`;
+      }
       
       console.log(`🎯 BACKEND: User ${userId} stopped typing in ${roomId}`);
       
+      // ✅ CRITICAL: Broadcast to ALL OTHER users in the room (excluding sender)
       socket.to(roomId).emit('user_typing', {
-        userId,
+        userId: userId,
         isTyping: false,
         chatId: chatId,
-        roomId: roomId,
+        roomId: roomId, // Include roomId for frontend validation
         isGroup: isGroup
       });
+      
+      console.log(`📤 BACKEND: Typing stop emitted to room: ${roomId} (excluding user ${userId})`);
     });
 
-    // Disconnect
+    // Handle disconnect
     socket.on('disconnect', (reason) => {
-      console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
+      console.log('❌ User disconnected:', socket.id, 'Reason:', reason, 'User ID:', socket.userData.userId);
+    });
+
+    // Error handling
+    socket.on('error', (error) => {
+      console.error('❌ Socket error:', error);
     });
   });
 };
