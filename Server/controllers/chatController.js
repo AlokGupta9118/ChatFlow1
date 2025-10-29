@@ -4,8 +4,7 @@ import Message from "../models/Message.js";
 import User from "../models/User.js";
 import GroupJoinRequest from "../models/GroupJoinRequest.js";
 
-
-// ✅ FIXED: Send private message
+// ✅ FIXED: Send private message with proper room handling
 export const sendMessage = async (req, res) => {
   try {
     const senderId = req.user._id;
@@ -68,32 +67,28 @@ export const sendMessage = async (req, res) => {
     const messageForRealTime = {
       ...populatedMessage,
       senderId: senderId,
-      receiverId: receiverId, // ✅ CRITICAL: Include receiverId
+      receiverId: receiverId,
       roomId: roomId,
-      chatRoom: chatRoom._id, // ✅ Include chatRoom ID
-      isRealTime: true, // ✅ Set to true for real-time
+      chatRoom: chatRoom._id,
+      isRealTime: true,
       chatType: 'private'
     };
 
-    console.log('📨 Emitting to room:', roomId);
+    console.log('📨 Emitting to private room:', roomId);
 
-    // ✅ FIXED: Emit socket message for real-time delivery
+    // ✅ FIXED: Emit socket message to private chat room (similar to group)
     const io = req.app.get('io');
     if (io) {
-      // 1. Emit to the private chat room
+      // Primary: Emit to the private chat room (similar to group room)
       io.to(roomId).emit('receive_message', messageForRealTime);
       
-      // 2. Emit to both users' personal rooms as backup
-      io.to(`user_${receiverId}`).emit('receive_message', messageForRealTime);
-      io.to(`user_${senderId}`).emit('receive_message', messageForRealTime);
-      
-      console.log('✅ Message emitted to all channels');
+      console.log('✅ Private message emitted to room:', roomId);
     }
 
     res.status(201).json({ 
       success: true, 
       message: populatedMessage,
-      chatRoomId: chatRoom._id // ✅ Return chatRoom ID for frontend
+      chatRoomId: chatRoom._id
     });
 
   } catch (err) {
@@ -155,7 +150,7 @@ export const sendGroupMessage = async (req, res) => {
       senderId: userId,
       roomId: groupRoomId,
       chatRoom: roomId,
-      isRealTime: true, // ✅ Set to true for real-time
+      isRealTime: true,
       chatType: 'group'
     };
 
@@ -167,12 +162,7 @@ export const sendGroupMessage = async (req, res) => {
       // Primary: Emit to group room
       io.to(groupRoomId).emit('receive_message', messageForRealTime);
       
-      // Secondary: Emit to all participants' personal rooms
-      room.participants.forEach(participant => {
-        io.to(`user_${participant.user}`).emit('receive_message', messageForRealTime);
-      });
-      
-      console.log('✅ Group message emitted to all channels');
+      console.log('✅ Group message emitted to room:', groupRoomId);
     }
 
     return res.status(201).json({ 
@@ -185,6 +175,8 @@ export const sendGroupMessage = async (req, res) => {
     res.status(500).json({ message: "Failed to send message", error: err.message });
   }
 };
+
+// ... (other functions remain the same)
 
 // ✅ FIXED: Get private messages
 export const getMessages = async (req, res) => {

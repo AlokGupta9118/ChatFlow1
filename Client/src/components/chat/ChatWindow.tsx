@@ -53,7 +53,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [isSending, setIsSending] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [userStatus, setUserStatus] = useState({});
-  const [currentChatRoomId, setCurrentChatRoomId] = useState(null); // ✅ Store actual chatRoom ID
+  const [currentChatRoomId, setCurrentChatRoomId] = useState(null);
   
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -74,11 +74,9 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       console.log('✅ Socket.IO connected:', newSocket.id);
       setIsConnected(true);
       
-      // Join user room immediately after connection
       if (userId) {
         console.log('👤 Joining user room after connect:', userId);
         newSocket.emit('join_user', userId);
-        newSocket.emit('user_online', { userId });
       }
     };
 
@@ -110,7 +108,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     if (socket && isConnected && userId) {
       console.log('👤 Joining user room:', userId);
       socket.emit('join_user', userId);
-      socket.emit('user_online', { userId });
     }
   }, [socket, isConnected, userId]);
 
@@ -149,6 +146,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       if (!isGroup && res.data.chatRoomId) {
         setCurrentChatRoomId(res.data.chatRoomId);
         console.log('💾 Stored chatRoomId for private chat:', res.data.chatRoomId);
+      } else if (isGroup) {
+        setCurrentChatRoomId(selectedChat._id);
       } else {
         setCurrentChatRoomId(null);
       }
@@ -164,14 +163,14 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     fetchMessages();
   }, [fetchMessages]);
 
-  // ✅ FIXED: Enhanced chat room joining with actual chatRoomId
+  // ✅ FIXED: Enhanced chat room joining with proper room IDs
   useEffect(() => {
     if (!socket || !isConnected || !selectedChat?._id) return;
 
     const roomData = {
       roomId: selectedChat._id,
       isGroup: isGroup,
-      chatRoomId: currentChatRoomId // ✅ Include actual chatRoom ID for private chats
+      chatRoomId: currentChatRoomId
     };
     
     console.log('🚪 Joining chat room with data:', roomData);
@@ -179,43 +178,9 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
     return () => {
       console.log('🚪 Leaving chat room');
-      socket.emit('leave_chat', roomData);
       setTypingUsers(new Set());
     };
   }, [socket, isConnected, selectedChat?._id, isGroup, currentChatRoomId]);
-
-  // ✅ FIXED: User status listener
-  useEffect(() => {
-    if (!socket || !isConnected) return;
-
-    const handleUserStatusChange = (data) => {
-      console.log('👤 User status changed:', data);
-      
-      setUserStatus(prev => ({
-        ...prev,
-        [data.userId]: {
-          status: data.status,
-          lastSeen: data.lastSeen
-        }
-      }));
-      
-      setOnlineUsers(prev => {
-        const newSet = new Set(prev);
-        if (data.status === 'online') {
-          newSet.add(data.userId);
-        } else {
-          newSet.delete(data.userId);
-        }
-        return newSet;
-      });
-    };
-
-    socket.on('user_status_change', handleUserStatusChange);
-
-    return () => {
-      socket.off('user_status_change', handleUserStatusChange);
-    };
-  }, [socket, isConnected]);
 
   // ✅ FIXED: Enhanced typing listeners
   useEffect(() => {
@@ -224,10 +189,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     const handleUserTyping = (data) => {
       console.log('⌨️ Typing event received:', data);
       
+      // ✅ FIXED: Better room matching logic
       const isForCurrentChat = 
-        data.chatId === selectedChat._id || 
-        data.roomId === `private_${currentChatRoomId || selectedChat._id}` || 
-        data.roomId === `group_${selectedChat._id}`;
+        (isGroup && data.roomId === `group_${selectedChat._id}`) ||
+        (!isGroup && data.roomId === `private_${currentChatRoomId || selectedChat._id}`);
       
       if (isForCurrentChat && data.userId !== userId) {
         console.log('⌨️ Typing event for current chat:', data.userName, data.isTyping);
@@ -249,7 +214,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socket.off('user_typing', handleUserTyping);
       setTypingUsers(new Set());
     };
-  }, [socket, isConnected, selectedChat?._id, userId, currentChatRoomId]);
+  }, [socket, isConnected, selectedChat?._id, userId, isGroup, currentChatRoomId]);
 
   // ✅ FIXED: REAL-TIME Message listener
   useEffect(() => {
@@ -260,19 +225,13 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     const handleReceiveMessage = (msg) => {
       console.log('📨 Received real-time message:', msg);
       
-      // ✅ SIMPLIFIED: Check if message is for current chat
+      // ✅ FIXED: Simplified room matching
       let isForCurrentChat = false;
       
       if (isGroup) {
-        // For group chats
         isForCurrentChat = msg.roomId === `group_${selectedChat?._id}`;
       } else {
-        // For private chats - check multiple possibilities
-        isForCurrentChat = 
-          msg.roomId === `private_${currentChatRoomId}` ||
-          msg.receiverId === selectedChat?._id ||
-          msg.senderId === selectedChat?._id ||
-          (msg.chatRoom === currentChatRoomId);
+        isForCurrentChat = msg.roomId === `private_${currentChatRoomId}`;
       }
       
       if (isForCurrentChat) {
@@ -285,8 +244,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           }
           return [...prev, { ...msg, displayTimestamp: new Date().toISOString() }];
         });
-      } else {
-        console.log('📨 Message not for current chat, ignoring');
       }
     };
 
@@ -309,7 +266,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     });
   };
 
-  // ✅ FIXED: Enhanced typing handler
+  // ✅ FIXED: Enhanced typing handler with proper room IDs
   const handleTyping = useCallback(() => {
     if (!socket || !isConnected || !selectedChat?._id) return;
 
@@ -317,26 +274,30 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       clearTimeout(typingTimeoutRef.current);
     }
 
-    socket.emit("typing_start", {
+    // ✅ FIXED: Include chatRoomId for private chats
+    const typingData = {
       chatId: selectedChat._id,
       userId: userId,
       userName: user.name,
-      isGroup: isGroup
-    });
+      isGroup: isGroup,
+      chatRoomId: currentChatRoomId
+    };
 
-    console.log('⌨️ Emitted typing start');
+    socket.emit("typing_start", typingData);
+    console.log('⌨️ Emitted typing start:', typingData);
 
     typingTimeoutRef.current = setTimeout(() => {
       socket.emit("typing_stop", {
         chatId: selectedChat._id,
         userId: userId,
-        isGroup: isGroup
+        isGroup: isGroup,
+        chatRoomId: currentChatRoomId
       });
       console.log('⌨️ Emitted typing stop');
     }, 1500);
-  }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name]);
+  }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, currentChatRoomId]);
 
-  // ✅ FIXED: Send message with proper room ID
+  // ✅ FIXED: Send message with proper room ID handling
   const handleSendMessage = async () => {
     const messageContent = newMessage.trim();
     if (!messageContent || !socket || !isConnected || isSending) return;
@@ -373,7 +334,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         socket.emit("typing_stop", {
           chatId: selectedChat._id,
           userId: userId,
-          isGroup: isGroup
+          isGroup: isGroup,
+          chatRoomId: currentChatRoomId
         });
       }
 
@@ -409,10 +371,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         )
       );
 
-      // ✅ FIXED: Use proper room ID for private messages
+      // ✅ FIXED: Use proper room ID based on chat type
       const roomId = isGroup ? 
         `group_${selectedChat._id}` : 
-        `private_${res.data.chatRoomId || currentChatRoomId || selectedChat._id}`;
+        `private_${res.data.chatRoomId || currentChatRoomId}`;
 
       socket.emit("send_message", {
         roomId: roomId,
@@ -458,10 +420,17 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       const typingArray = Array.from(typingUsers);
       if (typingArray.length === 1) {
         const typingUserId = typingArray[0];
-        const typingUser = selectedChat.participants?.find(p => 
-          p.user?._id === typingUserId || p.user === typingUserId
-        );
-        const userName = typingUser?.name || 'Someone';
+        let userName = 'Someone';
+        
+        if (isGroup) {
+          const typingUser = selectedChat.participants?.find(p => 
+            p.user?._id === typingUserId || p.user === typingUserId
+          );
+          userName = typingUser?.user?.name || typingUser?.name || 'Someone';
+        } else {
+          userName = selectedChat.name || 'Someone';
+        }
+        
         return `${userName} is typing...`;
       } else {
         return `${typingArray.length} people are typing...`;
