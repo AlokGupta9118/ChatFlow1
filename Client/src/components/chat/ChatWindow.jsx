@@ -1,5 +1,5 @@
 // components/chat/ChatWindow.jsx
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 import { 
   Send, 
@@ -7,7 +7,6 @@ import {
   Smile, 
   Mic, 
   Image, 
-  Video, 
   MoreVertical,
   Phone,
   VideoIcon,
@@ -17,25 +16,28 @@ import {
   Shield,
   CheckCheck,
   Check,
-  Clock,
   Reply,
   Trash2,
   Edit,
-  Pin
+  Pin,
+  Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
+import EmojiPicker from "emoji-picker-react";
 import { toast } from "sonner";
+
+// Initialize socket
+const socket = io(import.meta.env.VITE_API_URL);
 
 const ChatWindow = ({ 
   selectedChat, 
+  isGroup = false, 
   currentUser, 
-  onBack,
-  socket 
+  onToggleGroupInfo 
 }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
@@ -44,30 +46,46 @@ const ChatWindow = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [replyingTo, setReplyingTo] = useState(null);
-  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(1);
 
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
-  const isGroup = selectedChat?.type === "group";
+  // ✅ SAFE: Get chat ID with null checks
+  const chatId = selectedChat?._id;
+  const isGroupChat = isGroup;
+
+  // Debug logging
+  useEffect(() => {
+    console.log("🔍 ChatWindow Debug:", {
+      selectedChat,
+      chatId,
+      isGroup: isGroupChat,
+      currentUser: currentUser?._id,
+      hasParticipants: selectedChat?.participants,
+      participantsCount: selectedChat?.participants?.length
+    });
+  }, [selectedChat, chatId, isGroupChat, currentUser]);
 
   // Socket event handlers
   useEffect(() => {
-    if (!socket || !selectedChat) return;
+    if (!socket || !chatId) return;
+
+    console.log("🎯 Setting up socket events for chat:", chatId);
 
     const handleNewMessage = (message) => {
-      if (message.chatRoom === selectedChat._id) {
+      console.log("📨 New message received:", message);
+      if (message.chatRoom === chatId || message.chatRoomId === chatId) {
         setMessages(prev => [...prev, message]);
         markMessageAsRead(message._id);
       }
     };
 
     const handleUserTyping = (data) => {
-      if (data.chatRoomId === selectedChat._id) {
+      console.log("⌨️ User typing:", data);
+      if (data.chatRoomId === chatId) {
         setTypingUsers(prev => {
           const newTypingUsers = prev.filter(user => user.userId !== data.userId);
           return [...newTypingUsers, { userId: data.userId, userName: data.userName }];
@@ -77,7 +95,8 @@ const ChatWindow = ({
     };
 
     const handleUserStopTyping = (data) => {
-      if (data.chatRoomId === selectedChat._id) {
+      console.log("💤 User stopped typing:", data);
+      if (data.chatRoomId === chatId) {
         setTypingUsers(prev => prev.filter(user => user.userId !== data.userId));
         if (typingUsers.length <= 1) {
           setIsTyping(false);
@@ -86,14 +105,22 @@ const ChatWindow = ({
     };
 
     const handleMessageRead = (data) => {
+      console.log("📖 Message read:", data);
       setMessages(prev => prev.map(msg => 
         msg._id === data.messageId 
-          ? { ...msg, readBy: [...(msg.readBy || []), { user: data.readBy, readAt: data.readAt }] }
+          ? { 
+              ...msg, 
+              readBy: [...(msg.readBy || []), { 
+                user: data.readBy, 
+                readAt: data.readAt 
+              }] 
+            }
           : msg
       ));
     };
 
     const handleUserStatusChange = (data) => {
+      console.log("🔵 User status changed:", data);
       setOnlineUsers(prev => {
         const newSet = new Set(prev);
         if (data.isActive && data.status === "online") {
@@ -105,6 +132,10 @@ const ChatWindow = ({
       });
     };
 
+    // Join chat room
+    socket.emit("join_chat", chatId);
+
+    // Set up event listeners
     socket.on("new_message", handleNewMessage);
     socket.on("user_typing", handleUserTyping);
     socket.on("user_stop_typing", handleUserStopTyping);
@@ -112,60 +143,24 @@ const ChatWindow = ({
     socket.on("user_status_changed", handleUserStatusChange);
 
     return () => {
+      console.log("🧹 Cleaning up socket events for chat:", chatId);
       socket.off("new_message", handleNewMessage);
       socket.off("user_typing", handleUserTyping);
       socket.off("user_stop_typing", handleUserStopTyping);
       socket.off("message_read", handleMessageRead);
       socket.off("user_status_changed", handleUserStatusChange);
     };
-  }, [socket, selectedChat, typingUsers.length]);
+  }, [socket, chatId, typingUsers.length]);
 
-  // Load messages
-  const loadMessages = useCallback(async (pageNum = 1) => {
-    if (!selectedChat) return;
-    
-    setLoading(true);
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/chat/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        if (pageNum === 1) {
-          setMessages(data.messages);
-        } else {
-          setMessages(prev => [...data.messages, ...prev]);
-        }
-        setHasMoreMessages(data.hasMore);
-        setPage(pageNum);
-      }
-    } catch (error) {
-      console.error("Error loading messages:", error);
-      toast.error("Failed to load messages");
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedChat]);
-
-  // Initial load and when chat changes
+  // Load messages when chat changes
   useEffect(() => {
-    if (selectedChat) {
+    if (!chatId) {
       setMessages([]);
-      setPage(1);
-      loadMessages(1);
-      
-      // Join chat room
-      socket?.emit("join_chat", selectedChat._id);
+      return;
     }
-  }, [selectedChat, socket, loadMessages]);
+
+    loadMessages();
+  }, [chatId]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -176,42 +171,79 @@ const ChatWindow = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const loadMessages = async () => {
+    if (!chatId) return;
+    
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/chat/messages/${chatId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log("📥 Loaded messages:", data.messages?.length);
+        setMessages(data.messages || []);
+      } else {
+        toast.error("Failed to load messages");
+      }
+    } catch (error) {
+      console.error("❌ Error loading messages:", error);
+      toast.error("Failed to load messages");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat) return;
+    if (!newMessage.trim() || !chatId) {
+      console.log("🚫 Cannot send message - no content or chat ID");
+      return;
+    }
 
     const messageData = {
-      chatRoomId: selectedChat._id,
+      chatRoomId: chatId,
       content: newMessage,
       replyTo: replyingTo?._id,
     };
+
+    console.log("📤 Sending message:", messageData);
 
     try {
       socket.emit("send_message", messageData);
       setNewMessage("");
       setReplyingTo(null);
-      socket.emit("typing_stop", selectedChat._id);
+      socket.emit("typing_stop", chatId);
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("❌ Error sending message:", error);
       toast.error("Failed to send message");
     }
   };
 
   const handleTyping = () => {
-    if (!selectedChat) return;
+    if (!chatId) return;
 
-    socket.emit("typing_start", selectedChat._id);
+    socket.emit("typing_start", chatId);
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("typing_stop", selectedChat._id);
+      socket.emit("typing_stop", chatId);
     }, 3000);
   };
 
   const markMessageAsRead = (messageId) => {
-    socket.emit("message_read", { messageId, chatRoomId: selectedChat._id });
+    if (!chatId || !messageId) return;
+    socket.emit("message_read", { messageId, chatRoomId: chatId });
   };
 
   const handleEmojiClick = (emojiData) => {
@@ -222,16 +254,19 @@ const ChatWindow = ({
     const file = event.target.files[0];
     if (!file) return;
 
-    // Handle file upload logic here
-    console.log("File selected:", file);
-    // You would typically upload to cloud storage and get URL
+    console.log("📎 File selected:", file);
+    toast.info("File upload feature coming soon!");
   };
 
+  // ✅ SAFE: Get message status with null checks
   const getMessageStatus = (message) => {
-    if (message.sender._id !== currentUser._id) return null;
+    if (!message?.sender || !currentUser) return null;
+    
+    const senderId = message.sender._id || message.sender;
+    if (senderId !== currentUser._id) return null;
     
     const readByCount = message.readBy?.length || 0;
-    const participantCount = selectedChat.participants.length - 1; // Exclude self
+    const participantCount = (selectedChat?.participants?.length || 1) - 1;
 
     if (readByCount >= participantCount) {
       return <CheckCheck className="w-4 h-4 text-blue-500" />;
@@ -243,17 +278,34 @@ const ChatWindow = ({
   };
 
   const formatTime = (timestamp) => {
+    if (!timestamp) return "";
     return new Date(timestamp).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
   };
 
+  // ✅ SAFE: Get online status with null checks
   const getOnlineStatus = (user) => {
+    if (!user?._id) return "offline";
     return onlineUsers.has(user._id) ? "online" : "offline";
   };
 
-  if (!selectedChat) {
+  // ✅ SAFE: Get other participant for direct chats
+  const getOtherParticipant = () => {
+    if (!selectedChat?.participants || !currentUser) return null;
+    
+    return selectedChat.participants.find(
+      participant => {
+        const participantId = participant.user?._id || participant.user;
+        return participantId !== currentUser._id;
+      }
+    );
+  };
+
+  const otherParticipant = getOtherParticipant();
+
+  if (!selectedChat || !chatId) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
         <div className="text-center space-y-4">
@@ -261,10 +313,10 @@ const ChatWindow = ({
             <div className="text-3xl">💬</div>
           </div>
           <h3 className="text-2xl font-bold text-gray-800 dark:text-white">
-            Welcome to Chat
+            Select a Chat
           </h3>
           <p className="text-gray-600 dark:text-gray-400">
-            Select a conversation to start messaging
+            Choose a conversation from the sidebar to start messaging
           </p>
         </div>
       </div>
@@ -272,38 +324,46 @@ const ChatWindow = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700">
+    <div className="flex-1 flex flex-col h-full bg-white dark:bg-gray-900">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden">
-            ←
-          </Button>
-          
           <div className="flex items-center space-x-3">
             <Avatar className="h-10 w-10">
-              <AvatarImage src={selectedChat.avatar || selectedChat.participants?.[0]?.user?.profilePicture} />
+              <AvatarImage 
+                src={
+                  isGroupChat 
+                    ? selectedChat.avatar 
+                    : otherParticipant?.user?.profilePicture
+                } 
+              />
               <AvatarFallback>
-                {selectedChat.name?.[0] || selectedChat.participants?.[0]?.user?.name?.[0]}
+                {isGroupChat 
+                  ? selectedChat.name?.[0] 
+                  : otherParticipant?.user?.name?.[0]
+                }
               </AvatarFallback>
             </Avatar>
             
             <div>
               <h2 className="font-semibold text-gray-900 dark:text-white">
-                {selectedChat.name || selectedChat.participants?.find(p => p.user._id !== currentUser._id)?.user?.name}
+                {isGroupChat 
+                  ? selectedChat.name 
+                  : otherParticipant?.user?.name
+                }
               </h2>
               <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                {isGroup ? (
-                  <span>{selectedChat.participants?.length} members</span>
+                {isGroupChat ? (
+                  <span>{selectedChat.participants?.length || 0} members</span>
                 ) : (
                   <div className="flex items-center space-x-1">
                     <div className={`w-2 h-2 rounded-full ${
-                      getOnlineStatus(selectedChat.participants?.find(p => p.user._id !== currentUser._id)?.user) === "online" 
+                      getOnlineStatus(otherParticipant?.user) === "online" 
                         ? "bg-green-500" 
                         : "bg-gray-400"
                     }`} />
                     <span>
-                      {getOnlineStatus(selectedChat.participants?.find(p => p.user._id !== currentUser._id)?.user) === "online" 
+                      {getOnlineStatus(otherParticipant?.user) === "online" 
                         ? "Online" 
                         : "Offline"
                       }
@@ -325,9 +385,13 @@ const ChatWindow = ({
           <Button variant="ghost" size="icon">
             <Search className="h-5 w-5" />
           </Button>
-          {isGroup && (
-            <Button variant="ghost" size="icon">
-              <Users className="h-5 w-5" />
+          {isGroupChat && (
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={onToggleGroupInfo}
+            >
+              <Info className="h-5 w-5" />
             </Button>
           )}
         </div>
@@ -338,7 +402,11 @@ const ChatWindow = ({
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900"
       >
-        {loading && <div className="text-center">Loading messages...</div>}
+        {loading && (
+          <div className="text-center text-gray-500 dark:text-gray-400">
+            Loading messages...
+          </div>
+        )}
         
         <AnimatePresence>
           {messages.map((message) => (
@@ -347,56 +415,53 @@ const ChatWindow = ({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className={`flex ${message.sender._id === currentUser._id ? "justify-end" : "justify-start"}`}
+              className={`flex ${
+                message.sender?._id === currentUser?._id || message.sender === currentUser?._id 
+                  ? "justify-end" 
+                  : "justify-start"
+              }`}
             >
-              <div className={`flex space-x-2 max-w-[70%] ${message.sender._id === currentUser._id ? "flex-row-reverse space-x-reverse" : ""}`}>
-                {isGroup && message.sender._id !== currentUser._id && (
+              <div className={`flex space-x-2 max-w-[70%] ${
+                message.sender?._id === currentUser?._id || message.sender === currentUser?._id 
+                  ? "flex-row-reverse space-x-reverse" 
+                  : ""
+              }`}>
+                {(isGroupChat && (message.sender?._id !== currentUser?._id && message.sender !== currentUser?._id)) && (
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={message.sender.profilePicture} />
-                    <AvatarFallback>{message.sender.name[0]}</AvatarFallback>
+                    <AvatarImage src={message.sender?.profilePicture} />
+                    <AvatarFallback>
+                      {message.sender?.name?.[0] || "?"}
+                    </AvatarFallback>
                   </Avatar>
                 )}
                 
-                <div className={`flex flex-col space-y-1 ${message.sender._id === currentUser._id ? "items-end" : "items-start"}`}>
-                  {isGroup && message.sender._id !== currentUser._id && (
+                <div className={`flex flex-col space-y-1 ${
+                  message.sender?._id === currentUser?._id || message.sender === currentUser?._id 
+                    ? "items-end" 
+                    : "items-start"
+                }`}>
+                  {isGroupChat && (message.sender?._id !== currentUser?._id && message.sender !== currentUser?._id) && (
                     <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      {message.sender.name}
+                      {message.sender?.name}
                     </span>
                   )}
                   
-                  {replyingTo?._id === message._id && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2 border border-blue-200 dark:border-blue-800">
-                      <div className="text-xs text-blue-600 dark:text-blue-400">
-                        Replying to {message.sender._id === currentUser._id ? "yourself" : message.sender.name}
-                      </div>
-                      <div className="text-sm truncate">{message.content}</div>
-                    </div>
-                  )}
-
                   <div
                     className={`rounded-2xl px-4 py-2 ${
-                      message.sender._id === currentUser._id
+                      message.sender?._id === currentUser?._id || message.sender === currentUser?._id
                         ? "bg-blue-500 text-white rounded-br-md"
                         : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-md border border-gray-200 dark:border-gray-700"
                     }`}
                   >
-                    {message.replyTo && (
-                      <div className={`text-xs border-l-2 pl-2 mb-1 ${
-                        message.sender._id === currentUser._id 
-                          ? "border-blue-300 text-blue-100" 
-                          : "border-gray-300 text-gray-500"
-                      }`}>
-                        Replying to: {message.replyTo.content}
-                      </div>
-                    )}
-                    
                     <p className="text-sm">{message.content}</p>
                     
                     <div className={`flex items-center space-x-1 mt-1 ${
-                      message.sender._id === currentUser._id ? "justify-end" : "justify-start"
+                      message.sender?._id === currentUser?._id || message.sender === currentUser?._id 
+                        ? "justify-end" 
+                        : "justify-start"
                     }`}>
                       <span className={`text-xs ${
-                        message.sender._id === currentUser._id 
+                        message.sender?._id === currentUser?._id || message.sender === currentUser?._id
                           ? "text-blue-200" 
                           : "text-gray-500"
                       }`}>
@@ -432,30 +497,6 @@ const ChatWindow = ({
 
         <div ref={messagesEndRef} />
       </div>
-
-      {/* Reply Preview */}
-      {replyingTo && (
-        <div className="px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border-t border-blue-200 dark:border-blue-800">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                Replying to {replyingTo.sender._id === currentUser._id ? "yourself" : replyingTo.sender.name}
-              </div>
-              <div className="text-sm text-blue-800 dark:text-blue-200 truncate">
-                {replyingTo.content}
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setReplyingTo(null)}
-              className="h-8 w-8 text-blue-600 dark:text-blue-400"
-            >
-              ×
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Input Area */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
@@ -498,7 +539,7 @@ const ChatWindow = ({
             onClick={handleSendMessage}
             disabled={!newMessage.trim()}
             size="icon"
-            className="bg-blue-500 hover:bg-blue-600 text-white"
+            className="bg-blue-500 hover:bg-blue-600 text-white disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             <Send className="h-5 w-5" />
           </Button>
