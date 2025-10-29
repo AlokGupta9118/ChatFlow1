@@ -46,8 +46,8 @@ router.get("/my-join-requests", protect, getMyJoinRequests);
 
 
 // Messages
-router.post('/messages/send', sendMessage);
-router.get('/messages/:chatId', getMessages);
+router.post('/messages/send',protect, sendMessage);
+router.get('/messages/:chatId',protect, getMessages);
 
 // Groups
 router.get('/groups/my', getMyGroups);
