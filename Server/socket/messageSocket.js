@@ -1,9 +1,9 @@
-// Server/socket/messageSocket.js - FIXED VERSION
 export const setupChatSockets = (io) => {
   io.on('connection', (socket) => {
     console.log('✅ User connected:', socket.id);
 
     socket.userRooms = new Set();
+    socket.currentChat = null;
 
     // Join user's personal room
     socket.on('join_user', (userId) => {
@@ -11,6 +11,7 @@ export const setupChatSockets = (io) => {
         socket.userId = userId;
         const userRoom = `user_${userId}`;
         
+        // Leave previous user rooms
         socket.userRooms.forEach(room => {
           if (room.startsWith('user_')) socket.leave(room);
         });
@@ -51,35 +52,32 @@ export const setupChatSockets = (io) => {
       console.log(`✅ User ${socket.userId} successfully joined: ${actualRoomId}`);
     });
 
-    // ✅ FIXED: Enhanced typing indicators with BETTER debugging
-    // In your messageSocket.js - Update the typing_start handler:
-socket.on('typing_start', (data) => {
-  console.log('🎯 BACKEND: TYPING START received:', JSON.stringify(data, null, 2));
-  
-  const { chatId, userId, userName, isGroup = false, chatRoomId } = data;
-  
-  if (!chatId || !userId) {
-    console.log('❌ BACKEND: Missing required typing data');
-    return;
-  }
+    // Typing indicators
+    socket.on('typing_start', (data) => {
+      console.log('🎯 BACKEND: TYPING START received:', JSON.stringify(data, null, 2));
+      
+      const { chatId, userId, userName, isGroup = false, chatRoomId } = data;
+      
+      if (!chatId || !userId) {
+        console.log('❌ BACKEND: Missing required typing data');
+        return;
+      }
 
-  const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
-  
-  console.log(`🎯 BACKEND: ${userName} started typing in ${roomId} (User: ${userId})`);
-  
-  // ✅ FIXED: Ensure we send ALL user data
-  socket.to(roomId).emit('user_typing', {
-    userId,
-    userName: userName || 'Unknown User', // Fallback name
-    isTyping: true,
-    chatId: chatId,
-    roomId: roomId,
-    isGroup: isGroup,
-    timestamp: new Date().toISOString()
-  });
-
-  console.log(`📢 BACKEND: Emitted typing start to room: ${roomId}`);
-});
+      const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
+      
+      console.log(`🎯 BACKEND: ${userName} started typing in ${roomId} (User: ${userId})`);
+      
+      // Broadcast to others in the room
+      socket.to(roomId).emit('user_typing', {
+        userId,
+        userName: userName || 'Unknown User',
+        isTyping: true,
+        chatId: chatId,
+        roomId: roomId,
+        isGroup: isGroup,
+        timestamp: new Date().toISOString()
+      });
+    });
 
     socket.on('typing_stop', (data) => {
       console.log('🎯 BACKEND: TYPING STOP received:', JSON.stringify(data, null, 2));
@@ -95,7 +93,6 @@ socket.on('typing_start', (data) => {
       
       console.log(`🎯 BACKEND: User ${userId} stopped typing in ${roomId}`);
       
-      // ✅ FIXED: Use socket.to(roomId) to broadcast to others in the room
       socket.to(roomId).emit('user_typing', {
         userId,
         isTyping: false,
@@ -103,42 +100,6 @@ socket.on('typing_start', (data) => {
         roomId: roomId,
         isGroup: isGroup
       });
-
-      console.log(`📢 BACKEND: Emitted typing stop to room: ${roomId} (excluding sender)`);
-    });
-
-    // Real-time messages
-    socket.on('send_message', async (data) => {
-      try {
-        const { roomId, message, chatType = "private" } = data;
-        
-        console.log('💬 Socket send_message received for room:', roomId);
-
-        if (!roomId) {
-          console.error('❌ No roomId provided for message');
-          return;
-        }
-
-        const chatMessage = {
-          _id: message._id || `temp_${Date.now()}`,
-          sender: message.sender,
-          senderId: message.senderId,
-          content: message.content,
-          createdAt: message.createdAt || new Date().toISOString(),
-          type: message.type || "text",
-          chatType: chatType,
-          roomId: roomId,
-          isRealTime: true,
-          status: 'sent'
-        };
-
-        console.log(`📨 Broadcasting to room: ${roomId}`);
-        io.to(roomId).emit('receive_message', chatMessage);
-
-      } catch (error) {
-        console.error('❌ Error in send_message:', error);
-        socket.emit('chat_error', { error: 'Failed to send message' });
-      }
     });
 
     // Disconnect
