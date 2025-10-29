@@ -51,21 +51,21 @@ export const setupChatSockets = (io) => {
       console.log(`✅ User ${socket.userId} successfully joined: ${actualRoomId}`);
     });
 
-    // ✅ FIXED: Enhanced typing indicators
+    // ✅ FIXED: Enhanced typing indicators with BETTER debugging
     socket.on('typing_start', (data) => {
-      console.log('⌨️ TYPING START received:', data);
+      console.log('🎯 BACKEND: TYPING START received:', JSON.stringify(data, null, 2));
       
       const { chatId, userId, userName, isGroup = false, chatRoomId } = data;
       
       if (!chatId || !userId) {
-        console.log('❌ Missing required typing data');
+        console.log('❌ BACKEND: Missing required typing data');
         return;
       }
 
       // Calculate room ID
       const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
       
-      console.log(`⌨️ ${userName} started typing in ${roomId} (User: ${userId})`);
+      console.log(`🎯 BACKEND: ${userName} started typing in ${roomId} (User: ${userId})`);
       
       // ✅ FIXED: Use socket.to(roomId) to broadcast to others in the room
       socket.to(roomId).emit('user_typing', {
@@ -78,22 +78,22 @@ export const setupChatSockets = (io) => {
         timestamp: new Date().toISOString()
       });
 
-      console.log(`📢 Emitted typing start to room: ${roomId} (excluding sender)`);
+      console.log(`📢 BACKEND: Emitted typing start to room: ${roomId} (excluding sender)`);
     });
 
     socket.on('typing_stop', (data) => {
-      console.log('⌨️ TYPING STOP received:', data);
+      console.log('🎯 BACKEND: TYPING STOP received:', JSON.stringify(data, null, 2));
       
       const { chatId, userId, isGroup = false, chatRoomId } = data;
       
       if (!chatId || !userId) {
-        console.log('❌ Missing required typing stop data');
+        console.log('❌ BACKEND: Missing required typing stop data');
         return;
       }
 
       const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
       
-      console.log(`⌨️ User ${userId} stopped typing in ${roomId}`);
+      console.log(`🎯 BACKEND: User ${userId} stopped typing in ${roomId}`);
       
       // ✅ FIXED: Use socket.to(roomId) to broadcast to others in the room
       socket.to(roomId).emit('user_typing', {
@@ -104,7 +104,7 @@ export const setupChatSockets = (io) => {
         isGroup: isGroup
       });
 
-      console.log(`📢 Emitted typing stop to room: ${roomId} (excluding sender)`);
+      console.log(`📢 BACKEND: Emitted typing stop to room: ${roomId} (excluding sender)`);
     });
 
     // Real-time messages
