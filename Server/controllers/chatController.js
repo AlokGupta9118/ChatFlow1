@@ -4,7 +4,7 @@ import Message from "../models/Message.js";
 import User from "../models/User.js";
 import GroupJoinRequest from "../models/GroupJoinRequest.js";
 
-// ✅ FIXED: Send private message with proper room handling
+// ✅ FIXED: Send private message - SINGLE EMISSION
 export const sendMessage = async (req, res) => {
   try {
     const senderId = req.user._id;
@@ -62,7 +62,7 @@ export const sendMessage = async (req, res) => {
       .populate("sender", "name profilePicture")
       .lean();
 
-    // ✅ FIXED: Enhanced message object for real-time
+    // ✅ FIXED: SINGLE room ID for private chats
     const roomId = `private_${chatRoom._id}`;
     const messageForRealTime = {
       ...populatedMessage,
@@ -74,15 +74,14 @@ export const sendMessage = async (req, res) => {
       chatType: 'private'
     };
 
-    console.log('📨 Emitting to private room:', roomId);
+    console.log('📨 Emitting to private room ONLY:', roomId);
 
-    // ✅ FIXED: Emit socket message to private chat room (similar to group)
+    // ✅ FIXED: SINGLE emission to the correct room
     const io = req.app.get('io');
     if (io) {
-      // Primary: Emit to the private chat room (similar to group room)
+      // ONLY emit to the private chat room - NO duplicate emissions
       io.to(roomId).emit('receive_message', messageForRealTime);
-      
-      console.log('✅ Private message emitted to room:', roomId);
+      console.log('✅ Private message emitted to SINGLE room:', roomId);
     }
 
     res.status(201).json({ 
@@ -97,7 +96,7 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-// ✅ FIXED: Send group message
+// ✅ FIXED: Send group message - SINGLE EMISSION
 export const sendGroupMessage = async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -143,7 +142,7 @@ export const sendGroupMessage = async (req, res) => {
       .populate("sender", "name profilePicture")
       .lean();
 
-    // ✅ FIXED: Enhanced message object for real-time
+    // ✅ FIXED: SINGLE room ID for group chats
     const groupRoomId = `group_${roomId}`;
     const messageForRealTime = {
       ...populatedMessage,
@@ -154,15 +153,14 @@ export const sendGroupMessage = async (req, res) => {
       chatType: 'group'
     };
 
-    console.log('📨 Emitting group message to room:', groupRoomId);
+    console.log('📨 Emitting group message to room ONLY:', groupRoomId);
 
-    // ✅ FIXED: Emit socket message for real-time delivery
+    // ✅ FIXED: SINGLE emission to the correct room
     const io = req.app.get('io');
     if (io) {
-      // Primary: Emit to group room
+      // ONLY emit to group room - NO duplicate emissions
       io.to(groupRoomId).emit('receive_message', messageForRealTime);
-      
-      console.log('✅ Group message emitted to room:', groupRoomId);
+      console.log('✅ Group message emitted to SINGLE room:', groupRoomId);
     }
 
     return res.status(201).json({ 
@@ -175,7 +173,6 @@ export const sendGroupMessage = async (req, res) => {
     res.status(500).json({ message: "Failed to send message", error: err.message });
   }
 };
-
 // ... (other functions remain the same)
 
 // ✅ FIXED: Get private messages

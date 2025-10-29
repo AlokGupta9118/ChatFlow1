@@ -189,12 +189,14 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     const handleUserTyping = (data) => {
       console.log('⌨️ Typing event received:', data);
       
-      // ✅ FIXED: Better room matching logic
-      const isForCurrentChat = 
-        (isGroup && data.roomId === `group_${selectedChat._id}`) ||
-        (!isGroup && data.roomId === `private_${currentChatRoomId || selectedChat._id}`);
+      // ✅ FIXED: Exact room matching
+      const expectedRoomId = isGroup ? 
+        `group_${selectedChat._id}` : 
+        `private_${currentChatRoomId || selectedChat._id}`;
       
-      if (isForCurrentChat && data.userId !== userId) {
+      console.log('⌨️ Expected room:', expectedRoomId, 'Received room:', data.roomId);
+      
+      if (data.roomId === expectedRoomId && data.userId !== userId) {
         console.log('⌨️ Typing event for current chat:', data.userName, data.isTyping);
         if (data.isTyping) {
           setTypingUsers(prev => new Set(prev).add(data.userId));
@@ -216,7 +218,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     };
   }, [socket, isConnected, selectedChat?._id, userId, isGroup, currentChatRoomId]);
 
-  // ✅ FIXED: REAL-TIME Message listener
+  // ✅ FIXED: REAL-TIME Message listener - PREVENT DUPLICATES
   useEffect(() => {
     if (!socket || !isConnected) return;
 
@@ -225,7 +227,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     const handleReceiveMessage = (msg) => {
       console.log('📨 Received real-time message:', msg);
       
-      // ✅ FIXED: Simplified room matching
+      // ✅ FIXED: Strict room matching to prevent duplicates
       let isForCurrentChat = false;
       
       if (isGroup) {
@@ -237,13 +239,23 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       if (isForCurrentChat) {
         console.log('✅ Adding message to current chat');
         setMessages(prev => {
-          const messageExists = prev.some(m => m._id === msg._id);
+          // ✅ FIXED: Check for duplicates by _id AND content/timestamp
+          const messageExists = prev.some(m => 
+            m._id === msg._id || 
+            (m.content === msg.content && 
+             Math.abs(new Date(m.createdAt) - new Date(msg.createdAt)) < 1000)
+          );
+          
           if (messageExists) {
             console.log('🔄 Skipping duplicate message');
             return prev;
           }
+          
+          console.log('➕ Adding new message to state');
           return [...prev, { ...msg, displayTimestamp: new Date().toISOString() }];
         });
+      } else {
+        console.log('❌ Message not for current chat, ignoring');
       }
     };
 
@@ -253,6 +265,39 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socket.off('receive_message', handleReceiveMessage);
     };
   }, [socket, isConnected, selectedChat?._id, isGroup, currentChatRoomId]);
+
+  // ✅ FIXED: User status listener
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    const handleUserStatusChange = (data) => {
+      console.log('👤 User status changed:', data);
+      
+      setUserStatus(prev => ({
+        ...prev,
+        [data.userId]: {
+          status: data.status,
+          lastSeen: data.lastSeen
+        }
+      }));
+      
+      setOnlineUsers(prev => {
+        const newSet = new Set(prev);
+        if (data.status === 'online') {
+          newSet.add(data.userId);
+        } else {
+          newSet.delete(data.userId);
+        }
+        return newSet;
+      });
+    };
+
+    socket.on('user_status_change', handleUserStatusChange);
+
+    return () => {
+      socket.off('user_status_change', handleUserStatusChange);
+    };
+  }, [socket, isConnected]);
 
   // ✅ Auto-scroll to bottom
   useEffect(() => {
@@ -274,26 +319,28 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // ✅ FIXED: Include chatRoomId for private chats
+    // ✅ FIXED: Include ALL required data for typing events
     const typingData = {
       chatId: selectedChat._id,
       userId: userId,
       userName: user.name,
       isGroup: isGroup,
-      chatRoomId: currentChatRoomId
+      chatRoomId: currentChatRoomId // ✅ CRITICAL for private chats
     };
 
+    console.log('⌨️ Emitting typing start:', typingData);
     socket.emit("typing_start", typingData);
-    console.log('⌨️ Emitted typing start:', typingData);
 
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("typing_stop", {
+      const stopData = {
         chatId: selectedChat._id,
         userId: userId,
         isGroup: isGroup,
-        chatRoomId: currentChatRoomId
-      });
-      console.log('⌨️ Emitted typing stop');
+        chatRoomId: currentChatRoomId // ✅ CRITICAL for private chats
+      };
+      
+      console.log('⌨️ Emitting typing stop:', stopData);
+      socket.emit("typing_stop", stopData);
     }, 1500);
   }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, currentChatRoomId]);
 
@@ -376,18 +423,23 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         `group_${selectedChat._id}` : 
         `private_${res.data.chatRoomId || currentChatRoomId}`;
 
-      socket.emit("send_message", {
-        roomId: roomId,
-        message: {
-          ...sentMessage,
-          senderId: userId,
-          receiverId: isGroup ? null : selectedChat._id,
-          isRealTime: true
-        },
-        chatType: isGroup ? "group" : "private"
-      });
+      console.log('📤 Emitting socket message to room:', roomId);
 
-      console.log('📤 Socket message emitted to room:', roomId);
+      // ✅ FIXED: Only emit if we have a valid roomId
+      if (roomId && roomId !== 'private_null') {
+        socket.emit("send_message", {
+          roomId: roomId,
+          message: {
+            ...sentMessage,
+            senderId: userId,
+            receiverId: isGroup ? null : selectedChat._id,
+            isRealTime: true
+          },
+          chatType: isGroup ? "group" : "private"
+        });
+      } else {
+        console.warn('⚠️ No valid roomId for socket emission');
+      }
 
     } catch (err) {
       console.error("❌ Error sending message:", err);
