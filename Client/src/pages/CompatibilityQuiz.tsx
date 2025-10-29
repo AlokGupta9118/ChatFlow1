@@ -22,7 +22,7 @@ import {
   Coffee, Film, BookOpen, Utensils, Mountain, Palette,
   Zap as Lightning, Moon, Sun, Wifi, WifiOff,
   BarChart3, GitBranch, Eye, EyeOff, RotateCcw,
-  Smartphone, Monitor, ArrowDown
+  Smartphone, Monitor, ArrowDown, CopyIcon
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
@@ -281,6 +281,272 @@ const JoinCreateScreen = React.memo(({
               </>
             )}
           </div>
+        </div>
+      </Card>
+    </div>
+  );
+});
+
+// NEW: Waiting Screen Component
+const WaitingScreen = React.memo(({ 
+  roomId, 
+  players, 
+  isHost, 
+  playerName, 
+  darkMode, 
+  isMobile, 
+  startGame, 
+  soundEnabled,
+  connectionStatus,
+  onLeaveRoom 
+}) => {
+  const [copied, setCopied] = useState(false);
+  const [showShareOptions, setShowShareOptions] = useState(false);
+
+  const copyRoomCode = useCallback(() => {
+    navigator.clipboard.writeText(roomId).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [roomId]);
+
+  const shareRoom = useCallback(async () => {
+    const shareData = {
+      title: 'Join my Compatibility Game',
+      text: `Join my compatibility game room! Room code: ${roomId}`,
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        copyRoomCode();
+      }
+    } catch (error) {
+      console.log('Sharing cancelled');
+    }
+  }, [roomId, copyRoomCode]);
+
+  const leaveRoom = useCallback(() => {
+    if (onLeaveRoom) {
+      onLeaveRoom();
+    }
+  }, [onLeaveRoom]);
+
+  return (
+    <div className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 ${
+      darkMode 
+        ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
+        : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+    }`}>
+      <Card className={`p-4 md:p-8 max-w-2xl w-full backdrop-blur-sm border transition-all duration-300 ${
+        darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+      }`}>
+        {/* Header */}
+        <div className="text-center mb-6 md:mb-8">
+          <div className="flex justify-center mb-4 md:mb-6">
+            <div className="relative">
+              <Heart className="w-12 h-12 md:w-16 md:h-16 text-pink-500" />
+              <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-500 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-pulse" />
+            </div>
+          </div>
+          
+          <h1 className="text-2xl md:text-4xl font-bold mb-2 md:mb-4 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+            Waiting Room
+          </h1>
+          <p className={`text-sm md:text-base mb-4 md:mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+            Share the room code with your partner to start the compatibility test
+          </p>
+
+          {/* Room Code Section */}
+          <div className="mb-6 md:mb-8">
+            <div className="flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4">
+              <div className={`px-4 md:px-6 py-2 md:py-3 rounded-lg border-2 ${
+                darkMode ? 'bg-slate-700 border-purple-500' : 'bg-white border-purple-400'
+              }`}>
+                <span className={`text-lg md:text-2xl font-bold font-mono ${
+                  darkMode ? 'text-white' : 'text-gray-900'
+                }`}>
+                  {roomId}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={copyRoomCode}
+                  size={isMobile ? "sm" : "default"}
+                  className={`${darkMode ? 'bg-purple-600 hover:bg-purple-700' : 'bg-purple-500 hover:bg-purple-600'} text-white`}
+                >
+                  {copied ? <Check className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+                  {copied ? "Copied!" : "Copy"}
+                </Button>
+                <Button
+                  onClick={shareRoom}
+                  size={isMobile ? "sm" : "default"}
+                  variant={darkMode ? "outline" : "secondary"}
+                >
+                  <Share2 className="w-4 h-4" />
+                  Share
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Players List */}
+        <div className="mb-6 md:mb-8">
+          <h2 className={`text-lg md:text-xl font-semibold mb-3 md:mb-4 text-center ${
+            darkMode ? 'text-white' : 'text-gray-900'
+          }`}>
+            Players ({players.length}/2)
+          </h2>
+          
+          <div className="space-y-2 md:space-y-3">
+            {players.map((player, index) => (
+              <div
+                key={player.name || index}
+                className={`flex items-center justify-between p-3 md:p-4 rounded-lg border ${
+                  darkMode 
+                    ? 'bg-slate-700/50 border-slate-600' 
+                    : 'bg-white/50 border-gray-200'
+                } ${player.name === playerName ? 'ring-2 ring-purple-500' : ''}`}
+              >
+                <div className="flex items-center space-x-3 md:space-x-4">
+                  <Avatar className="w-8 h-8 md:w-10 md:h-10">
+                    <AvatarFallback className={`${
+                      darkMode ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
+                    }`}>
+                      {player.name ? player.name.charAt(0).toUpperCase() : '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <span className={`font-medium text-sm md:text-base ${
+                      darkMode ? 'text-white' : 'text-gray-900'
+                    }`}>
+                      {player.name}
+                    </span>
+                    {player.name === playerName && (
+                      <Badge variant="secondary" className="ml-2 text-xs">
+                        You
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                
+                {index === 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Crown className="w-5 h-5 md:w-6 md:h-6 text-yellow-500" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Room Host</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
+            ))}
+            
+            {/* Empty player slots */}
+            {Array.from({ length: 2 - players.length }).map((_, index) => (
+              <div
+                key={`empty-${index}`}
+                className={`flex items-center p-3 md:p-4 rounded-lg border border-dashed ${
+                  darkMode 
+                    ? 'bg-slate-700/30 border-slate-500 text-slate-400' 
+                    : 'bg-gray-50 border-gray-300 text-gray-500'
+                }`}
+              >
+                <div className="flex items-center space-x-3 md:space-x-4">
+                  <Avatar className="w-8 h-8 md:w-10 md:h-10">
+                    <AvatarFallback className={darkMode ? 'bg-slate-600' : 'bg-gray-200'}>
+                      ?
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm md:text-base">Waiting for player...</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Connection Status */}
+        <div className={`mb-4 md:mb-6 p-3 rounded-lg text-center ${
+          connectionStatus === "connected" 
+            ? (darkMode ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-700')
+            : (darkMode ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-700')
+        }`}>
+          <div className="flex items-center justify-center space-x-2">
+            {connectionStatus === "connected" ? (
+              <>
+                <Wifi className="w-4 h-4" />
+                <span className="text-sm">Connected to server</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-4 h-4" />
+                <span className="text-sm">Connecting to server...</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="space-y-3 md:space-y-4">
+          {isHost && (
+            <Button
+              onClick={startGame}
+              disabled={players.length < 2}
+              size={isMobile ? "lg" : "lg"}
+              className="w-full py-3 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
+            >
+              <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+              Start Compatibility Test
+              {players.length < 2 && ` (${2 - players.length} more needed)`}
+            </Button>
+          )}
+          
+          {!isHost && (
+            <div className={`p-3 md:p-4 rounded-lg text-center ${
+              darkMode ? 'bg-slate-700/50 text-slate-300' : 'bg-gray-100 text-gray-600'
+            }`}>
+              <div className="flex items-center justify-center space-x-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm md:text-base">
+                  Waiting for host to start the game...
+                </span>
+              </div>
+            </div>
+          )}
+
+          <Button
+            onClick={leaveRoom}
+            variant={darkMode ? "outline" : "secondary"}
+            size={isMobile ? "sm" : "default"}
+            className="w-full"
+          >
+            Leave Room
+          </Button>
+        </div>
+
+        {/* Game Info */}
+        <div className={`mt-4 md:mt-6 p-3 md:p-4 rounded-lg border ${
+          darkMode ? 'bg-slate-700/30 border-slate-600' : 'bg-white/50 border-gray-200'
+        }`}>
+          <h4 className="font-semibold mb-2 md:mb-3 flex items-center justify-center text-sm md:text-base">
+            <Brain className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-500" />
+            What to Expect
+          </h4>
+          <ul className={`text-xs md:text-sm space-y-1 md:space-y-2 text-left ${
+            darkMode ? 'text-slate-300' : 'text-gray-600'
+          }`}>
+            <li>• 5 personality-based questions</li>
+            <li>• Advanced compatibility analysis</li>
+            <li>• Real-time results comparison</li>
+            <li>• Detailed insights and recommendations</li>
+            <li>• Fun, interactive experience</li>
+          </ul>
         </div>
       </Card>
     </div>
@@ -955,6 +1221,18 @@ export default function AdvancedCompatibilityGame() {
     return result;
   };
 
+  // NEW: Leave room function
+  const leaveRoom = useCallback(() => {
+    socket.emit("leave-room", { roomId });
+    setJoined(false);
+    setGameStarted(false);
+    setShowResults(false);
+    setPlayers([]);
+    setIsHost(false);
+    setRoomId("");
+    localStorage.removeItem('compatibilityGameState');
+  }, [roomId]);
+
   // Add enhanced CSS for mobile optimizations
   useEffect(() => {
     const style = document.createElement('style');
@@ -1094,8 +1372,21 @@ export default function AdvancedCompatibilityGame() {
   }
 
   if (joined) {
-    // Return your WaitingScreen component here
-    return <div>Waiting Screen - Implement based on your existing code</div>;
+    // Return the new WaitingScreen component
+    return (
+      <WaitingScreen
+        roomId={roomId}
+        players={players}
+        isHost={isHost}
+        playerName={playerName}
+        darkMode={darkMode}
+        isMobile={isMobile}
+        startGame={startGame}
+        soundEnabled={soundEnabled}
+        connectionStatus={connectionStatus}
+        onLeaveRoom={leaveRoom}
+      />
+    );
   }
 
   // Use the memoized JoinCreateScreen component
