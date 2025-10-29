@@ -254,40 +254,41 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   };
 
   // ✅ ENHANCED: Typing handler with TEST functionality
-  const handleTyping = useCallback(() => {
-    if (!socket || !isConnected || !selectedChat?._id) {
-      console.log('❌ Typing: Missing requirements');
-      return;
-    }
+ // ✅ FIXED: Enhanced typing handler
+const handleTyping = useCallback(() => {
+  if (!socket || !isConnected || !selectedChat?._id) {
+    console.log('❌ Typing: Missing requirements');
+    return;
+  }
 
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+  if (typingTimeoutRef.current) {
+    clearTimeout(typingTimeoutRef.current);
+  }
 
-    const typingData = {
+  // ✅ FIXED: Ensure we have proper user data
+  const typingData = {
+    chatId: selectedChat._id,
+    userId: userId,
+    userName: user.name || user.username || 'User', // Multiple fallbacks
+    isGroup: isGroup,
+    chatRoomId: currentChatRoomId
+  };
+
+  console.log('🎯 EMITTING TYPING START:', typingData);
+  socket.emit("typing_start", typingData);
+
+  typingTimeoutRef.current = setTimeout(() => {
+    const stopData = {
       chatId: selectedChat._id,
       userId: userId,
-      userName: user.name || 'User',
       isGroup: isGroup,
       chatRoomId: currentChatRoomId
     };
-
-    console.log('🎯 EMITTING TYPING START:', typingData);
-    socket.emit("typing_start", typingData);
-
-    typingTimeoutRef.current = setTimeout(() => {
-      const stopData = {
-        chatId: selectedChat._id,
-        userId: userId,
-        isGroup: isGroup,
-        chatRoomId: currentChatRoomId
-      };
-      
-      console.log('🎯 EMITTING TYPING STOP:', stopData);
-      socket.emit("typing_stop", stopData);
-    }, 2000);
-  }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, currentChatRoomId]);
-
+    
+    console.log('🎯 EMITTING TYPING STOP:', stopData);
+    socket.emit("typing_stop", stopData);
+  }, 2000);
+}, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, user.username, currentChatRoomId]);
   // Enhanced input change handler
   const handleInputChange = (e) => {
     const value = e.target.value;
@@ -387,47 +388,63 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // Get status text
-  const getStatusText = () => {
-    if (typingUsers.size > 0) {
-      const typingArray = Array.from(typingUsers);
-      console.log('🎯 TYPING USERS IN UI:', typingArray);
+ // ✅ FIXED: Enhanced typing indicator display with proper name lookup
+const getStatusText = () => {
+  if (typingUsers.size > 0) {
+    const typingArray = Array.from(typingUsers);
+    console.log('🎯 Currently typing users:', typingArray);
+    
+    if (typingArray.length === 1) {
+      const typingUserId = typingArray[0];
+      let userName = 'Someone';
       
-      if (typingArray.length === 1) {
-        const typingUserId = typingArray[0];
-        let userName = 'Someone';
+      if (isGroup) {
+        // ✅ FIXED: Better user name lookup for group chats
+        const typingUser = selectedChat.participants?.find(p => {
+          // Handle both object and string formats
+          const participantId = p.user?._id?.toString() || p.user?.toString() || p.user;
+          return participantId === typingUserId.toString();
+        });
         
-        if (isGroup) {
-          const typingUser = selectedChat.participants?.find(p => {
-            const participantId = p.user?._id || p.user;
-            return participantId === typingUserId;
-          });
-          userName = typingUser?.user?.name || typingUser?.name || 'Someone';
+        console.log('🎯 Found typing user in group:', typingUser);
+        
+        if (typingUser) {
+          // Handle different participant structures
+          userName = typingUser.user?.name || typingUser.name || 'Someone';
         } else {
-          userName = selectedChat.name || 'Someone';
+          console.log('🎯 Could not find typing user in participants:', selectedChat.participants);
         }
-        
-        return `${userName} is typing...`;
       } else {
-        return `${typingArray.length} people are typing...`;
+        // For private chats, it's always the other person
+        userName = selectedChat.name || 'Someone';
       }
+      
+      return `${userName} is typing...`;
+    } else {
+      return `${typingArray.length} people are typing...`;
     }
-    
-    if (isGroup) {
-      const onlineCount = selectedChat.participants?.filter(p => 
-        onlineUsers.has(p.user?._id || p.user)
-      ).length || 0;
-      return `${onlineCount} online • ${selectedChat.participants?.length || 0} members`;
-    }
-    
-    const friendId = selectedChat._id;
-    const status = userStatus[friendId]?.status || 'offline';
-    
-    if (status === 'online') return 'Online';
-    if (status === 'away') return 'Away';
+  }
+  
+  // Default status text when no one is typing
+  if (isGroup) {
+    const onlineCount = selectedChat.participants?.filter(p => 
+      onlineUsers.has(p.user?._id || p.user)
+    ).length || 0;
+    return `${onlineCount} online • ${selectedChat.participants?.length || 0} members`;
+  }
+  
+  // For private chats
+  const friendId = selectedChat._id;
+  const status = userStatus[friendId]?.status || 'offline';
+  
+  if (status === 'online') {
+    return 'Online';
+  } else if (status === 'away') {
+    return 'Away';
+  } else {
     return 'Offline';
-  };
-
+  }
+};
   // Message rendering (keep your existing renderMessage function)
   const renderMessage = (msg, idx) => {
     const senderId = msg.sender?._id || msg.senderId;
