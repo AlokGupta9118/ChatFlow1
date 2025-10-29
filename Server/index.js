@@ -75,7 +75,6 @@ new SocketService(server);
 app.set('io', io);
 // Register socket handlers
 gameSocket(io);
-setupChatSockets(io);
 // Error handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
