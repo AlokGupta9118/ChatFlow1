@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const socket = io(import.meta.env.VITE_API_URL);
 
-const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
+const ChatList = ({ onSelectChat, selectedChat }) => {
   const [friends, setFriends] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,29 +17,7 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
   const [unreadCounts, setUnreadCounts] = useState({});
   const [activeCategory, setActiveCategory] = useState("all");
   const [showAdminPanel, setShowAdminPanel] = useState(null);
-
-  // ✅ Get current user from props or localStorage
-  const user = currentUser || JSON.parse(localStorage.getItem("user") || "{}");
-
-  // ✅ Fetch user statuses for friends
-  const fetchUserStatuses = async (friendIds: string[]) => {
-    if (!friendIds.length) return {};
-    
-    const token = getToken();
-    if (!token) return {};
-
-    try {
-      const res = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/status/statuses`,
-        { userIds: friendIds },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      return res.data.statuses || {};
-    } catch (err) {
-      console.error("Error fetching user statuses:", err);
-      return {};
-    }
-  };
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
   const fetchFriends = async () => {
     const token = getToken();
@@ -48,21 +26,7 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/friends`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      
-      const friendsList = res.data.friends || [];
-      
-      // ✅ Fetch statuses for all friends
-      const friendIds = friendsList.map(f => f._id).filter(id => id);
-      const statuses = await fetchUserStatuses(friendIds);
-      
-      // ✅ Merge status data with friends
-      const friendsWithStatus = friendsList.map(friend => ({
-        ...friend,
-        status: statuses[friend._id]?.status || 'offline',
-        lastSeen: statuses[friend._id]?.lastSeen || new Date()
-      }));
-      
-      setFriends(friendsWithStatus);
+      setFriends(res.data.friends || []);
     } catch (err) {
       console.error("Error fetching friends:", err);
       setFriends([]);
@@ -79,40 +43,7 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
       const safeGroups = (res.data.groups || []).filter(
         (g) => Array.isArray(g.participants)
       );
-      
-      // ✅ Fetch statuses for all group members
-      const allMemberIds = [];
-      safeGroups.forEach(group => {
-        if (group.participants) {
-          group.participants.forEach(participant => {
-            const memberId = participant.user?._id || participant.user;
-            if (memberId && !allMemberIds.includes(memberId)) {
-              allMemberIds.push(memberId);
-            }
-          });
-        }
-      });
-      
-      const statuses = await fetchUserStatuses(allMemberIds);
-      
-      // ✅ Merge status data with group participants
-      const groupsWithMemberStatus = safeGroups.map(group => ({
-        ...group,
-        participants: group.participants?.map(participant => {
-          const memberId = participant.user?._id || participant.user;
-          const memberStatus = statuses[memberId];
-          return {
-            ...participant,
-            user: {
-              ...participant.user,
-              status: memberStatus?.status || 'offline',
-              lastSeen: memberStatus?.lastSeen || new Date()
-            }
-          };
-        }) || []
-      }));
-      
-      setGroups(groupsWithMemberStatus);
+      setGroups(safeGroups);
     } catch (err) {
       console.error("Error fetching groups:", err);
       setGroups([]);
@@ -128,50 +59,23 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
     })();
 
     socket.on("receive_message", (msg) => {
-      if (!user?._id) return;
+      if (!currentUser?._id) return;
       const senderId = msg.sender?._id || msg.senderId;
-      if (senderId === user._id) return;
+      if (senderId === currentUser._id) return;
       const key = msg.chatRoom?._id || senderId;
       setUnreadCounts((prev) => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
     });
 
-    // ✅ Listen for real-time status changes
-    socket.on("user-status-change", ({ userId, status, lastSeen }) => {
-      console.log(`🔄 Status update: ${userId} is now ${status}`);
-      
-      // Update friends list
+    socket.on("update_status", ({ userId, status }) => {
       setFriends((prev) =>
-        prev.map((f) => 
-          f._id === userId ? { ...f, status, lastSeen } : f
-        )
-      );
-      
-      // Update group participants status
-      setGroups((prev) =>
-        prev.map((group) => ({
-          ...group,
-          participants: group.participants?.map((p) => {
-            const participantId = p.user?._id || p.user;
-            if (participantId === userId) {
-              return {
-                ...p,
-                user: {
-                  ...p.user,
-                  status,
-                  lastSeen
-                }
-              };
-            }
-            return p;
-          })
-        }))
+        prev.map((f) => (f._id === userId ? { ...f, status } : f))
       );
     });
 
     return () => {
       mounted = false;
       socket.off("receive_message");
-      socket.off("user-status-change");
+      socket.off("update_status");
     };
   }, []);
 
@@ -185,25 +89,18 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
     normalize(g?.name).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // ✅ FIXED: Enhanced handleSelect function with proper isGroup detection
   const handleSelect = (chat, isGroup = false) => {
     console.log("🎯 ChatList: handleSelect called", {
       chat: chat?.name,
       isGroup,
-      chatType: isGroup ? "GROUP" : "PRIVATE",
-      hasId: !!chat?._id
+      chatType: isGroup ? "GROUP" : "PRIVATE"
     });
     
-    if (!chat?._id) {
-      console.error("❌ Cannot select chat: No _id found", chat);
-      return;
-    }
-
     const key = chat._id;
     setUnreadCounts((prev) => ({ ...prev, [key]: 0 }));
     
+    // Make sure to pass the isGroup parameter to the parent
     if (onSelectChat) {
-      // ✅ FIXED: Always pass isGroup parameter
       onSelectChat(chat, isGroup);
     } else {
       console.error("❌ onSelectChat callback is not defined!");
@@ -215,7 +112,6 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
       case "online": return "bg-green-500";
       case "away": return "bg-yellow-400";
       case "busy": return "bg-red-500";
-      case "offline": return "bg-gray-400";
       default: return "bg-gray-400";
     }
   };
@@ -225,24 +121,13 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
       case "online": return "Online";
       case "away": return "Away";
       case "busy": return "Busy";
-      case "offline": return "Offline";
       default: return "Offline";
     }
   };
 
-  // ✅ Get online members count for groups
-  const getOnlineMembersCount = (group) => {
-    if (!group.participants) return 0;
-    return group.participants.filter(p => {
-      const user = p.user;
-      const status = user?.status || 'offline';
-      return status === 'online';
-    }).length;
-  };
-
   const getUserRoleInGroup = (group) => {
     const participant = group.participants.find(
-      (p) => String(p.user?._id || p.user) === String(user._id)
+      (p) => String(p.user?._id || p.user) === String(currentUser._id)
     );
     return participant?.role || "member";
   };
@@ -326,18 +211,17 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
         ) : displayedItems.length > 0 ? (
           <AnimatePresence mode="popLayout">
             {displayedItems.map((item, index) => {
-              const isGroup = item.participants && Array.isArray(item.participants);
+              const isGroup = item.participants;
               const itemName = item?.name || "Unnamed";
               const isSelected = selectedChat?._id === item._id;
               const unread = unreadCounts[item._id] || 0;
 
               if (isGroup) {
                 const participant = item.participants.find(
-                  (p) => String(p.user?._id || p.user) === String(user._id)
+                  (p) => String(p.user?._id || p.user) === String(currentUser._id)
                 );
                 const role = participant?.role || "Member";
                 const memberCount = item.participants?.length || 0;
-                const onlineMembers = getOnlineMembersCount(item);
                 const isAdmin = isGroupAdmin(item);
 
                 return (
@@ -358,8 +242,7 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
                     <div
                       onClick={() => {
                         console.log("🎯 Clicked on GROUP:", itemName);
-                        // ✅ FIXED: Explicitly pass isGroup=true for groups
-                        handleSelect(item, true);
+                        handleSelect(item, true); // Explicitly pass true for groups
                       }}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
@@ -419,7 +302,7 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
                             </span>
                             <span className="text-gray-400">•</span>
                             <span className="text-gray-500 dark:text-gray-400">
-                              {onlineMembers} online • {memberCount} total
+                              {memberCount} {memberCount === 1 ? 'member' : 'members'}
                             </span>
                           </div>
                         </div>
@@ -489,8 +372,7 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
                     <div
                       onClick={() => {
                         console.log("🎯 Clicked on PRIVATE CHAT:", itemName);
-                        // ✅ FIXED: Explicitly pass isGroup=false for friends
-                        handleSelect(item, false);
+                        handleSelect(item, false); // Explicitly pass false for private chats
                       }}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
@@ -530,11 +412,6 @@ const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
                             <span className={`w-2 h-2 rounded-full ${getStatusColor(item.status)}`} />
                             <span className="text-gray-500 dark:text-gray-400">
                               {getStatusText(item.status)}
-                              {item.status === 'offline' && item.lastSeen && (
-                                <span className="ml-1">
-                                  • Last seen {new Date(item.lastSeen).toLocaleDateString()}
-                                </span>
-                              )}
                             </span>
                           </div>
                         </div>

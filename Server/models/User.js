@@ -1,3 +1,4 @@
+// models/User.js
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
@@ -10,48 +11,38 @@ const userSchema = new mongoose.Schema(
     bio: { type: String, default: "" },
     profilePicture: { type: String, default: "" },
     coverPhoto: { type: String, default: "" },
-    status: { type: String, enum: ["online", "offline", "away", "busy"], default: "offline" },
+    status: { 
+      type: String, 
+      enum: ["online", "offline", "away", "busy"], 
+      default: "offline" 
+    },
     lastSeen: { type: Date, default: Date.now },
     theme: { type: String, enum: ["light", "dark", "system"], default: "system" },
 
     // Social / Friends
     friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    messages: [{ type: mongoose.Schema.Types.ObjectId, ref: "Message" }],
     incomingRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     outgoingRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 
-    // Stories / Status Updates
-    stories: [
-      {
-        mediaUrl: String,
-        caption: String,
-        createdAt: { type: Date, default: Date.now },
-        expiresAt: { type: Date },
-        viewers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-      },
-    ],
+    // Status
+    isActive: { type: Boolean, default: false },
+    lastActive: { type: Date, default: Date.now },
+    socketId: { type: String, default: null },
 
     // Privacy & Settings
     isTwoFactorEnabled: { type: Boolean, default: false },
     isPrivate: { type: Boolean, default: false },
     allowFriendRequests: { type: Boolean, default: true },
-    allowStoryView: { type: Boolean, default: true },
 
-    // Activity & Analytics
-    lastLogin: { type: Date },
-    deviceTokens: [{ type: String }], // For push notifications
-    loginHistory: [
-      {
-        ip: String,
-        device: String,
-        time: { type: Date, default: Date.now },
-      },
-    ],
+    // Notifications
+    deviceTokens: [{ type: String }],
   },
   { timestamps: true }
 );
 
-const UserModel = mongoose.model("User", userSchema);
+userSchema.index({ email: 1 });
+userSchema.index({ status: 1 });
+userSchema.index({ isActive: 1 });
 
-export default UserModel;
+export default mongoose.model("User", userSchema);

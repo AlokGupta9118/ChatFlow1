@@ -173,66 +173,6 @@ export const getGroupMembers = async (req, res) => {
 
     // Find chat room and populate user details
    
-export const createGroupChat = async (req, res) => {
-  try {
-    const { name, description = "", participants = [] } = req.body;
-    if (!name) return res.status(400).json({ message: "Group name is required" });
-
-    const creatorId = req.user._id;
-
-    // Ensure all participants are user IDs only
-    const participantIds = [
-      ...new Set(
-        participants
-          .map((p) => (typeof p === "object" ? p.user || p._id : p))
-          .filter(Boolean)
-          .map(String)
-      ),
-    ];
-
-    // Add creator as owner if not included
-    if (!participantIds.includes(String(creatorId))) {
-      participantIds.push(String(creatorId));
-    }
-
-    const chatRoom = new ChatRoom({
-      name,
-      description,
-      type: "group",
-      participants: participantIds.map((id) => ({
-        user: id,
-        role: id.toString() === creatorId.toString() ? "owner" : "member",
-      })),
-      createdBy: creatorId,
-    });
-
-    // Optional: create welcome message
-    const welcomeMessage = new Message({
-      sender: creatorId,
-      content: `🎉 Group "${name}" was created by ${req.user.name || "Admin"}.`,
-      messageType: "system",
-      chatRoom: chatRoom._id,
-    });
-
-    await welcomeMessage.save();
-    chatRoom.messages.push(welcomeMessage._id);
-    chatRoom.lastMessage = welcomeMessage._id;
-
-    await chatRoom.save();
-
-    const populatedChat = await ChatRoom.findById(chatRoom._id)
-      .populate("participants.user", "name profilePicture")
-      .populate("lastMessage");
-
-    res.status(201).json({
-      message: "Group chat created successfully",
-      chatRoom: populatedChat,
-    });
-  } catch (err) {
-    console.error("❌ Error creating group chat:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-};
 
 
 
@@ -462,5 +402,226 @@ export const rejectRequest = async (req, res) => {
   } catch (err) {
     console.error("❌ Failed to reject request:", err);
     res.status(500).json({ message: "Failed to reject request" });
+  }
+};
+
+// controllers/chatController.js
+import ChatRoom from "../models/ChatRoom.js";
+import Message from "../models/Message.js";
+import User from "../models/User.js";
+
+export const getChatRooms = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const chatRooms = await ChatRoom.find({
+      "participants.user": userId,
+      isActive: true
+    })
+    .populate("participants.user", "name profilePicture status lastSeen")
+    .populate("lastMessage")
+    .populate("createdBy", "name profilePicture")
+    .sort({ updatedAt: -1 });
+
+    res.json({
+      success: true,
+      chatRooms
+    });
+  } catch (error) {
+    console.error("Error fetching chat rooms:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch chat rooms"
+    });
+  }
+};
+
+export const getOrCreateDirectChat = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { targetUserId } = req.body;
+
+    if (userId === targetUserId) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot create chat with yourself"
+      });
+    }
+
+    // Check if direct chat already exists
+    let chatRoom = await ChatRoom.findOne({
+      type: "direct",
+      "participants.user": { $all: [userId, targetUserId] },
+      isActive: true
+    })
+    .populate("participants.user", "name profilePicture status lastSeen")
+    .populate("lastMessage");
+
+    if (!chatRoom) {
+      // Create new direct chat
+      chatRoom = new ChatRoom({
+        type: "direct",
+        participants: [
+          { user: userId, role: "member" },
+          { user: targetUserId, role: "member" }
+        ],
+        createdBy: userId,
+        settings: {
+          isPrivate: true
+        }
+      });
+
+      await chatRoom.save();
+      await chatRoom.populate("participants.user", "name profilePicture status lastSeen");
+    }
+
+    res.json({
+      success: true,
+      chatRoom
+    });
+  } catch (error) {
+    console.error("Error creating direct chat:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create chat"
+    });
+  }
+};
+
+export const createGroupChat = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { name, description, participantIds, settings } = req.body;
+
+    const participants = [
+      { user: userId, role: "owner" },
+      ...participantIds.map(id => ({ user: id, role: "member" }))
+    ];
+
+    const chatRoom = new ChatRoom({
+      name,
+      description,
+      type: "group",
+      participants,
+      createdBy: userId,
+      settings: {
+        ...settings,
+        isPrivate: true
+      }
+    });
+
+    await chatRoom.save();
+    await chatRoom.populate([
+      { path: "participants.user", select: "name profilePicture status" },
+      { path: "createdBy", select: "name profilePicture" }
+    ]);
+
+    res.status(201).json({
+      success: true,
+      chatRoom
+    });
+  } catch (error) {
+    console.error("Error creating group chat:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create group chat"
+    });
+  }
+};
+
+export const getMessages = async (req, res) => {
+  try {
+    const { chatRoomId } = req.params;
+    const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+
+    // Verify user has access to chat room
+    const chatRoom = await ChatRoom.findOne({
+      _id: chatRoomId,
+      "participants.user": userId,
+      isActive: true
+    });
+
+    if (!chatRoom) {
+      return res.status(404).json({
+        success: false,
+        message: "Chat room not found"
+      });
+    }
+
+    const messages = await Message.find({
+      chatRoom: chatRoomId,
+      deleted: false
+    })
+    .populate("sender", "name profilePicture status")
+    .populate("replyTo")
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .skip((page - 1) * limit);
+
+    // Mark messages as delivered
+    await Message.updateMany(
+      {
+        chatRoom: chatRoomId,
+        sender: { $ne: userId },
+        "readBy.user": { $ne: userId },
+        deleted: false
+      },
+      {
+        $push: {
+          readBy: {
+            user: userId,
+            readAt: new Date()
+          }
+        }
+      }
+    );
+
+    res.json({
+      success: true,
+      messages: messages.reverse(),
+      hasMore: messages.length === limit
+    });
+  } catch (error) {
+    console.error("Error fetching messages:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch messages"
+    });
+  }
+};
+
+export const getChatRoomDetails = async (req, res) => {
+  try {
+    const { chatRoomId } = req.params;
+    const userId = req.user.id;
+
+    const chatRoom = await ChatRoom.findOne({
+      _id: chatRoomId,
+      "participants.user": userId,
+      isActive: true
+    })
+    .populate("participants.user", "name profilePicture status lastSeen")
+    .populate("createdBy", "name profilePicture")
+    .populate("lastMessage");
+
+    if (!chatRoom) {
+      return res.status(404).json({
+        success: false,
+        message: "Chat room not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      chatRoom
+    });
+  } catch (error) {
+    console.error("Error fetching chat room details:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch chat room details"
+    });
   }
 };

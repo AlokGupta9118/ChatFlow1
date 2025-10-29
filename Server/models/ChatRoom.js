@@ -1,3 +1,4 @@
+// models/ChatRoom.js
 import mongoose from "mongoose";
 
 const chatRoomSchema = new mongoose.Schema(
@@ -5,7 +6,7 @@ const chatRoomSchema = new mongoose.Schema(
     name: {
       type: String,
       trim: true,
-      default: null, // only required for group chats
+      default: null,
     },
     description: {
       type: String,
@@ -14,8 +15,9 @@ const chatRoomSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["direct", "group"], // direct = 1v1 chat, group = group chat
+      enum: ["direct", "group"],
       required: true,
+      index: true
     },
     participants: [
       {
@@ -41,6 +43,10 @@ const chatRoomSchema = new mongoose.Schema(
           type: Date,
           default: Date.now,
         },
+        nickname: {
+          type: String,
+          default: null,
+        },
       },
     ],
     pendingParticipants: [
@@ -54,12 +60,10 @@ const chatRoomSchema = new mongoose.Schema(
           type: Date,
           default: Date.now,
         },
-      },
-    ],
-    messages: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Message",
+        invitedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
       },
     ],
     lastMessage: {
@@ -81,6 +85,7 @@ const chatRoomSchema = new mongoose.Schema(
       allowGIFs: { type: Boolean, default: true },
       allowMessageEdit: { type: Boolean, default: true },
       allowMessageDelete: { type: Boolean, default: true },
+      allowInvites: { type: Boolean, default: true },
     },
     avatar: {
       type: String,
@@ -92,29 +97,37 @@ const chatRoomSchema = new mongoose.Schema(
       default: "system",
     },
     pinnedMessages: [
-      { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
+      { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "Message" 
+      }
     ],
-    archivedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    reactions: [
-      {
-        messageId: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
-        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-        emoji: String,
-      },
-    ],
-    readReceipts: [
-      {
-        messageId: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
-        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-        readAt: { type: Date, default: Date.now },
-      },
-    ],
-    typingUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    archivedBy: [{ 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "User" 
+    }],
+    blockedUsers: [{ 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "User" 
+    }],
+    typingUsers: [{ 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "User" 
+    }],
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
 );
 
-const ChatRoom = mongoose.model("ChatRoom", chatRoomSchema);
+chatRoomSchema.index({ "participants.user": 1 });
+chatRoomSchema.index({ type: 1, "participants.user": 1 });
+chatRoomSchema.index({ updatedAt: -1 });
 
-export default ChatRoom;
+export default mongoose.model("ChatRoom", chatRoomSchema);

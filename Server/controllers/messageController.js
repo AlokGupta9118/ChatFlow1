@@ -1,131 +1,153 @@
-// controllers/chatController.js
-import ChatRoom from "../models/ChatRoom.js";
+// controllers/messageController.js
 import Message from "../models/Message.js";
-import User from "../models/User.js";
+import ChatRoom from "../models/ChatRoom.js";
 
-// ✅ Get messages for private chat
-export const getMessages = async (req, res) => {
+export const sendMessage = async (req, res) => {
   try {
-    const { chatId } = req.params;
-    const userId = req.user._id;
+    const { chatRoomId, content, replyTo, type, mediaUrl } = req.body;
+    const userId = req.user.id;
 
-    // Find messages between current user and the other user
-    const messages = await Message.find({
-      $or: [
-        { sender: userId, receiver: chatId },
-        { sender: chatId, receiver: userId }
-      ]
-    })
-    .populate('sender', 'name profilePicture')
-    .populate('receiver', 'name profilePicture')
-    .sort({ createdAt: 1 });
-
-    res.status(200).json({ messages });
-  } catch (error) {
-    console.error("Error fetching private messages:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// ✅ Get messages for group chat
-export const getGroupMessages = async (req, res) => {
-  try {
-    const { chatRoomId } = req.params;
-    const userId = req.user._id;
-
-    // Check if user is member of the group
-    const chatRoom = await ChatRoom.findById(chatRoomId);
-    if (!chatRoom) {
-      return res.status(404).json({ message: "Chat room not found" });
-    }
-
-    const isMember = chatRoom.members.some(member => 
-      member.user.toString() === userId.toString()
-    );
-
-    if (!isMember) {
-      return res.status(403).json({ message: "Not a member of this group" });
-    }
-
-    const messages = await Message.find({ chatRoom: chatRoomId })
-      .populate('sender', 'name profilePicture')
-      .sort({ createdAt: 1 });
-
-    res.status(200).json({ messages });
-  } catch (error) {
-    console.error("Error fetching group messages:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// ✅ Send private message
-export const sendMessage= async (req, res) => {
-  try {
-    const { receiverId, content, messageType = "text" } = req.body;
-    const senderId = req.user._id;
-
-    // Create new message
-    const newMessage = new Message({
-      sender: senderId,
-      receiver: receiverId,
-      content,
-      messageType
+    // Verify user has access to chat room
+    const chatRoom = await ChatRoom.findOne({
+      _id: chatRoomId,
+      "participants.user": userId,
+      isActive: true
     });
 
-    await newMessage.save();
-
-    // Populate sender info for real-time delivery
-    await newMessage.populate('sender', 'name profilePicture');
-
-    res.status(201).json({ 
-      message: newMessage,
-      success: true 
-    });
-  } catch (error) {
-    console.error("Error sending private message:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// ✅ Send group message
-export const sendGroupMessage = async (req, res) => {
-  try {
-    const { chatRoomId, content, messageType = "text" } = req.body;
-    const senderId = req.user._id;
-
-    // Check if user is member of the group
-    const chatRoom = await ChatRoom.findById(chatRoomId);
     if (!chatRoom) {
-      return res.status(404).json({ message: "Chat room not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Chat room not found"
+      });
     }
 
-    const isMember = chatRoom.members.some(member => 
-      member.user.toString() === senderId.toString()
-    );
-
-    if (!isMember) {
-      return res.status(403).json({ message: "Not a member of this group" });
-    }
-
-    // Create new message
-    const newMessage = new Message({
-      sender: senderId,
+    const message = new Message({
       chatRoom: chatRoomId,
+      sender: userId,
       content,
-      messageType
+      type: type || "text",
+      mediaUrl,
+      replyTo,
+      status: "sent"
     });
 
-    await newMessage.save();
+    await message.save();
+    await message.populate([
+      { path: "sender", select: "name profilePicture status" },
+      { path: "replyTo", populate: { path: "sender", select: "name" } }
+    ]);
 
-    // Populate sender info for real-time delivery
-    await newMessage.populate('sender', 'name profilePicture');
+    // Update last message
+    await ChatRoom.findByIdAndUpdate(chatRoomId, {
+      lastMessage: message._id,
+      updatedAt: new Date()
+    });
 
-    res.status(201).json({ 
-      message: newMessage,
-      success: true 
+    res.status(201).json({
+      success: true,
+      message
     });
   } catch (error) {
-    console.error("Error sending group message:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("Error sending message:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to send message"
+    });
+  }
+};
+
+export const deleteMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found"
+      });
+    }
+
+    // Check if user is the sender or has admin rights
+    const chatRoom = await ChatRoom.findOne({
+      _id: message.chatRoom,
+      "participants.user": userId,
+      isActive: true
+    });
+
+    if (!chatRoom) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied"
+      });
+    }
+
+    const userParticipant = chatRoom.participants.find(
+      p => p.user.toString() === userId
+    );
+
+    if (message.sender.toString() !== userId && 
+        !["admin", "owner"].includes(userParticipant.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot delete this message"
+      });
+    }
+
+    message.deleted = true;
+    message.deletedAt = new Date();
+    message.content = "This message was deleted";
+    await message.save();
+
+    res.json({
+      success: true,
+      message: "Message deleted successfully"
+    });
+  } catch (error) {
+    console.error("Error deleting message:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete message"
+    });
+  }
+};
+
+export const markAsRead = async (req, res) => {
+  try {
+    const { messageId } = req.body;
+    const userId = req.user.id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found"
+      });
+    }
+
+    // Check if already read
+    const alreadyRead = message.readBy.some(
+      read => read.user.toString() === userId
+    );
+
+    if (!alreadyRead) {
+      message.readBy.push({
+        user: userId,
+        readAt: new Date()
+      });
+      await message.save();
+    }
+
+    res.json({
+      success: true,
+      message: "Message marked as read"
+    });
+  } catch (error) {
+    console.error("Error marking message as read:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to mark message as read"
+    });
   }
 };

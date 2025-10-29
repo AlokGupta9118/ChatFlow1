@@ -18,7 +18,7 @@ import { protect } from "./middleware/authMiddleware.js";
 import gameSocket from "./socket/gameSocket.js";
 import statusRoutes from "./routes/statusRoutes.js";
 import { setupChatSockets } from "./socket/messageSocket.js";
-
+import chatRoutes from "./routes/chat.js";
 dotenv.config();
 
 const app = express();
@@ -60,6 +60,7 @@ app.use("/chatroom", chatRoomRoutes);
 app.use("/api/user", settingRoutes);
 app.get("/api/user/profile", protect, getProfile);
 app.use("/api/status", statusRoutes);
+app.use("/api/chat",chatRoutes);
 // HTTP server + Socket.IO
 const server = http.createServer(app);
 
@@ -70,6 +71,7 @@ const io = new Server(server, {
   },
 });
 
+new SocketService(server);
 app.set('io', io);
 // Register socket handlers
 gameSocket(io);
