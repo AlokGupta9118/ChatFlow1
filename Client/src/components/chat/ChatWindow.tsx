@@ -10,16 +10,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import GroupChatAdminPanel from "@/components/chat/GroupChatAdminPanel";
 import { toast } from "sonner";
 
-// ✅ Create socket instance with better configuration
+// ✅ Optimized socket configuration
 const createSocket = () => {
   return io(import.meta.env.VITE_API_URL, {
     transports: ['websocket', 'polling'],
     upgrade: true,
-    forceNew: true,
-    timeout: 10000,
+    forceNew: false,
+    timeout: 5000,
     reconnection: true,
-    reconnectionAttempts: 5,
+    reconnectionAttempts: 10,
     reconnectionDelay: 1000,
+    autoConnect: true
   });
 };
 
@@ -46,8 +47,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [newMessage, setNewMessage] = useState("");
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [viewedProfile, setViewedProfile] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
   const [showMenu, setShowMenu] = useState(false);
@@ -56,112 +55,105 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [friendLastSeen, setFriendLastSeen] = useState(null);
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const menuRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const socketRef = useRef(null);
 
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
 
-  // ✅ Initialize Socket.IO connection
+  // ✅ Single socket instance with useRef to prevent recreations
   useEffect(() => {
-    const newSocket = createSocket();
-    setSocket(newSocket);
+    if (!socketRef.current) {
+      const newSocket = createSocket();
+      socketRef.current = newSocket;
+      setSocket(newSocket);
 
-    newSocket.on('connect', () => {
-      console.log('✅ Socket.IO connected:', newSocket.id);
-      setIsConnected(true);
-    });
+      newSocket.on('connect', () => {
+        console.log('✅ Socket.IO connected:', newSocket.id);
+        setIsConnected(true);
+        
+        // Join user room immediately after connection
+        if (userId) {
+          newSocket.emit('join_user', { userId });
+        }
+      });
 
-    newSocket.on('disconnect', () => {
-      console.log('❌ Socket.IO disconnected');
-      setIsConnected(false);
-    });
+      newSocket.on('disconnect', () => {
+        console.log('❌ Socket.IO disconnected');
+        setIsConnected(false);
+      });
 
-    newSocket.on('connect_error', (error) => {
-      console.error('❌ Socket.IO connection error:', error);
-      setIsConnected(false);
-    });
+      newSocket.on('connect_error', (error) => {
+        console.error('❌ Socket.IO connection error:', error);
+        setIsConnected(false);
+      });
+    }
 
     return () => {
-      console.log('🧹 Cleaning up socket connection');
-      newSocket.disconnect();
-      newSocket.removeAllListeners();
+      // Don't disconnect on cleanup, keep connection alive
+      if (socketRef.current) {
+        socketRef.current.off('receive-chat-message');
+        socketRef.current.off('user-typing');
+      }
     };
-  }, []);
+  }, [userId]);
 
-  // ✅ Join user room when socket is connected and userId is available
+  // ✅ Join/leave chat room when selectedChat changes - OPTIMIZED
   useEffect(() => {
-    if (socket && isConnected && userId) {
-      console.log('👤 Joining user room:', userId);
-      socket.emit('join_user', userId);
-    }
-  }, [socket, isConnected, userId]);
-
-  // ✅ Join chat room when selectedChat changes
-  useEffect(() => {
-    if (!socket || !isConnected || !selectedChat?._id) return;
+    if (!socketRef.current || !isConnected || !selectedChat?._id) return;
 
     const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
     console.log('🚪 Joining chat room:', roomId);
     
-    socket.emit('join_chat', roomId);
+    // Join chat room
+    socketRef.current.emit('join-chat-room', { roomId, userId });
+
+    // Set up message listeners
+    const handleReceiveMessage = (msg) => {
+      console.log('📨 Received real-time message:', msg);
+      
+      if ((isGroup && msg.roomId === roomId) || 
+          (!isGroup && (msg.senderId === selectedChat._id || msg.senderId === userId))) {
+        
+        setMessages(prev => {
+          // Prevent duplicates with more robust check
+          const messageExists = prev.some(m => 
+            m._id === msg._id || 
+            (m.content === msg.content && m.senderId === msg.senderId && Math.abs(new Date(m.timestamp) - new Date(msg.timestamp)) < 1000)
+          );
+          
+          if (messageExists) {
+            console.log('🔄 Duplicate message detected, skipping');
+            return prev;
+          }
+          
+          console.log('✅ Adding new message to state');
+          return [...prev, msg];
+        });
+      }
+    };
+
+    const handleTyping = (data) => {
+      if (data.userId !== userId) {
+        setIsTyping(data.isTyping);
+      }
+    };
+
+    socketRef.current.on('receive-chat-message', handleReceiveMessage);
+    socketRef.current.on('user-typing', handleTyping);
 
     return () => {
       console.log('🚪 Leaving chat room:', roomId);
-      socket.emit('leave_chat', roomId);
+      socketRef.current.emit('leave-chat-room', { roomId, userId });
+      socketRef.current.off('receive-chat-message', handleReceiveMessage);
+      socketRef.current.off('user-typing', handleTyping);
     };
-  }, [socket, isConnected, selectedChat?._id, isGroup]);
-
-  // ✅ Set up real-time message listeners
-  useEffect(() => {
-    if (!socket || !isConnected) return;
-
-    console.log('👂 Setting up message listeners');
-
-    // Handle incoming messages
-    const handleReceiveMessage = (msg) => {
-      console.log('📨 Received message:', msg);
-      
-      setMessages(prev => {
-        // Check if message already exists to prevent duplicates
-        const messageExists = prev.some(m => m._id === msg._id);
-        if (messageExists) return prev;
-        
-        return [...prev, msg];
-      });
-    };
-
-    // Handle typing indicators
-    const handleTypingStart = (data) => {
-      if (data.chatId === selectedChat?._id && data.userId !== userId) {
-        setIsTyping(true);
-      }
-    };
-
-    const handleTypingStop = (data) => {
-      if (data.chatId === selectedChat?._id && data.userId !== userId) {
-        setIsTyping(false);
-      }
-    };
-
-    // Listen for events
-    socket.on('receive_message', handleReceiveMessage);
-    socket.on('typing_start', handleTypingStart);
-    socket.on('typing_stop', handleTypingStop);
-    socket.on('message_sent', handleReceiveMessage); // Alternative event name
-
-    // Clean up listeners
-    return () => {
-      console.log('🧹 Cleaning up message listeners');
-      socket.off('receive_message', handleReceiveMessage);
-      socket.off('typing_start', handleTypingStart);
-      socket.off('typing_stop', handleTypingStop);
-      socket.off('message_sent', handleReceiveMessage);
-    };
-  }, [socket, isConnected, selectedChat?._id, userId]);
+  }, [socketRef.current, isConnected, selectedChat?._id, isGroup, userId]);
 
   // ✅ Fetch messages when selected chat changes
   const fetchMessages = useCallback(async () => {
@@ -194,6 +186,15 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     fetchMessages();
   }, [fetchMessages]);
 
+  // ✅ Scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   // ✅ Friend status functions
   const fetchFriendStatus = async () => {
     if (!selectedChat?._id || isGroup) return;
@@ -220,19 +221,19 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
   // ✅ Listen for real-time status changes
   useEffect(() => {
-    if (!selectedChat || !socket) return;
+    if (!selectedChat || !socketRef.current) return;
 
     if (!isGroup) {
       fetchFriendStatus();
       
-      socket.on("user-status-change", ({ userId, status, lastSeen }) => {
+      socketRef.current.on("user-status-change", ({ userId, status, lastSeen }) => {
         if (userId === selectedChat._id) {
           setFriendStatus(status);
           setFriendLastSeen(lastSeen);
         }
       });
     } else {
-      socket.on("user-status-change", ({ userId, status, lastSeen }) => {
+      socketRef.current.on("user-status-change", ({ userId, status, lastSeen }) => {
         setGroupMembers(prev => 
           prev.map(member => {
             const memberId = member.user?._id || member.user;
@@ -253,9 +254,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
 
     return () => {
-      socket.off("user-status-change");
+      if (socketRef.current) {
+        socketRef.current.off("user-status-change");
+      }
     };
-  }, [socket, selectedChat?._id, isGroup]);
+  }, [socketRef.current, selectedChat?._id, isGroup]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -268,10 +271,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
 
   // ✅ Fetch group members with status
   const fetchGroupMembers = async () => {
@@ -423,85 +422,127 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   }, [selectedChat?._id, isGroup, userId]);
 
-  useEffect(scrollToBottom, [messages]);
-
-  // ✅ Improved typing handler with debouncing
+  // ✅ Optimized typing handler
   const handleTyping = useCallback(() => {
-    if (!socket || !isConnected || !selectedChat?._id) return;
+    if (!socketRef.current || !isConnected || !selectedChat?._id) return;
 
     // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
+    const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
+    
     // Emit typing start
-    socket.emit("typing_start", {
-      chatId: selectedChat._id,
+    socketRef.current.emit("chat-typing-start", {
+      roomId,
       userId: userId,
-      isGroup: isGroup
+      userName: user.name
     });
 
     // Set timeout to stop typing
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("typing_stop", {
-        chatId: selectedChat._id,
-        userId: userId,
-        isGroup: isGroup
+      socketRef.current.emit("chat-typing-stop", {
+        roomId,
+        userId: userId
       });
     }, 1000);
-  }, [socket, isConnected, selectedChat?._id, userId, isGroup]);
+  }, [isConnected, selectedChat?._id, isGroup, userId, user.name]);
 
-  // ✅ Improved send message function
+  // ✅ ULTRA-FAST Message Sending with Optimistic Updates
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !socket || !isConnected) return;
+    const messageContent = newMessage.trim();
+    if (!messageContent || !socketRef.current || !isConnected || isSending) return;
 
+    setIsSending(true);
     const token = getToken();
-    if (!token) return;
+    if (!token) {
+      setIsSending(false);
+      return;
+    }
+
+    // ✅ 1. Create optimistic message immediately
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const optimisticMessage = {
+      _id: tempId,
+      content: messageContent,
+      sender: { _id: userId, name: user.name },
+      senderId: userId,
+      createdAt: new Date().toISOString(),
+      isOptimistic: true,
+      status: 'sending'
+    };
+
+    // ✅ 2. Update UI immediately
+    setMessages(prev => [...prev, optimisticMessage]);
+    setNewMessage("");
+    
+    // ✅ 3. Clear typing
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
+    socketRef.current.emit("chat-typing-stop", { roomId, userId });
 
     try {
+      // ✅ 4. Prepare message data
       const msgData = isGroup
-        ? { chatRoomId: selectedChat._id, content: newMessage, messageType: "text" }
-        : { receiverId: selectedChat._id, content: newMessage, messageType: "text" };
+        ? { chatRoomId: selectedChat._id, content: messageContent, messageType: "text" }
+        : { receiverId: selectedChat._id, content: messageContent, messageType: "text" };
 
       const endpoint = isGroup
         ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/sendGroupmessages`
         : `${import.meta.env.VITE_API_URL}/chatroom/messages/send`;
 
+      // ✅ 5. Send to backend
       const res = await axios.post(endpoint, msgData, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       const sentMessage = res.data.message;
-      console.log('📤 Message sent:', sentMessage);
+      console.log('📤 Message saved to database:', sentMessage);
 
-      // ✅ Optimistically update UI immediately
-      setMessages(prev => [...prev, sentMessage]);
-      setNewMessage("");
+      // ✅ 6. Replace optimistic message with real one
+      setMessages(prev => 
+        prev.map(msg => 
+          msg._id === tempId ? { ...sentMessage, status: 'sent' } : msg
+        )
+      );
 
-      // ✅ Emit socket event for real-time delivery
-      const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
-      socket.emit("send_message", {
-        ...sentMessage,
-        roomId: roomId
+      // ✅ 7. Emit socket event for real-time delivery to others
+      socketRef.current.emit("send-chat-message", {
+        roomId: roomId,
+        message: {
+          ...sentMessage,
+          senderId: userId,
+          sender: { _id: userId, name: user.name }
+        },
+        chatType: isGroup ? "group" : "private"
       });
-
-      // Stop typing
-      socket.emit("typing_stop", {
-        chatId: selectedChat._id,
-        userId: userId,
-        isGroup: isGroup
-      });
-
-      // Clear typing timeout
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
 
     } catch (err) {
       console.error("❌ Error sending message:", err);
+      
+      // ✅ 8. Mark message as failed
+      setMessages(prev =>
+        prev.map(msg =>
+          msg._id === tempId ? { ...msg, status: 'failed', error: err.response?.data?.message || 'Failed to send' } : msg
+        )
+      );
+
       if (err.response?.status !== 403) {
         toast.error("Failed to send message");
       }
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // ✅ Handle Enter key press
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -525,7 +566,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     return lastSeenDate.toLocaleDateString();
   };
 
-  // ✅ Connection status indicator (optional, for debugging)
+  // ✅ Connection status indicator
   const ConnectionStatus = () => (
     <div className={`absolute top-2 right-2 flex items-center gap-2 px-2 py-1 rounded-full text-xs ${
       isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
@@ -556,12 +597,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm relative">
-      {/* Connection Status Indicator */}
       <ConnectionStatus />
 
       {/* Header - Fixed height */}
       <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-xl border-b border-purple-500/30 shadow-lg z-10">
-        {/* ... (rest of your JSX remains the same) */}
         <div className="flex items-center gap-4">
           <div className="relative group">
             <Avatar 
@@ -739,21 +778,25 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
             const senderId = msg.sender?._id || msg.senderId;
             const isSent = senderId?.toString() === userId?.toString();
             const userColor = getUserColor(senderId);
+            const isOptimistic = msg.isOptimistic;
+            const isFailed = msg.status === 'failed';
 
             return (
               <motion.div
                 key={msg._id || idx}
                 initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+                animate={{ 
+                  opacity: isOptimistic ? 0.7 : 1, 
+                  y: 0 
+                }}
                 exit={{ opacity: 0, y: -20 }}
-                className={`flex ${isSent ? "justify-end" : "justify-start"}`}
+                className={`flex ${isSent ? "justify-end" : "justify-start"} ${isOptimistic ? 'opacity-70' : ''} ${isFailed ? 'border border-red-400/30 rounded-2xl' : ''}`}
               >
                 <div className={`flex items-end gap-3 max-w-[80%] ${isSent ? "flex-row-reverse" : ""}`}>
+                  
                   {!isSent && isGroup && (
                     <div className="relative group flex-shrink-0">
-                      <Avatar 
-                        className="w-10 h-10 shadow-md border-2 border-white/30 cursor-pointer hover:scale-105 transition-transform"
-                      >
+                      <Avatar className="w-10 h-10 shadow-md border-2 border-white/30">
                         <AvatarImage src={msg.sender?.profilePicture || "/default-avatar.png"} />
                         <AvatarFallback className={`text-xs bg-gradient-to-r ${userColor} text-white`}>
                           {msg.sender?.name?.[0] || "?"}
@@ -778,12 +821,23 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                         isSent
                           ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md border-blue-400/30"
                           : "bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-bl-md border-gray-600/30"
-                      }`}
+                      } ${isFailed ? 'border-red-400/50' : ''}`}
                     >
-                      <p className="leading-relaxed text-sm">{msg.content}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="leading-relaxed text-sm flex-1">{msg.content}</p>
+                        {isOptimistic && (
+                          <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+                        )}
+                        {isFailed && (
+                          <div className="text-red-400 text-xs" title={msg.error}>
+                            ❌
+                          </div>
+                        )}
+                      </div>
                       <div className={`flex ${isSent ? 'justify-end' : 'justify-start'} mt-2`}>
                         <p className={`text-xs ${isSent ? 'text-blue-200' : 'text-gray-400'}`}>
                           {formatTime(msg.createdAt)}
+                          {isOptimistic && ' • Sending...'}
                         </p>
                       </div>
                     </motion.div>
@@ -847,9 +901,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
               setNewMessage(e.target.value);
               handleTyping();
             }}
-            onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+            onKeyDown={handleKeyPress}
             placeholder="Type your message..."
-            className="w-full pl-4 pr-12 py-3 bg-gray-700/50 border-2 border-purple-500/30 text-white placeholder-gray-400 rounded-2xl focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 backdrop-blur-sm transition-all"
+            disabled={isSending}
+            className="w-full pl-4 pr-12 py-3 bg-gray-700/50 border-2 border-purple-500/30 text-white placeholder-gray-400 rounded-2xl focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 backdrop-blur-sm transition-all disabled:opacity-50"
           />
           <motion.button 
             whileHover={{ scale: 1.05 }} 
@@ -864,10 +919,14 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={handleSendMessage}
-          disabled={!newMessage.trim() || !isConnected}
-          className="p-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg shadow-purple-500/25 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border-2 border-purple-400/30"
+          disabled={!newMessage.trim() || !isConnected || isSending}
+          className="p-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg shadow-purple-500/25 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border-2 border-purple-400/30 flex items-center justify-center min-w-[44px]"
         >
-          <Send className="w-5 h-5" />
+          {isSending ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Send className="w-5 h-5" />
+          )}
         </motion.button>
       </div>
 

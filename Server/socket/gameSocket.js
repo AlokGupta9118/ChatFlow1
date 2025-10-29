@@ -1,12 +1,11 @@
+// socket/gameSocket.js
 import UserModel from "../models/User.js";
 
 export default function gameSocket(io) {
-  const rooms = {}; // { roomId: { roomId, players: [], status, currentPlayer, currentPrompt, currentChoice, answers: {}, proofs: {}, scores: {}, playerStats: {}, roundNumber: 1 } }
-  
-  // 🔥 NEW: Store chat messages for each room
-  const chatMessages = new Map(); // roomId -> messages array
+  const rooms = {};
+  const chatMessages = new Map();
 
-  // ✅ NEW: Helper function to sync game state to all players
+  // ✅ Helper function to sync game state to all players
   function syncGameState(room) {
     const gameState = {
       currentPlayer: room.currentPlayer,
@@ -27,7 +26,7 @@ export default function gameSocket(io) {
     io.to(room.roomId).emit("game-state-sync", gameState);
   }
 
-  // ✅ Helper function to get random scenario - NEW
+  // ✅ Helper function to get random scenario
   function getRandomScenario(room) {
     let availableScenarios = room.scenarios
       .map((_, i) => i)
@@ -43,16 +42,14 @@ export default function gameSocket(io) {
     return room.scenarios[randomIndex];
   }
 
-  // ✅ Helper function to calculate round results - NEW
+  // ✅ Helper function to calculate round results
   function calculateRoundResults(room) {
     const voteCounts = {};
     
-    // Count votes for each player
     Object.values(room.votes).forEach(votedFor => {
       voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
     });
 
-    // Find player with most votes
     let maxVotes = 0;
     let winners = [];
     
@@ -65,13 +62,11 @@ export default function gameSocket(io) {
       }
     });
 
-    // Award points to winners
     winners.forEach(winner => {
       room.scores[winner] = (room.scores[winner] || 0) + 10;
       room.playerStats[winner].roundsWon++;
     });
 
-    // Award participation points
     Object.keys(room.votes).forEach(voter => {
       room.scores[voter] = (room.scores[voter] || 0) + 1;
     });
@@ -89,7 +84,7 @@ export default function gameSocket(io) {
     console.log(`🏆 Round ${room.currentRound} results: ${winners.join(', ')} won with ${maxVotes} votes`);
   }
 
-  // ✅ Helper function to calculate final results - NEW
+  // ✅ Helper function to calculate final results
   function calculateFinalResults(room) {
     const playersWithScores = room.players.map(player => ({
       name: player.name,
@@ -97,7 +92,6 @@ export default function gameSocket(io) {
       stats: room.playerStats[player.name]
     }));
 
-    // Sort by score descending
     playersWithScores.sort((a, b) => b.score - a.score);
 
     return {
@@ -113,7 +107,6 @@ export default function gameSocket(io) {
     const updateRoomPlayers = (roomId) => {
       const room = rooms[roomId];
       if (room) {
-        // Emit appropriate update based on game type
         if (room.gameType === "most-likely") {
           io.to(roomId).emit("mostlikely-update-players", room.players);
         } else {
@@ -127,6 +120,75 @@ export default function gameSocket(io) {
       const messages = chatMessages.get(roomId) || [];
       socket.emit("chat-history", messages);
     };
+
+    // ✅ CHAT: Join chat room for real-time messaging
+    socket.on("join-chat-room", ({ roomId, userId }) => {
+      console.log(`💬 User ${userId} joining chat room: ${roomId}`);
+      socket.join(roomId);
+    });
+
+    // ✅ CHAT: Leave chat room
+    socket.on("leave-chat-room", ({ roomId, userId }) => {
+      console.log(`💬 User ${userId} leaving chat room: ${roomId}`);
+      socket.leave(roomId);
+    });
+
+    // ✅ CHAT: Send message to chat room
+    socket.on("send-chat-message", ({ roomId, message, chatType = "private" }) => {
+      try {
+        console.log(`💬 Chat message in ${roomId}:`, message);
+        
+        // Create the message object
+        const chatMessage = {
+          _id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          sender: message.sender,
+          senderId: message.senderId,
+          content: message.content,
+          timestamp: new Date().toISOString(),
+          type: message.type || "text",
+          chatType: chatType,
+          roomId: roomId
+        };
+
+        // Store in chat history if it's a game room
+        if (chatType === "game") {
+          if (!chatMessages.has(roomId)) {
+            chatMessages.set(roomId, []);
+          }
+          const roomChat = chatMessages.get(roomId);
+          roomChat.push(chatMessage);
+          
+          // Keep only last 100 messages
+          if (roomChat.length > 100) {
+            roomChat.shift();
+          }
+        }
+
+        // Broadcast to ALL users in the room
+        io.to(roomId).emit("receive-chat-message", chatMessage);
+        console.log(`📨 Message broadcast to room ${roomId}`);
+        
+      } catch (error) {
+        console.error('❌ Error sending chat message:', error);
+        socket.emit("chat-error", "Failed to send message");
+      }
+    });
+
+    // ✅ CHAT: Typing indicators for chat
+    socket.on("chat-typing-start", ({ roomId, userId, userName }) => {
+      socket.to(roomId).emit("user-typing", { 
+        userId, 
+        userName, 
+        isTyping: true 
+      });
+    });
+
+    socket.on("chat-typing-stop", ({ roomId, userId }) => {
+      socket.to(roomId).emit("user-typing", { 
+        userId, 
+        isTyping: false 
+      });
+    });
 
     // ✅ FIXED: User online status
     socket.on("user-online", async (userId) => {
@@ -147,54 +209,6 @@ export default function gameSocket(io) {
         console.log(`👋 ${userId} logged out`);
       } catch (err) {
         console.error("Error setting user offline on logout:", err.message);
-      }
-    });
-
-    // 🔥 NEW: Chat message handler - ENHANCED
-    socket.on("send-chat-message", ({ roomId, message }) => {
-      try {
-        if (!chatMessages.has(roomId)) {
-          chatMessages.set(roomId, []);
-        }
-
-        const roomChat = chatMessages.get(roomId);
-        const chatMessage = {
-          id: Date.now() + Math.random(),
-          sender: message.sender,
-          content: message.content,
-          timestamp: new Date().toISOString(),
-          type: message.type || "text",
-          senderId: socket.id
-        };
-        
-        roomChat.push(chatMessage);
-
-        // Keep only last 100 messages
-        if (roomChat.length > 100) {
-          roomChat.shift();
-        }
-
-        // Broadcast to room
-        io.to(roomId).emit("receive-chat-message", chatMessage);
-        console.log(`💬 ${message.sender} sent message in ${roomId}: ${message.content}`);
-      } catch (error) {
-        console.error('Error sending chat message:', error);
-        socket.emit("chat-error", "Failed to send message");
-      }
-    });
-
-    // 🔥 NEW: Typing indicators - ENHANCED
-    socket.on("typing", ({ roomId, isTyping }) => {
-      const room = rooms[roomId];
-      if (!room) return;
-
-      const player = room.players.find(p => p.socketId === socket.id);
-      if (player) {
-        socket.to(roomId).emit("user-typing", { 
-          userName: player.name, 
-          isTyping,
-          userId: socket.id
-        });
       }
     });
 
@@ -1241,7 +1255,7 @@ export default function gameSocket(io) {
       socket.emit("pong", { timestamp: Date.now() });
     });
 
-    // ✅ FIXED: Disconnect cleanup - MOVED INSIDE connection handler
+    // ✅ FIXED: Disconnect cleanup
     socket.on("disconnect", async () => {
       console.log("❌ Game socket disconnected:", socket.id);
       
