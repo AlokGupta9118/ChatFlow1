@@ -1,4 +1,4 @@
-// ChatWindow.jsx - ENHANCED DEBUG VERSION
+// ChatWindow.jsx - FIXED VERSION
 import { useEffect, useState, useRef, useCallback } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -253,42 +253,42 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // ✅ ENHANCED: Typing handler with TEST functionality
- // ✅ FIXED: Enhanced typing handler
-const handleTyping = useCallback(() => {
-  if (!socket || !isConnected || !selectedChat?._id) {
-    console.log('❌ Typing: Missing requirements');
-    return;
-  }
+  // ✅ FIXED: Single handleTyping function (removed duplicate)
+  const handleTyping = useCallback(() => {
+    if (!socket || !isConnected || !selectedChat?._id) {
+      console.log('❌ Typing: Missing requirements');
+      return;
+    }
 
-  if (typingTimeoutRef.current) {
-    clearTimeout(typingTimeoutRef.current);
-  }
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
 
-  // ✅ FIXED: Ensure we have proper user data
-  const typingData = {
-    chatId: selectedChat._id,
-    userId: userId,
-    userName: user.name || user.username || 'User', // Multiple fallbacks
-    isGroup: isGroup,
-    chatRoomId: currentChatRoomId
-  };
-
-  console.log('🎯 EMITTING TYPING START:', typingData);
-  socket.emit("typing_start", typingData);
-
-  typingTimeoutRef.current = setTimeout(() => {
-    const stopData = {
+    // ✅ FIXED: Ensure we have proper user data
+    const typingData = {
       chatId: selectedChat._id,
       userId: userId,
+      userName: user.name || user.username || 'User', // Multiple fallbacks
       isGroup: isGroup,
       chatRoomId: currentChatRoomId
     };
-    
-    console.log('🎯 EMITTING TYPING STOP:', stopData);
-    socket.emit("typing_stop", stopData);
-  }, 2000);
-}, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, user.username, currentChatRoomId]);
+
+    console.log('🎯 EMITTING TYPING START:', typingData);
+    socket.emit("typing_start", typingData);
+
+    typingTimeoutRef.current = setTimeout(() => {
+      const stopData = {
+        chatId: selectedChat._id,
+        userId: userId,
+        isGroup: isGroup,
+        chatRoomId: currentChatRoomId
+      };
+      
+      console.log('🎯 EMITTING TYPING STOP:', stopData);
+      socket.emit("typing_stop", stopData);
+    }, 2000);
+  }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, user.username, currentChatRoomId]);
+
   // Enhanced input change handler
   const handleInputChange = (e) => {
     const value = e.target.value;
@@ -388,64 +388,65 @@ const handleTyping = useCallback(() => {
     }
   };
 
- // ✅ FIXED: Enhanced typing indicator display with proper name lookup
-const getStatusText = () => {
-  if (typingUsers.size > 0) {
-    const typingArray = Array.from(typingUsers);
-    console.log('🎯 Currently typing users:', typingArray);
-    
-    if (typingArray.length === 1) {
-      const typingUserId = typingArray[0];
-      let userName = 'Someone';
+  // ✅ FIXED: Enhanced typing indicator display with proper name lookup
+  const getStatusText = () => {
+    if (typingUsers.size > 0) {
+      const typingArray = Array.from(typingUsers);
+      console.log('🎯 Currently typing users:', typingArray);
       
-      if (isGroup) {
-        // ✅ FIXED: Better user name lookup for group chats
-        const typingUser = selectedChat.participants?.find(p => {
-          // Handle both object and string formats
-          const participantId = p.user?._id?.toString() || p.user?.toString() || p.user;
-          return participantId === typingUserId.toString();
-        });
+      if (typingArray.length === 1) {
+        const typingUserId = typingArray[0];
+        let userName = 'Someone';
         
-        console.log('🎯 Found typing user in group:', typingUser);
-        
-        if (typingUser) {
-          // Handle different participant structures
-          userName = typingUser.user?.name || typingUser.name || 'Someone';
+        if (isGroup) {
+          // ✅ FIXED: Better user name lookup for group chats
+          const typingUser = selectedChat.participants?.find(p => {
+            // Handle both object and string formats
+            const participantId = p.user?._id?.toString() || p.user?.toString() || p.user;
+            return participantId === typingUserId.toString();
+          });
+          
+          console.log('🎯 Found typing user in group:', typingUser);
+          
+          if (typingUser) {
+            // Handle different participant structures
+            userName = typingUser.user?.name || typingUser.name || 'Someone';
+          } else {
+            console.log('🎯 Could not find typing user in participants:', selectedChat.participants);
+          }
         } else {
-          console.log('🎯 Could not find typing user in participants:', selectedChat.participants);
+          // For private chats, it's always the other person
+          userName = selectedChat.name || 'Someone';
         }
+        
+        return `${userName} is typing...`;
       } else {
-        // For private chats, it's always the other person
-        userName = selectedChat.name || 'Someone';
+        return `${typingArray.length} people are typing...`;
       }
-      
-      return `${userName} is typing...`;
-    } else {
-      return `${typingArray.length} people are typing...`;
     }
-  }
-  
-  // Default status text when no one is typing
-  if (isGroup) {
-    const onlineCount = selectedChat.participants?.filter(p => 
-      onlineUsers.has(p.user?._id || p.user)
-    ).length || 0;
-    return `${onlineCount} online • ${selectedChat.participants?.length || 0} members`;
-  }
-  
-  // For private chats
-  const friendId = selectedChat._id;
-  const status = userStatus[friendId]?.status || 'offline';
-  
-  if (status === 'online') {
-    return 'Online';
-  } else if (status === 'away') {
-    return 'Away';
-  } else {
-    return 'Offline';
-  }
-};
-  // Message rendering (keep your existing renderMessage function)
+    
+    // Default status text when no one is typing
+    if (isGroup) {
+      const onlineCount = selectedChat.participants?.filter(p => 
+        onlineUsers.has(p.user?._id || p.user)
+      ).length || 0;
+      return `${onlineCount} online • ${selectedChat.participants?.length || 0} members`;
+    }
+    
+    // For private chats
+    const friendId = selectedChat._id;
+    const status = userStatus[friendId]?.status || 'offline';
+    
+    if (status === 'online') {
+      return 'Online';
+    } else if (status === 'away') {
+      return 'Away';
+    } else {
+      return 'Offline';
+    }
+  };
+
+  // Message rendering
   const renderMessage = (msg, idx) => {
     const senderId = msg.sender?._id || msg.senderId;
     const isSent = senderId?.toString() === userId?.toString();
@@ -571,7 +572,7 @@ const getStatusText = () => {
             console.log('🎯 MANUAL TYPING TEST');
             handleTyping();
           }}
-          className="mt-2 px-2 py-1 bg-blue-500 rounded text-xs"
+          className="mt-2 px-2 py-1 bg-blue-500 rounded text-xs hover:bg-blue-600 transition-colors"
         >
           Test Typing
         </button>
@@ -598,7 +599,7 @@ const getStatusText = () => {
 
         <button
           onClick={() => setShowAdminPanel(true)}
-          className="p-3 bg-white/20 rounded-xl"
+          className="p-3 bg-white/20 rounded-xl hover:bg-white/30 transition-colors"
         >
           <Info className="w-5 h-5 text-white" />
         </button>
@@ -644,14 +645,14 @@ const getStatusText = () => {
             onKeyDown={handleKeyPress}
             disabled={isSending || !isConnected}
             placeholder={!isConnected ? "Connecting..." : isSending ? "Sending..." : "Type your message..."}
-            className="w-full pl-4 pr-12 py-3 bg-gray-700 border-2 border-blue-500/30 text-white rounded-2xl"
+            className="w-full pl-4 pr-12 py-3 bg-gray-700 border-2 border-blue-500/30 text-white rounded-2xl focus:border-blue-400 transition-colors"
           />
         </div>
         
         <button
           onClick={handleSendMessage}
           disabled={!newMessage.trim() || !isConnected || isSending}
-          className="p-3 bg-blue-600 text-white rounded-xl disabled:opacity-50"
+          className="p-3 bg-blue-600 text-white rounded-xl disabled:opacity-50 hover:bg-blue-700 transition-colors"
         >
           {isSending ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -670,7 +671,10 @@ const getStatusText = () => {
                 <h3 className="text-xl font-bold text-white">
                   {isGroup ? 'Group Settings' : 'User Info'} - {selectedChat.name}
                 </h3>
-                <button onClick={() => setShowAdminPanel(false)}>
+                <button 
+                  onClick={() => setShowAdminPanel(false)}
+                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+                >
                   <X className="w-5 h-5 text-white" />
                 </button>
               </div>
