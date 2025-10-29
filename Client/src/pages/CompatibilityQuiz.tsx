@@ -4,27 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { 
-  Heart, Users, LinkIcon, Crown, Sparkles, Timer, Trophy, 
-  Gamepad2, Camera, Volume2, VolumeX, Settings, Zap, Award,
-  Star, Target, TrendingUp, Clock, CheckCircle, PartyPopper,
-  MessageCircle, ThumbsUp, Flame, Medal, Users2, Brain,
-  Smile, Frown, Meh, Laugh, HeartCrack, Loader2, Share2,
-  Download, Image, Copy, Check, MapPin, Calendar, Music,
-  Coffee, Film, BookOpen, Utensils, Mountain, Palette,
-  Zap as Lightning, Moon, Sun, Wifi, WifiOff,
-  BarChart3, GitBranch, Eye, EyeOff, RotateCcw,
-  Smartphone, Monitor, ArrowDown, CopyIcon, ArrowLeft
+  Heart, Users, Crown, Sparkles, Timer, CheckCircle, Loader2, 
+  Share2, Check, CopyIcon, ArrowLeft, Wifi, WifiOff, 
+  Smartphone, Monitor, Settings, RotateCcw, Target, Brain
 } from "lucide-react";
-import html2canvas from "html2canvas";
 
 const socket = io(import.meta.env.VITE_API_URL || "http://localhost:3001", {
   transports: ['websocket', 'polling'],
@@ -101,17 +89,7 @@ const questions = [
   }
 ];
 
-// Advanced compatibility parameters
-const advancedCompatibilityFactors = {
-  communicationStyles: ["Direct", "Diplomatic", "Emotional", "Analytical"],
-  loveLanguages: ["Words of Affirmation", "Quality Time", "Gifts", "Acts of Service", "Physical Touch"],
-  conflictResolution: ["Confront immediately", "Take time to cool off", "Seek compromise", "Avoid conflict"],
-  futureGoals: ["Career-focused", "Family-oriented", "Travel and adventure", "Stability and security"],
-  energyLevels: ["Morning Person", "Night Owl", "All Day Energy", "Balanced"],
-  socialPreferences: ["Large Groups", "Small Circles", "One-on-One", "Mixed"]
-};
-
-// Create a separate component for the Join/Create screen to prevent re-renders
+// Create a separate component for the Join/Create screen
 const JoinCreateScreen = React.memo(({ 
   playerName, 
   setPlayerName, 
@@ -127,7 +105,6 @@ const JoinCreateScreen = React.memo(({
   const nameInputRef = useRef(null);
   const roomInputRef = useRef(null);
 
-  // Use useCallback to prevent function recreation on every render
   const handleCreateRoom = useCallback(() => {
     createRoom();
   }, [createRoom]);
@@ -155,45 +132,44 @@ const JoinCreateScreen = React.memo(({
   }, [playerName, roomId, handleCreateRoom, handleJoinRoom]);
 
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
+    <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-300 overflow-x-hidden ${
       darkMode 
         ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
         : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
     }`}>
-      {/* Settings Button */}
-      <div className="absolute top-2 md:top-4 left-2 md:left-4">
+      <div className="absolute top-4 left-4">
         <Button
           variant="ghost"
-          size={isMobile ? "sm" : "default"}
+          size="sm"
           onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
           className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
         >
-          <Settings className="w-4 h-4 md:w-5 md:h-5" />
+          <Settings className="w-4 h-4" />
         </Button>
       </div>
 
-      <Card className={`p-4 md:p-8 max-w-md w-full backdrop-blur-sm border transition-all duration-300 ${
+      <Card className={`p-6 max-w-md w-full backdrop-blur-sm border transition-all duration-300 ${
         darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
       }`}>
-        <div className="text-center mb-6 md:mb-8">
-          <div className="flex justify-center mb-4 md:mb-6">
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
             <div className="relative">
-              <Heart className="w-12 h-12 md:w-16 md:h-16 text-pink-500" />
-              <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-500 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-spin" />
+              <Heart className="w-12 h-12 text-pink-500" />
+              <Sparkles className="w-6 h-6 text-yellow-500 absolute -top-1 -right-1 animate-spin" />
             </div>
           </div>
           
-          <h1 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-            Advanced Compatibility
+          <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+            Compatibility Quiz
           </h1>
-          <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-            Discover your deep connection with someone special
+          <p className={`text-sm ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+            Discover your connection with someone special
           </p>
         </div>
 
-        <div className="space-y-3 md:space-y-4 mb-4 md:mb-6">
+        <div className="space-y-4 mb-6">
           <div>
-            <Label htmlFor="playerName" className="font-medium mb-1 md:mb-2 block text-sm md:text-base">
+            <Label htmlFor="playerName" className="font-medium mb-2 block">
               Your Name
             </Label>
             <Input
@@ -203,13 +179,13 @@ const JoinCreateScreen = React.memo(({
               value={playerName}
               onChange={handleNameChange}
               onKeyPress={handleKeyPress}
-              className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
+              className={`${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
               autoComplete="name"
             />
           </div>
           
           <div>
-            <Label htmlFor="roomId" className="font-medium mb-1 md:mb-2 block text-sm md:text-base">
+            <Label htmlFor="roomId" className="font-medium mb-2 block">
               Room Code (optional)
             </Label>
             <Input
@@ -219,52 +195,49 @@ const JoinCreateScreen = React.memo(({
               value={roomId}
               onChange={handleRoomIdChange}
               onKeyPress={handleKeyPress}
-              className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
+              className={`${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
               autoComplete="off"
             />
           </div>
         </div>
 
-        <div className="space-y-2 md:space-y-3">
+        <div className="space-y-3">
           <Button
             onClick={handleCreateRoom}
             disabled={!playerName.trim()}
-            size={isMobile ? "sm" : "lg"}
-            className="w-full py-3 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
+            size="lg"
+            className="w-full py-6 text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
           >
-            <Crown className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
+            <Crown className="w-5 h-5 mr-2" />
             Create New Room
           </Button>
 
           <Button
             onClick={handleJoinRoom}
             disabled={!playerName.trim() || !roomId.trim()}
-            size={isMobile ? "sm" : "lg"}
-            className="w-full py-3 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white disabled:opacity-50 transition-all"
+            size="lg"
+            className="w-full py-6 text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white disabled:opacity-50 transition-all"
           >
-            <Users className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
+            <Users className="w-5 h-5 mr-2" />
             Join Existing Room
           </Button>
         </div>
 
-        <div className={`mt-4 md:mt-6 p-3 md:p-4 rounded-lg border ${
+        <div className={`mt-6 p-4 rounded-lg border ${
           darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
         }`}>
-          <h4 className="font-semibold mb-1 md:mb-2 flex items-center justify-center text-sm md:text-base">
-            <Sparkles className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2 text-yellow-500" />
-            Advanced Features
+          <h4 className="font-semibold mb-2 flex items-center justify-center">
+            <Sparkles className="w-4 h-4 mr-2 text-yellow-500" />
+            Features
           </h4>
-          <ul className="text-xs md:text-sm space-y-0.5 md:space-y-1 text-left">
-            <li>• Personality-based matching algorithm</li>
-            <li>• Advanced compatibility factors</li>
+          <ul className="text-sm space-y-1 text-left">
+            <li>• Personality-based matching</li>
             <li>• Real-time progress tracking</li>
-            <li>• Interactive results with insights</li>
-            <li>• Dark/Light mode support</li>
-            <li>• Mobile & Desktop optimized</li>
+            <li>• Interactive results</li>
+            <li>• Mobile optimized</li>
           </ul>
         </div>
 
-        {/* Device Indicator */}
         <div className="mt-3 text-center">
           <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
             darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
@@ -287,7 +260,7 @@ const JoinCreateScreen = React.memo(({
   );
 });
 
-// NEW: Waiting Screen Component
+// Waiting Screen Component
 const WaitingScreen = React.memo(({ 
   roomId, 
   players, 
@@ -296,12 +269,10 @@ const WaitingScreen = React.memo(({
   darkMode, 
   isMobile, 
   startGame, 
-  soundEnabled,
   connectionStatus,
   onLeaveRoom 
 }) => {
   const [copied, setCopied] = useState(false);
-  const [showShareOptions, setShowShareOptions] = useState(false);
 
   const copyRoomCode = useCallback(() => {
     navigator.clipboard.writeText(roomId).then(() => {
@@ -328,44 +299,36 @@ const WaitingScreen = React.memo(({
     }
   }, [roomId, copyRoomCode]);
 
-  const leaveRoom = useCallback(() => {
-    if (onLeaveRoom) {
-      onLeaveRoom();
-    }
-  }, [onLeaveRoom]);
-
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 ${
+    <div className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-300 ${
       darkMode 
         ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
         : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
     }`}>
-      <Card className={`p-4 md:p-8 max-w-2xl w-full backdrop-blur-sm border transition-all duration-300 ${
+      <Card className={`p-6 max-w-2xl w-full backdrop-blur-sm border transition-all duration-300 ${
         darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
       }`}>
-        {/* Header */}
-        <div className="text-center mb-6 md:mb-8">
-          <div className="flex justify-center mb-4 md:mb-6">
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
             <div className="relative">
-              <Heart className="w-12 h-12 md:w-16 md:h-16 text-pink-500" />
-              <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-500 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-pulse" />
+              <Heart className="w-12 h-12 text-pink-500" />
+              <Sparkles className="w-6 h-6 text-yellow-500 absolute -top-1 -right-1 animate-pulse" />
             </div>
           </div>
           
-          <h1 className="text-2xl md:text-4xl font-bold mb-2 md:mb-4 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold mb-4 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
             Waiting Room
           </h1>
-          <p className={`text-sm md:text-base mb-4 md:mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-            Share the room code with your partner to start the compatibility test
+          <p className={`text-base mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+            Share the room code with your partner
           </p>
 
-          {/* Room Code Section */}
-          <div className="mb-6 md:mb-8">
-            <div className="flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4">
-              <div className={`px-4 md:px-6 py-2 md:py-3 rounded-lg border-2 ${
+          <div className="mb-8">
+            <div className="flex flex-col md:flex-row items-center justify-center gap-4">
+              <div className={`px-6 py-3 rounded-lg border-2 ${
                 darkMode ? 'bg-slate-700 border-purple-500' : 'bg-white border-purple-400'
               }`}>
-                <span className={`text-lg md:text-2xl font-bold font-mono ${
+                <span className={`text-2xl font-bold font-mono ${
                   darkMode ? 'text-white' : 'text-gray-900'
                 }`}>
                   {roomId}
@@ -374,7 +337,6 @@ const WaitingScreen = React.memo(({
               <div className="flex gap-2">
                 <Button
                   onClick={copyRoomCode}
-                  size={isMobile ? "sm" : "default"}
                   className={`${darkMode ? 'bg-purple-600 hover:bg-purple-700' : 'bg-purple-500 hover:bg-purple-600'} text-white`}
                 >
                   {copied ? <Check className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
@@ -382,7 +344,6 @@ const WaitingScreen = React.memo(({
                 </Button>
                 <Button
                   onClick={shareRoom}
-                  size={isMobile ? "sm" : "default"}
                   variant={darkMode ? "outline" : "secondary"}
                 >
                   <Share2 className="w-4 h-4" />
@@ -393,26 +354,25 @@ const WaitingScreen = React.memo(({
           </div>
         </div>
 
-        {/* Players List */}
-        <div className="mb-6 md:mb-8">
-          <h2 className={`text-lg md:text-xl font-semibold mb-3 md:mb-4 text-center ${
+        <div className="mb-8">
+          <h2 className={`text-xl font-semibold mb-4 text-center ${
             darkMode ? 'text-white' : 'text-gray-900'
           }`}>
             Players ({players.length}/2)
           </h2>
           
-          <div className="space-y-2 md:space-y-3">
+          <div className="space-y-3">
             {players.map((player, index) => (
               <div
                 key={player.name || index}
-                className={`flex items-center justify-between p-3 md:p-4 rounded-lg border ${
+                className={`flex items-center justify-between p-4 rounded-lg border ${
                   darkMode 
                     ? 'bg-slate-700/50 border-slate-600' 
                     : 'bg-white/50 border-gray-200'
                 } ${player.name === playerName ? 'ring-2 ring-purple-500' : ''}`}
               >
-                <div className="flex items-center space-x-3 md:space-x-4">
-                  <Avatar className="w-8 h-8 md:w-10 md:h-10">
+                <div className="flex items-center space-x-4">
+                  <Avatar className="w-10 h-10">
                     <AvatarFallback className={`${
                       darkMode ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
                     }`}>
@@ -420,13 +380,11 @@ const WaitingScreen = React.memo(({
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <span className={`font-medium text-sm md:text-base ${
-                      darkMode ? 'text-white' : 'text-gray-900'
-                    }`}>
+                    <span className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                       {player.name}
                     </span>
                     {player.name === playerName && (
-                      <Badge variant="secondary" className="ml-2 text-xs">
+                      <Badge variant="secondary" className="ml-2">
                         You
                       </Badge>
                     )}
@@ -437,7 +395,7 @@ const WaitingScreen = React.memo(({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
-                        <Crown className="w-5 h-5 md:w-6 md:h-6 text-yellow-500" />
+                        <Crown className="w-5 h-5 text-yellow-500" />
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Room Host</p>
@@ -448,31 +406,29 @@ const WaitingScreen = React.memo(({
               </div>
             ))}
             
-            {/* Empty player slots */}
             {Array.from({ length: 2 - players.length }).map((_, index) => (
               <div
                 key={`empty-${index}`}
-                className={`flex items-center p-3 md:p-4 rounded-lg border border-dashed ${
+                className={`flex items-center p-4 rounded-lg border border-dashed ${
                   darkMode 
                     ? 'bg-slate-700/30 border-slate-500 text-slate-400' 
                     : 'bg-gray-50 border-gray-300 text-gray-500'
                 }`}
               >
-                <div className="flex items-center space-x-3 md:space-x-4">
-                  <Avatar className="w-8 h-8 md:w-10 md:h-10">
+                <div className="flex items-center space-x-4">
+                  <Avatar className="w-10 h-10">
                     <AvatarFallback className={darkMode ? 'bg-slate-600' : 'bg-gray-200'}>
                       ?
                     </AvatarFallback>
                   </Avatar>
-                  <span className="text-sm md:text-base">Waiting for player...</span>
+                  <span>Waiting for player...</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Connection Status */}
-        <div className={`mb-4 md:mb-6 p-3 rounded-lg text-center ${
+        <div className={`mb-6 p-3 rounded-lg text-center ${
           connectionStatus === "connected" 
             ? (darkMode ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-700')
             : (darkMode ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-700')
@@ -481,83 +437,59 @@ const WaitingScreen = React.memo(({
             {connectionStatus === "connected" ? (
               <>
                 <Wifi className="w-4 h-4" />
-                <span className="text-sm">Connected to server</span>
+                <span>Connected to server</span>
               </>
             ) : (
               <>
                 <WifiOff className="w-4 h-4" />
-                <span className="text-sm">Connecting to server...</span>
+                <span>Connecting to server...</span>
               </>
             )}
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="space-y-3 md:space-y-4">
+        <div className="space-y-4">
           {isHost && (
             <Button
               onClick={startGame}
               disabled={players.length < 2}
-              size={isMobile ? "lg" : "lg"}
-              className="w-full py-3 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
+              size="lg"
+              className="w-full py-6 text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
             >
-              <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+              <Sparkles className="w-5 h-5 mr-2" />
               Start Compatibility Test
               {players.length < 2 && ` (${2 - players.length} more needed)`}
             </Button>
           )}
           
           {!isHost && (
-            <div className={`p-3 md:p-4 rounded-lg text-center ${
+            <div className={`p-4 rounded-lg text-center ${
               darkMode ? 'bg-slate-700/50 text-slate-300' : 'bg-gray-100 text-gray-600'
             }`}>
               <div className="flex items-center justify-center space-x-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm md:text-base">
-                  Waiting for host to start the game...
-                </span>
+                <span>Waiting for host to start the game...</span>
               </div>
             </div>
           )}
 
           <Button
-            onClick={leaveRoom}
+            onClick={onLeaveRoom}
             variant={darkMode ? "outline" : "secondary"}
-            size={isMobile ? "sm" : "default"}
             className="w-full"
           >
             Leave Room
           </Button>
-        </div>
-
-        {/* Game Info */}
-        <div className={`mt-4 md:mt-6 p-3 md:p-4 rounded-lg border ${
-          darkMode ? 'bg-slate-700/30 border-slate-600' : 'bg-white/50 border-gray-200'
-        }`}>
-          <h4 className="font-semibold mb-2 md:mb-3 flex items-center justify-center text-sm md:text-base">
-            <Brain className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-500" />
-            What to Expect
-          </h4>
-          <ul className={`text-xs md:text-sm space-y-1 md:space-y-2 text-left ${
-            darkMode ? 'text-slate-300' : 'text-gray-600'
-          }`}>
-            <li>• 5 personality-based questions</li>
-            <li>• Advanced compatibility analysis</li>
-            <li>• Real-time results comparison</li>
-            <li>• Detailed insights and recommendations</li>
-            <li>• Fun, interactive experience</li>
-          </ul>
         </div>
       </Card>
     </div>
   );
 });
 
-// NEW: Game Screen Component
+// Game Screen Component
 const GameScreen = React.memo(({
   currentQuestion,
   currentAnswer,
-  setCurrentAnswer,
   questions,
   timeLeft,
   playerProgress,
@@ -571,9 +503,7 @@ const GameScreen = React.memo(({
   onLeaveRoom
 }) => {
   const questionContainerRef = useRef(null);
-  const optionsContainerRef = useRef(null);
 
-  // Auto-scroll to question on mobile
   useEffect(() => {
     if (isMobile && questionContainerRef.current) {
       setTimeout(() => {
@@ -585,10 +515,6 @@ const GameScreen = React.memo(({
     }
   }, [currentQuestion, isMobile]);
 
-  const handleOptionSelect = (option) => {
-    onOptionSelect(option);
-  };
-
   const handleSubmit = () => {
     if (currentAnswer && !isSubmitting) {
       onSubmitAnswer();
@@ -598,14 +524,13 @@ const GameScreen = React.memo(({
   const currentQuestionData = questions[currentQuestion];
 
   return (
-    <div className={`min-h-screen p-3 md:p-6 transition-colors duration-300 ${
+    <div className={`min-h-screen p-4 transition-colors duration-300 overflow-y-auto ${
       darkMode 
         ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
         : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
     }`}>
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 md:mb-8 gap-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
           <div className="flex items-center space-x-3">
             <Button
               variant="ghost"
@@ -623,7 +548,6 @@ const GameScreen = React.memo(({
             </div>
           </div>
 
-          {/* Timer */}
           {timeLeft !== null && (
             <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
               darkMode ? 'bg-slate-700' : 'bg-white'
@@ -636,8 +560,7 @@ const GameScreen = React.memo(({
           )}
         </div>
 
-        {/* Progress Bar */}
-        <div className="mb-6 md:mb-8">
+        <div className="mb-8">
           <div className="flex justify-between items-center mb-2">
             <span className={`text-sm ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
               Progress
@@ -652,11 +575,9 @@ const GameScreen = React.memo(({
           />
         </div>
 
-        {/* Main Game Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-          {/* Left Column - Players */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1">
-            <Card className={`p-4 md:p-6 backdrop-blur-sm border ${
+            <Card className={`p-6 backdrop-blur-sm border ${
               darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
             }`}>
               <h3 className={`text-lg font-semibold mb-4 flex items-center ${
@@ -710,13 +631,11 @@ const GameScreen = React.memo(({
             </Card>
           </div>
 
-          {/* Right Column - Question & Options */}
           <div className="lg:col-span-2">
-            <Card className={`p-4 md:p-6 backdrop-blur-sm border ${
+            <Card className={`p-6 backdrop-blur-sm border ${
               darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
             }`} ref={questionContainerRef}>
-              {/* Question */}
-              <div className="mb-6 md:mb-8">
+              <div className="mb-8">
                 <div className="flex items-center space-x-2 mb-3">
                   <Badge variant={darkMode ? "secondary" : "default"} className="mb-2">
                     {currentQuestionData.category}
@@ -726,7 +645,7 @@ const GameScreen = React.memo(({
                   </Badge>
                 </div>
                 
-                <h2 className={`text-xl md:text-2xl font-bold mb-4 leading-relaxed ${
+                <h2 className={`text-2xl font-bold mb-4 leading-relaxed ${
                   darkMode ? 'text-white' : 'text-gray-900'
                 }`}>
                   {currentQuestionData.question}
@@ -737,13 +656,12 @@ const GameScreen = React.memo(({
                 </div>
               </div>
 
-              {/* Options */}
-              <div className="space-y-3 mb-6 md:mb-8" ref={optionsContainerRef}>
+              <div className="space-y-3 mb-8">
                 {currentQuestionData.options.map((option, index) => (
                   <div
                     key={index}
-                    onClick={() => handleOptionSelect(option)}
-                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 option-item ${
+                    onClick={() => onOptionSelect(option)}
+                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
                       currentAnswer === option
                         ? darkMode 
                           ? 'bg-purple-600 border-purple-500 text-white scale-105 shadow-lg' 
@@ -754,7 +672,7 @@ const GameScreen = React.memo(({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-sm md:text-base">{option}</span>
+                      <span className="font-medium">{option}</span>
                       {currentAnswer === option && (
                         <CheckCircle className="w-5 h-5" />
                       )}
@@ -763,12 +681,11 @@ const GameScreen = React.memo(({
                 ))}
               </div>
 
-              {/* Submit Button */}
               <Button
                 onClick={handleSubmit}
                 disabled={!currentAnswer || isSubmitting}
                 size="lg"
-                className="w-full py-3 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
+                className="w-full py-6 text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
               >
                 {isSubmitting ? (
                   <>
@@ -783,7 +700,6 @@ const GameScreen = React.memo(({
                 )}
               </Button>
 
-              {/* Progress Indicator */}
               <div className="mt-4 text-center">
                 <div className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-xs ${
                   darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
@@ -802,7 +718,7 @@ const GameScreen = React.memo(({
   );
 });
 
-// NEW: Results Screen Component
+// Results Screen Component
 const ResultsScreen = React.memo(({
   bothAnswers,
   players,
@@ -812,19 +728,14 @@ const ResultsScreen = React.memo(({
   onPlayAgain,
   onLeaveRoom
 }) => {
-  const [activeTab, setActiveTab] = useState("overview");
   const [copied, setCopied] = useState(false);
-  const resultsContainerRef = useRef(null);
 
-  // Calculate compatibility
   const compatibility = React.useMemo(() => {
     if (!bothAnswers || typeof bothAnswers !== 'object') {
       return { 
         score: 0, 
         breakdown: {}, 
-        insights: ["No results available yet"], 
-        advancedAnalysis: {}, 
-        advancedFactors: {} 
+        insights: ["No results available yet"]
       };
     }
 
@@ -833,9 +744,7 @@ const ResultsScreen = React.memo(({
       return { 
         score: 0, 
         breakdown: {}, 
-        insights: ["Waiting for both players to complete the test"], 
-        advancedAnalysis: {}, 
-        advancedFactors: {} 
+        insights: ["Waiting for both players to complete the test"]
       };
     }
 
@@ -864,25 +773,20 @@ const ResultsScreen = React.memo(({
 
     const finalScore = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0;
 
-    // Generate insights based on score
     if (finalScore >= 95) {
       insights.push("💖 Cosmic Connection! You're practically soulmates");
-      insights.push("✨ Perfect harmony in values, communication, and lifestyle");
+      insights.push("✨ Perfect harmony in values and lifestyle");
     } else if (finalScore >= 85) {
       insights.push("🌟 Exceptional Match! Your connection is deep and natural");
-      insights.push("⭐ Strong alignment in core values and life goals");
+      insights.push("⭐ Strong alignment in core values");
     } else if (finalScore >= 75) {
       insights.push("💫 Great Chemistry! You complement each other beautifully");
-      insights.push("🎯 Good balance of similarities and complementary differences");
     } else if (finalScore >= 65) {
       insights.push("🌈 Strong Potential! With understanding, this could flourish");
-      insights.push("💡 Your differences create opportunities for growth");
     } else if (finalScore >= 50) {
       insights.push("🎭 Interesting Dynamic! You challenge and inspire each other");
-      insights.push("🌱 Unique combination with room for beautiful development");
     } else {
       insights.push("🌀 Unconventional Match! You bring fresh perspectives");
-      insights.push("⚡ Your differences create exciting, unpredictable chemistry");
     }
 
     return {
@@ -893,28 +797,6 @@ const ResultsScreen = React.memo(({
       player2: p2
     };
   }, [bothAnswers]);
-
-  const copyResults = async () => {
-    const resultsText = `
-Compatibility Results: ${compatibility.score}%
-
-Players: ${compatibility.player1} & ${compatibility.player2}
-
-Key Insights:
-${compatibility.insights.join('\n')}
-
-Breakdown:
-${Object.entries(compatibility.breakdown).map(([category, score]) => `${category}: ${score}`).join('\n')}
-    `.trim();
-
-    try {
-      await navigator.clipboard.writeText(resultsText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy results');
-    }
-  };
 
   const shareResults = async () => {
     const shareData = {
@@ -927,7 +809,9 @@ ${Object.entries(compatibility.breakdown).map(([category, score]) => `${category
       if (navigator.share) {
         await navigator.share(shareData);
       } else {
-        copyResults();
+        await navigator.clipboard.writeText(`Compatibility Score: ${compatibility.score}%`);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
       }
     } catch (error) {
       console.log('Sharing cancelled');
@@ -935,43 +819,42 @@ ${Object.entries(compatibility.breakdown).map(([category, score]) => `${category
   };
 
   return (
-    <div className={`min-h-screen p-3 md:p-6 transition-colors duration-300 ${
+    <div className={`min-h-screen p-4 transition-colors duration-300 overflow-y-auto ${
       darkMode 
         ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
         : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
     }`}>
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8 md:mb-12">
-          <div className="flex justify-center mb-4 md:mb-6">
+        <div className="text-center mb-12">
+          <div className="flex justify-center mb-6">
             <div className="relative">
-              <Heart className="w-16 h-16 md:w-20 md:h-20 text-pink-500" />
-              <Sparkles className="w-8 h-8 md:w-10 md:h-10 text-yellow-500 absolute -top-2 -right-2 animate-pulse" />
+              <Heart className="w-20 h-20 text-pink-500" />
+              <Sparkles className="w-10 h-10 text-yellow-500 absolute -top-2 -right-2 animate-pulse" />
             </div>
           </div>
           
-          <h1 className="text-3xl md:text-5xl font-bold mb-4 md:mb-6 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+          <h1 className="text-5xl font-bold mb-6 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
             Compatibility Results
           </h1>
           
-          <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 mb-6 md:mb-8">
+          <div className="flex flex-col md:flex-row items-center justify-center gap-8 mb-8">
             {players.map((player, index) => (
               <div key={player.name} className="flex items-center space-x-3">
-                <Avatar className="w-12 h-12 md:w-16 md:h-16">
+                <Avatar className="w-16 h-16">
                   <AvatarFallback className={`text-lg ${
                     darkMode ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
                   }`}>
                     {player.name.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <span className={`text-lg md:text-xl font-semibold ${
+                <span className={`text-xl font-semibold ${
                   darkMode ? 'text-white' : 'text-gray-900'
                 }`}>
                   {player.name}
                 </span>
               </div>
             ))}
-            <div className={`text-2xl md:text-3xl font-bold ${
+            <div className={`text-3xl font-bold ${
               darkMode ? 'text-white' : 'text-gray-900'
             }`}>
               &
@@ -979,15 +862,13 @@ ${Object.entries(compatibility.breakdown).map(([category, score]) => `${category
           </div>
         </div>
 
-        {/* Main Score Card */}
-        <Card className={`p-6 md:p-8 backdrop-blur-sm border mb-6 md:mb-8 ${
+        <Card className={`p-8 backdrop-blur-sm border mb-8 ${
           darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
         }`}>
           <div className="text-center">
-            {/* Score Circle */}
-            <div className="relative inline-block mb-6 md:mb-8">
+            <div className="relative inline-block mb-8">
               <div className="relative">
-                <div className={`w-32 h-32 md:w-40 md:h-40 rounded-full border-8 flex items-center justify-center ${
+                <div className={`w-40 h-40 rounded-full border-8 flex items-center justify-center ${
                   compatibility.score >= 80 
                     ? 'border-green-500' 
                     : compatibility.score >= 60 
@@ -995,7 +876,7 @@ ${Object.entries(compatibility.breakdown).map(([category, score]) => `${category
                     : 'border-red-500'
                 }`}>
                   <div className="text-center">
-                    <div className={`text-3xl md:text-4xl font-bold ${
+                    <div className={`text-4xl font-bold ${
                       darkMode ? 'text-white' : 'text-gray-900'
                     }`}>
                       {compatibility.score}%
@@ -1010,16 +891,15 @@ ${Object.entries(compatibility.breakdown).map(([category, score]) => `${category
               </div>
             </div>
 
-            {/* Insights */}
-            <div className="space-y-3 md:space-y-4 mb-6 md:mb-8">
+            <div className="space-y-4 mb-8">
               {compatibility.insights.map((insight, index) => (
                 <div
                   key={index}
-                  className={`p-3 md:p-4 rounded-lg border ${
+                  className={`p-4 rounded-lg border ${
                     darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white border-gray-200'
                   }`}
                 >
-                  <p className={`text-sm md:text-base text-center ${
+                  <p className={`text-base text-center ${
                     darkMode ? 'text-slate-300' : 'text-gray-700'
                   }`}>
                     {insight}
@@ -1028,8 +908,7 @@ ${Object.entries(compatibility.breakdown).map(([category, score]) => `${category
               ))}
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col md:flex-row gap-3 md:gap-4 justify-center">
+            <div className="flex flex-col md:flex-row gap-4 justify-center">
               <Button
                 onClick={onPlayAgain}
                 size="lg"
@@ -1045,7 +924,7 @@ ${Object.entries(compatibility.breakdown).map(([category, score]) => `${category
                 size="lg"
               >
                 <Share2 className="w-5 h-5 mr-2" />
-                Share Results
+                {copied ? "Copied!" : "Share Results"}
               </Button>
               
               <Button
@@ -1060,17 +939,16 @@ ${Object.entries(compatibility.breakdown).map(([category, score]) => `${category
           </div>
         </Card>
 
-        {/* Detailed Breakdown */}
-        <Card className={`p-6 md:p-8 backdrop-blur-sm border ${
+        <Card className={`p-8 backdrop-blur-sm border ${
           darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
         }`}>
-          <h3 className={`text-xl md:text-2xl font-bold mb-6 text-center ${
+          <h3 className={`text-2xl font-bold mb-6 text-center ${
             darkMode ? 'text-white' : 'text-gray-900'
           }`}>
             Detailed Breakdown
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {Object.entries(compatibility.breakdown).map(([category, score]) => (
               <div
                 key={category}
@@ -1109,58 +987,37 @@ export default function AdvancedCompatibilityGame() {
   const [playerName, setPlayerName] = useState("");
   const [isHost, setIsHost] = useState(false);
   const [joined, setJoined] = useState(false);
-  const [players, setPlayers] = useState<any[]>([]);
+  const [players, setPlayers] = useState([]);
   const [gameStarted, setGameStarted] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Game states
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
-  const [answers, setAnswers] = useState<any[]>([]);
-  const [bothAnswers, setBothAnswers] = useState<any>({});
+  const [answers, setAnswers] = useState([]);
+  const [bothAnswers, setBothAnswers] = useState({});
   const [showResults, setShowResults] = useState(false);
-  const [playerProgress, setPlayerProgress] = useState<{[key: string]: number}>({});
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [playerReactions, setPlayerReactions] = useState<{[key: string]: string}>({});
+  const [playerProgress, setPlayerProgress] = useState({});
+  const [timeLeft, setTimeLeft] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState("connected");
-
-  // Advanced states
-  const [advancedAnswers, setAdvancedAnswers] = useState({
-    communicationStyle: "",
-    loveLanguage: "",
-    conflictStyle: "",
-    futureGoal: "",
-    energyLevel: "",
-    socialPreference: "",
-    personalityTraits: [] as string[]
-  });
 
   // UI/UX states
   const [darkMode, setDarkMode] = useState(true);
-  const [animationsEnabled, setAnimationsEnabled] = useState(true);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  const [activeTab, setActiveTab] = useState("basic");
-  const [typingIndicator, setTypingIndicator] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [gameState, setGameState] = useState<any>(null);
 
   // Refs
-  const submitTimeoutRef = useRef<NodeJS.Timeout>();
+  const submitTimeoutRef = useRef();
 
   // Mobile detection
   useEffect(() => {
     const checkMobile = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
+      setIsMobile(window.innerWidth < 768);
     };
 
     checkMobile();
     window.addEventListener('resize', checkMobile);
-
-    return () => {
-      window.removeEventListener('resize', checkMobile);
-    };
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   // State persistence
@@ -1173,7 +1030,6 @@ export default function AdvancedCompatibilityGame() {
         setRoomId(state.roomId || '');
         setDarkMode(state.darkMode !== undefined ? state.darkMode : true);
       } catch (error) {
-        console.error('Error loading saved state:', error);
         localStorage.removeItem('compatibilityGameState');
       }
     }
@@ -1181,23 +1037,17 @@ export default function AdvancedCompatibilityGame() {
 
   // Auto-save
   useEffect(() => {
-    try {
-      const state = {
-        playerName,
-        roomId,
-        darkMode,
-        joined,
-        gameStarted,
-        currentQuestion,
-        answers,
-        advancedAnswers,
-        gameState
-      };
-      localStorage.setItem('compatibilityGameState', JSON.stringify(state));
-    } catch (error) {
-      console.error('Error saving state:', error);
-    }
-  }, [playerName, roomId, darkMode, joined, gameStarted, currentQuestion, answers, advancedAnswers, gameState]);
+    const state = {
+      playerName,
+      roomId,
+      darkMode,
+      joined,
+      gameStarted,
+      currentQuestion,
+      answers,
+    };
+    localStorage.setItem('compatibilityGameState', JSON.stringify(state));
+  }, [playerName, roomId, darkMode, joined, gameStarted, currentQuestion, answers]);
 
   // Socket connection management
   useEffect(() => {
@@ -1213,10 +1063,7 @@ export default function AdvancedCompatibilityGame() {
     const handleReconnect = () => {
       setConnectionStatus("connected");
       if (joined && roomId && playerName) {
-        socket.emit("rejoin-room", { 
-          roomId, 
-          playerName 
-        });
+        socket.emit("rejoin-room", { roomId, playerName });
       }
     };
 
@@ -1233,21 +1080,19 @@ export default function AdvancedCompatibilityGame() {
 
   // Socket event handlers
   useEffect(() => {
-    const handleRoomCreated = (room: any) => {
+    const handleRoomCreated = (room) => {
       if (!room) return;
       setRoomId(room.roomId || '');
       setIsHost(true);
       setJoined(true);
       setPlayers(room.players || []);
-      setGameState(room.gameState || null);
     };
 
-    const handleRoomJoined = (room: any) => {
+    const handleRoomJoined = (room) => {
       if (!room) return;
       setRoomId(room.roomId || '');
       setPlayers(room.players || []);
       setJoined(true);
-      setGameState(room.gameState || null);
       
       if (room.gameState?.gameStarted) {
         setGameStarted(true);
@@ -1256,12 +1101,12 @@ export default function AdvancedCompatibilityGame() {
       }
     };
 
-    const handleUpdatePlayers = (playersList: any[]) => {
+    const handleUpdatePlayers = (playersList) => {
       if (!Array.isArray(playersList)) return;
       setPlayers(playersList);
     };
 
-    const handlePlayerProgress = (data: {player: string, progress: number}) => {
+    const handlePlayerProgress = (data) => {
       if (!data || !data.player) return;
       setPlayerProgress(prev => ({
         ...prev,
@@ -1269,48 +1114,33 @@ export default function AdvancedCompatibilityGame() {
       }));
     };
 
-    const handleGameStarted = (gameState: any) => {
+    const handleGameStarted = () => {
       setGameStarted(true);
       setCurrentQuestion(0);
       setAnswers([]);
       setCurrentAnswer("");
       setBothAnswers({});
-      setAdvancedAnswers({
-        communicationStyle: "",
-        loveLanguage: "",
-        conflictStyle: "",
-        futureGoal: "",
-        energyLevel: "",
-        socialPreference: "",
-        personalityTraits: []
-      });
-      setGameState(gameState || null);
+      setShowResults(false);
+      setTimeLeft(30);
     };
 
-    const handleQuestionChanged = (data: any) => {
+    const handleQuestionChanged = (data) => {
       if (!data) return;
       setCurrentQuestion(data.questionIndex || 0);
-      setTimeLeft(data.timeLeft || 25);
-      setGameState(data.gameState || null);
+      setTimeLeft(data.timeLeft || 30);
     };
 
-    const handleShowResults = (data: any) => {
+    const handleShowResults = (data) => {
       const safeData = data || {};
       const results = safeData.results || safeData || {};
       
-      if (typeof results !== 'object' || results === null) {
-        setBothAnswers({});
-      } else {
-        setBothAnswers(results);
-      }
-      
+      setBothAnswers(results);
       setShowResults(true);
       setIsSubmitting(false);
-      setGameState(safeData.gameState || null);
     };
 
-    const handleGameStateUpdate = (newGameState: any) => {
-      setGameState(newGameState || null);
+    const handleAnswersUpdate = (data) => {
+      console.log('Answers update:', data);
     };
 
     // Register event listeners
@@ -1321,7 +1151,7 @@ export default function AdvancedCompatibilityGame() {
     socket.on("game-started", handleGameStarted);
     socket.on("question-changed", handleQuestionChanged);
     socket.on("show-results", handleShowResults);
-    socket.on("game-state-update", handleGameStateUpdate);
+    socket.on("answers-update", handleAnswersUpdate);
 
     return () => {
       socket.off("room-created", handleRoomCreated);
@@ -1331,7 +1161,7 @@ export default function AdvancedCompatibilityGame() {
       socket.off("game-started", handleGameStarted);
       socket.off("question-changed", handleQuestionChanged);
       socket.off("show-results", handleShowResults);
-      socket.off("game-state-update", handleGameStateUpdate);
+      socket.off("answers-update", handleAnswersUpdate);
     };
   }, []);
 
@@ -1354,7 +1184,7 @@ export default function AdvancedCompatibilityGame() {
   const handleAutoSubmit = () => {
     if (currentAnswer) {
       submitAnswer();
-    } else {
+    } else if (questions[currentQuestion]?.options?.length > 0) {
       const randomOption = questions[currentQuestion].options[
         Math.floor(Math.random() * questions[currentQuestion].options.length)
       ];
@@ -1366,7 +1196,7 @@ export default function AdvancedCompatibilityGame() {
       
       submitTimeoutRef.current = setTimeout(() => {
         submitAnswer();
-      }, 800);
+      }, 1000);
     }
   };
 
@@ -1380,7 +1210,7 @@ export default function AdvancedCompatibilityGame() {
     
     socket.emit("create-room", { 
       player: { name: trimmedName },
-      gameType: "advanced-compatibility"
+      gameType: "compatibility"
     });
   }, [playerName]);
 
@@ -1430,36 +1260,40 @@ export default function AdvancedCompatibilityGame() {
     const progress = Math.round(((currentQuestion + 1) / questions.length) * 100);
     socket.emit("player-progress", { roomId, progress });
 
+    // Use setTimeout to ensure state updates are processed
     setTimeout(() => {
       if (currentQuestion < questions.length - 1) {
+        // Move to next question
         socket.emit("answer-submitted", {
           roomId,
           playerName,
           questionIndex: currentQuestion,
-          answer: currentAnswer,
-          advancedAnswers: currentQuestion === questions.length - 1 ? advancedAnswers : null
+          answer: currentAnswer
         });
         
         setCurrentQuestion(prev => prev + 1);
         setCurrentAnswer("");
         setIsSubmitting(false);
+        setTimeLeft(30);
       } else {
+        // Submit final answers
         socket.emit("submit-answers", { 
           roomId, 
           player: { name: playerName }, 
-          answers: newAnswers,
-          advancedAnswers
+          answers: newAnswers
         });
+        
+        // Don't reset isSubmitting here - wait for results
       }
-    }, 400);
+    }, 500);
   };
 
-  const handleOptionSelect = (option: string) => {
+  const handleOptionSelect = (option) => {
     setCurrentAnswer(option);
   };
 
   const leaveRoom = useCallback(() => {
-    socket.emit("leave-room", { roomId });
+    socket.emit("leave-room", roomId);
     setJoined(false);
     setGameStarted(false);
     setShowResults(false);
@@ -1507,7 +1341,6 @@ export default function AdvancedCompatibilityGame() {
       <GameScreen
         currentQuestion={currentQuestion}
         currentAnswer={currentAnswer}
-        setCurrentAnswer={setCurrentAnswer}
         questions={questions}
         timeLeft={timeLeft}
         playerProgress={playerProgress}
@@ -1533,7 +1366,6 @@ export default function AdvancedCompatibilityGame() {
         darkMode={darkMode}
         isMobile={isMobile}
         startGame={startGame}
-        soundEnabled={soundEnabled}
         connectionStatus={connectionStatus}
         onLeaveRoom={leaveRoom}
       />

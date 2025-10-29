@@ -6,7 +6,7 @@ import GroupJoinRequest from "../models/GroupJoinRequest.js";
 
 
 
-// ✅ FIXED: Send private message - UPDATED VERSION
+// ✅ IMPROVED: Send message with immediate DB storage and real-time delivery
 export const sendMessage = async (req, res) => {
   try {
     const senderId = req.user._id;
@@ -16,21 +16,16 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    console.log('📤 Sending message from:', senderId, 'to:', receiverId);
-
-    // ✅ FIXED: Better chat room query
+    // Find or create chat room
     let chatRoom = await ChatRoom.findOne({
       type: "direct",
-      participants: {
-        $all: [
-          { $elemMatch: { user: senderId } },
-          { $elemMatch: { user: receiverId } }
-        ]
-      }
+      $and: [
+        { "participants.user": senderId },
+        { "participants.user": receiverId },
+      ],
     });
 
     if (!chatRoom) {
-      console.log('✅ Creating new chat room');
       chatRoom = new ChatRoom({
         type: "direct",
         participants: [
@@ -42,9 +37,7 @@ export const sendMessage = async (req, res) => {
       await chatRoom.save();
     }
 
-    console.log('✅ Using chat room:', chatRoom._id);
-
-    // Create and save message
+    // ✅ Create and save message immediately
     const newMessage = new Message({
       chatRoom: chatRoom._id,
       sender: senderId,
@@ -66,39 +59,105 @@ export const sendMessage = async (req, res) => {
       .populate("sender", "name profilePicture")
       .lean();
 
-    // ✅ FIXED: Room ID for real-time
-    const roomId = `private_${chatRoom._id}`;
+    // ✅ Enhanced message object for real-time
     const messageForRealTime = {
       ...populatedMessage,
       senderId: senderId,
-      receiverId: receiverId, // ✅ CRITICAL for frontend filtering
-      roomId: roomId,
-      chatRoom: chatRoom._id, // ✅ CRITICAL for frontend filtering
-      isRealTime: true,
-      chatType: 'private'
+      roomId: `private_${chatRoom._id}`,
+      isRealTime: false
     };
 
-    console.log('📨 Emitting to room:', roomId);
-
-    // ✅ FIXED: Real-time emission
+    // ✅ Emit socket message for real-time delivery
     const io = req.app.get('io');
     if (io) {
-      // 1. Primary: Emit to private room
-      io.to(roomId).emit('receive_message', messageForRealTime);
+      // Emit to both users' personal rooms and the chat room
+      io.to(`user_${receiverId}`).to(`user_${senderId}`).emit('receive_message', messageForRealTime);
       
-      // 2. Backup: Emit to both users' personal rooms
-      io.to(`user_${receiverId}`).emit('receive_message', messageForRealTime);
-      io.to(`user_${senderId}`).emit('receive_message', messageForRealTime);
+      // Also emit to the chat room for consistency
+      io.to(`private_${chatRoom._id}`).emit('receive_message', messageForRealTime);
     }
 
     res.status(201).json({ 
       success: true, 
-      message: populatedMessage,
-      chatRoomId: chatRoom._id // ✅ Return for frontend
+      message: populatedMessage 
     });
 
   } catch (err) {
     console.error("❌ Error in sendMessage:", err);
+    res.status(500).json({ message: "Failed to send message", error: err.message });
+  }
+};
+
+// ✅ IMPROVED: Send group message
+export const sendGroupMessage = async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { content, mediaUrl, messageType = "text" } = req.body;
+    const userId = req.user._id;
+
+    if (!content?.trim() && !mediaUrl) {
+      return res.status(400).json({ message: "Message content cannot be empty" });
+    }
+
+    // Find the chat room
+    const room = await ChatRoom.findById(roomId);
+    if (!room) return res.status(404).json({ message: "Room not found" });
+
+    // Check if user is a participant
+    const isParticipant = room.participants.some(
+      (p) => p.user.toString() === userId.toString()
+    );
+    if (!isParticipant) {
+      return res.status(403).json({ message: "You are not a participant of this room" });
+    }
+
+    // ✅ Create and save message immediately
+    const newMessage = await Message.create({
+      chatRoom: roomId,
+      sender: userId,
+      content: content?.trim() || null,
+      mediaUrl: mediaUrl || null,
+      type: messageType,
+      status: 'delivered'
+    });
+
+    // Update chat room
+    room.messages.push(newMessage._id);
+    room.lastMessage = newMessage._id;
+    room.lastActivity = new Date();
+    await room.save();
+
+    // Populate sender info
+    const populatedMessage = await Message.findById(newMessage._id)
+      .populate("sender", "name profilePicture")
+      .lean();
+
+    // ✅ Enhanced message object for real-time
+    const messageForRealTime = {
+      ...populatedMessage,
+      senderId: userId,
+      roomId: `group_${roomId}`,
+      isRealTime: false
+    };
+
+    // ✅ Emit socket message for real-time delivery
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`group_${roomId}`).emit('receive_message', messageForRealTime);
+      
+      // Also emit to all participants' personal rooms
+      room.participants.forEach(participant => {
+        io.to(`user_${participant.user}`).emit('receive_message', messageForRealTime);
+      });
+    }
+
+    return res.status(201).json({ 
+      success: true, 
+      message: populatedMessage 
+    });
+
+  } catch (err) {
+    console.error("❌ sendGroupMessage error:", err);
     res.status(500).json({ message: "Failed to send message", error: err.message });
   }
 };
