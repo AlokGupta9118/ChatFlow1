@@ -24,6 +24,24 @@ const createSocket = () => {
   });
 };
 
+// Color system for better UI differentiation
+const userColors = [
+  'from-purple-500 to-pink-500',
+  'from-blue-500 to-cyan-500',
+  'from-green-500 to-emerald-500',
+  'from-orange-500 to-red-500',
+  'from-indigo-500 to-purple-500',
+  'from-teal-500 to-blue-500',
+  'from-yellow-500 to-orange-500',
+  'from-pink-500 to-rose-500'
+];
+
+const getUserColor = (userId) => {
+  if (!userId) return userColors[0];
+  const index = userId.toString().split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % userColors.length;
+  return userColors[index];
+};
+
 const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupInfo }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
@@ -32,44 +50,33 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [userStatus, setUserStatus] = useState({});
   const [currentChatRoomId, setCurrentChatRoomId] = useState(null);
   
   const messagesEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const socketRef = useRef(null);
   const processedMessagesRef = useRef(new Set());
+  const lastMessageRef = useRef(null);
 
-  // ✅ FIXED: Get user from localStorage if currentUser is not provided
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
 
-  // ✅ FIXED: Debug to check user data
+  // Debug: Log state changes
   useEffect(() => {
-    console.log('👤 USER DATA:', { 
-      userId, 
-      userName: user?.name || user?.username,
-      currentUser: !!currentUser,
-      localStorageUser: !!JSON.parse(localStorage.getItem("user"))
-    });
-  }, [userId, user, currentUser]);
+    console.log('🔄 MESSAGES STATE UPDATED:', messages.length, 'messages');
+    console.log('📝 MESSAGES CONTENT:', messages);
+  }, [messages]);
 
-  // ✅ FIXED: Ensure user data is stored in localStorage
   useEffect(() => {
-    if (currentUser && !localStorage.getItem("user")) {
-      console.log('💾 Storing user data in localStorage');
-      localStorage.setItem("user", JSON.stringify(currentUser));
-    }
-  }, [currentUser]);
+    console.log('🎯 TYPING USERS STATE UPDATED:', Array.from(typingUsers.entries()));
+  }, [typingUsers]);
 
-  // ✅ FIXED: Enhanced socket connection with user ID validation
+  // ✅ Single socket connection management
   useEffect(() => {
     console.log('🔌 Initializing socket connection...');
-    
-    if (!userId) {
-      console.log('❌ Cannot initialize socket: No user ID');
-      return;
-    }
-
     const newSocket = createSocket();
     socketRef.current = newSocket;
     setSocket(newSocket);
@@ -78,8 +85,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       console.log('✅ Socket.IO connected:', newSocket.id);
       setIsConnected(true);
       
-      console.log('👤 Joining user room after connect:', userId);
-      newSocket.emit('join_user', userId);
+      if (userId) {
+        console.log('👤 Joining user room after connect:', userId);
+        newSocket.emit('join_user', userId);
+      }
     };
 
     const handleDisconnect = () => {
@@ -88,7 +97,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     };
 
     const handleConnectError = (error) => {
-      console.error('❌ Socket connection error:', error);
+      console.error('❌ Socket.IO connection error:', error);
+      setIsConnected(false);
     };
 
     newSocket.on('connect', handleConnect);
@@ -141,6 +151,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         console.log('💾 Stored chatRoomId for private chat:', res.data.chatRoomId);
       } else if (isGroup) {
         setCurrentChatRoomId(selectedChat._id);
+      } else {
+        setCurrentChatRoomId(null);
       }
 
     } catch (err) {
@@ -154,59 +166,36 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     fetchMessages();
   }, [fetchMessages]);
 
-  // ✅ FIXED: Enhanced room joining with user ID validation
+  // ✅ Enhanced chat room joining with proper room IDs
   useEffect(() => {
-    if (!socket || !isConnected || !selectedChat?._id || !userId) {
-      console.log('❌ Cannot join room - missing requirements:', {
-        socket: !!socket,
-        connected: isConnected,
-        selectedChat: !!selectedChat?._id,
-        userId: userId
-      });
-      return;
-    }
+    if (!socket || !isConnected || !selectedChat?._id) return;
 
-    // Small delay to ensure socket is ready
-    const timeoutId = setTimeout(() => {
-      const roomData = {
-        roomId: selectedChat._id,
-        isGroup: isGroup,
-        chatRoomId: currentChatRoomId
-      };
-      
-      console.log('🚪 Joining chat room with data:', roomData);
-      socket.emit('join_chat', roomData);
-    }, 100);
+    const roomData = {
+      roomId: selectedChat._id,
+      isGroup: isGroup,
+      chatRoomId: currentChatRoomId
+    };
+    
+    console.log('🚪 Joining chat room with data:', roomData);
+    socket.emit('join_chat', roomData);
 
     return () => {
-      clearTimeout(timeoutId);
+      console.log('🚪 Leaving chat room');
+      setTypingUsers(new Map());
     };
-  }, [socket, isConnected, selectedChat?._id, userId, isGroup, currentChatRoomId]);
+  }, [socket, isConnected, selectedChat?._id, isGroup, currentChatRoomId]);
 
-  // ✅ FIXED: Enhanced typing listeners with better debugging
+  // ✅ FIXED: Enhanced typing listeners - SIMPLIFIED
   useEffect(() => {
-    if (!socket || !isConnected || !selectedChat?._id || !userId) return;
+    if (!socket || !isConnected || !selectedChat?._id) return;
 
     console.log('🎯 Setting up typing listeners for chat:', selectedChat._id);
 
     const handleUserTyping = (data) => {
       console.log('🎯 TYPING EVENT RECEIVED:', data);
       
-      // Calculate expected room ID
-      const expectedRoomId = isGroup ? 
-        `group_${selectedChat._id}` : 
-        `private_${currentChatRoomId || selectedChat._id}`;
-      
-      console.log('🎯 ROOM VALIDATION:', {
-        expectedRoom: expectedRoomId,
-        receivedRoom: data.roomId,
-        matches: data.roomId === expectedRoomId,
-        isCurrentUser: data.userId === userId,
-        typingStatus: data.isTyping ? 'START' : 'STOP'
-      });
-      
-      // Only process if it's for current chat AND not from current user
-      if (data.roomId === expectedRoomId && data.userId !== userId) {
+      // SIMPLIFIED: Just check if it's not from current user
+      if (data.userId !== userId) {
         console.log('🎯 PROCESSING TYPING EVENT for user:', data.userName);
         
         setTypingUsers(prev => {
@@ -222,8 +211,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           
           return newMap;
         });
-      } else {
-        console.log('❌ IGNORING typing event - wrong room or own user');
       }
     };
 
@@ -234,17 +221,18 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socket.off('user_typing', handleUserTyping);
       setTypingUsers(new Map());
     };
-  }, [socket, isConnected, selectedChat?._id, userId, isGroup, currentChatRoomId]);
+  }, [socket, isConnected, selectedChat?._id, userId]);
 
-  // ✅ FIXED: Message listener
+  // ✅ FIXED: SIMPLIFIED Message listener - REMOVE STRICT ROOM CHECKING
   useEffect(() => {
-    if (!socket || !isConnected) return;
+    if (!socket || !isConnected || !selectedChat?._id) return;
 
     console.log('👂 Setting up real-time message listeners');
 
     const handleReceiveMessage = (msg) => {
       console.log('📨 Received real-time message:', msg._id, msg.content);
       
+      // SIMPLIFIED: Just add the message if it's not a duplicate
       const messageKey = `${msg._id}_${msg.createdAt}`;
       
       if (processedMessagesRef.current.has(messageKey)) {
@@ -255,6 +243,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       processedMessagesRef.current.add(messageKey);
       
       setMessages(prev => {
+        // Check for duplicates
         const messageExists = prev.some(m => m._id === msg._id);
         
         if (messageExists) {
@@ -263,7 +252,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         }
         
         console.log('➕ Adding new message to state:', msg._id);
-        return [...prev, msg];
+        return [...prev, { 
+          ...msg, 
+          displayTimestamp: new Date().toISOString() 
+        }];
       });
     };
 
@@ -272,25 +264,24 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     return () => {
       socket.off('receive_message', handleReceiveMessage);
     };
-  }, [socket, isConnected]);
+  }, [socket, isConnected, selectedChat?._id]);
 
   // ✅ Auto-scroll to bottom
   useEffect(() => {
+    scrollToBottom();
+  }, [messages, typingUsers.size]);
+
+  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ 
       behavior: "smooth",
       block: "nearest"
     });
-  }, [messages, typingUsers.size]);
+  };
 
-  // ✅ FIXED: Enhanced typing handler with user ID validation
+  // ✅ FIXED: Enhanced typing handler
   const handleTyping = useCallback(() => {
-    if (!socket || !isConnected || !selectedChat?._id || !userId) {
-      console.log('❌ Typing: Missing requirements', {
-        socket: !!socket,
-        connected: isConnected,
-        selectedChat: !!selectedChat?._id,
-        userId: userId
-      });
+    if (!socket || !isConnected || !selectedChat?._id) {
+      console.log('❌ Typing: Missing requirements');
       return;
     }
 
@@ -319,16 +310,15 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       
       console.log('🎯 EMITTING TYPING STOP:', stopData);
       socket.emit("typing_stop", stopData);
-      typingTimeoutRef.current = null;
     }, 2000);
   }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, user.username, currentChatRoomId]);
 
-  // Enhanced input change handler
+  // ✅ Enhanced input change handler
   const handleInputChange = (e) => {
     const value = e.target.value;
     setNewMessage(value);
     
-    if (value.trim() && socket && isConnected && userId) {
+    if (value.trim() && socket && isConnected) {
       handleTyping();
     }
   };
@@ -340,10 +330,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // Send message with optimistic update
+  // ✅ FIXED: Send message with OPTIMISTIC UPDATE
   const handleSendMessage = async () => {
     const messageContent = newMessage.trim();
-    if (!messageContent || !socket || !isConnected || isSending || !userId) return;
+    if (!messageContent || !socket || !isConnected || isSending) return;
 
     const token = getToken();
     if (!token) {
@@ -384,18 +374,27 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         status: 'sending'
       };
 
+      // Add optimistic message immediately
       setMessages(prev => [...prev, optimisticMessage]);
       setNewMessage("");
 
       // Prepare API data
       const msgData = isGroup
-        ? { content: messageContent, messageType: "text" }
-        : { receiverId: selectedChat._id, content: messageContent, messageType: "text" };
+        ? { 
+            content: messageContent, 
+            messageType: "text" 
+          }
+        : { 
+            receiverId: selectedChat._id, 
+            content: messageContent, 
+            messageType: "text" 
+          };
 
       const endpoint = isGroup
         ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/sendGroupmessages`
         : `${import.meta.env.VITE_API_URL}/chatroom/messages/send`;
 
+      // Send to backend
       const res = await axios.post(endpoint, msgData, {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 10000
@@ -404,11 +403,14 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       const sentMessage = res.data.message;
       console.log('✅ Message saved to DB:', sentMessage._id);
 
-      // Replace optimistic message
+      // Replace optimistic message with real one
       setMessages(prev => {
         const filtered = prev.filter(msg => msg._id !== tempMessageId);
         const exists = filtered.some(msg => msg._id === sentMessage._id);
-        return exists ? filtered : [...filtered, { ...sentMessage, status: 'delivered' }];
+        if (!exists) {
+          return [...filtered, { ...sentMessage, status: 'delivered' }];
+        }
+        return filtered;
       });
 
       processedMessagesRef.current.add(`${sentMessage._id}_${sentMessage.createdAt}`);
@@ -416,6 +418,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     } catch (err) {
       console.error("❌ Error sending message:", err);
       toast.error("Failed to send message");
+      
+      // Remove optimistic message on error
       setMessages(prev => prev.filter(msg => !msg.isOptimistic || msg.status !== 'sending'));
     } finally {
       setIsSending(false);
@@ -437,110 +441,177 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       }
     }
     
-    return isGroup ? 'Group chat' : 'Online';
+    // Default status
+    if (isGroup) {
+      const onlineCount = selectedChat.participants?.filter(p => 
+        onlineUsers.has(p.user?._id || p.user)
+      ).length || 0;
+      return `${onlineCount} online • ${selectedChat.participants?.length || 0} members`;
+    }
+    
+    const friendId = selectedChat._id;
+    const status = userStatus[friendId]?.status || 'offline';
+    
+    if (status === 'online') {
+      return 'Online';
+    } else if (status === 'away') {
+      return 'Away';
+    } else {
+      return 'Offline';
+    }
   };
 
-  // Message rendering
+  // ✅ FIXED: Enhanced message rendering with VISIBILITY CHECK
   const renderMessage = (msg, idx) => {
     const senderId = msg.sender?._id || msg.senderId;
     const isSent = senderId?.toString() === userId?.toString();
+    const userColor = getUserColor(senderId);
+    const isSystem = msg.type === 'system';
     const isOptimistic = msg.isOptimistic;
+
+    console.log('🎨 Rendering message:', msg._id, msg.content, 'isSent:', isSent);
+
+    if (isSystem) {
+      return (
+        <motion.div
+          key={msg._id || idx}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex justify-center my-4"
+        >
+          <div className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-sm rounded-full shadow-lg">
+            <span className="font-medium">💬 {msg.content}</span>
+          </div>
+        </motion.div>
+      );
+    }
 
     return (
       <motion.div
         key={msg._id || idx}
         initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        animate={{ 
+          opacity: 1, 
+          y: 0,
+        }}
+        exit={{ opacity: 0, y: -20 }}
+        transition={{ duration: 0.3 }}
         className={`flex ${isSent ? "justify-end" : "justify-start"} mb-4 px-4`}
       >
         <div className={`flex items-end gap-3 max-w-[80%] ${isSent ? "flex-row-reverse" : ""}`}>
+          {/* Sender Avatar */}
           {!isSent && isGroup && (
-            <Avatar className="w-8 h-8">
-              <AvatarImage src={msg.sender?.profilePicture} />
-              <AvatarFallback className="bg-blue-600 text-white text-xs">
-                {msg.sender?.name?.[0]?.toUpperCase() || "?"}
-              </AvatarFallback>
-            </Avatar>
+            <div className="relative group flex-shrink-0">
+              <Avatar className="w-8 h-8 shadow-md border-2 border-white/30">
+                <AvatarImage src={msg.sender?.profilePicture || "/default-avatar.png"} />
+                <AvatarFallback className={`text-xs bg-gradient-to-r ${userColor} text-white`}>
+                  {msg.sender?.name?.[0]?.toUpperCase() || "?"}
+                </AvatarFallback>
+              </Avatar>
+            </div>
           )}
           
           <div className="flex flex-col space-y-1">
+            {/* Sender Name */}
             {isGroup && !isSent && (
-              <span className="text-xs font-semibold text-gray-300 px-1">
-                {msg.sender?.name}
-              </span>
+              <div className="flex items-center space-x-2 mb-1 px-1">
+                <span className="text-xs font-semibold text-gray-300">
+                  {msg.sender?.name}
+                </span>
+              </div>
             )}
             
-            <div className={`px-4 py-3 rounded-2xl ${
-              isSent
-                ? `bg-blue-600 text-white rounded-br-md ${isOptimistic ? 'opacity-80' : ''}`
-                : "bg-gray-700 text-white rounded-bl-md"
-            }`}>
+            {/* Message Bubble */}
+            <motion.div
+              whileHover={{ scale: 1.01 }}
+              className={`relative px-4 py-3 rounded-2xl shadow-lg backdrop-blur-sm border ${
+                isSent
+                  ? `bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md border-blue-400/30 ${isOptimistic ? 'opacity-80' : ''}`
+                  : "bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-bl-md border-gray-600/30"
+              }`}
+            >
               <p className="leading-relaxed text-sm whitespace-pre-wrap break-words">
                 {msg.content}
-                {isOptimistic && <span className="ml-2 text-xs opacity-70">🕒</span>}
+                {isOptimistic && (
+                  <span className="ml-2 text-xs opacity-70">🕒</span>
+                )}
               </p>
-              <p className={`text-xs mt-2 ${isSent ? 'text-blue-200' : 'text-gray-400'}`}>
-                {new Date(msg.createdAt).toLocaleTimeString([], { 
-                  hour: '2-digit', minute: '2-digit' 
-                })}
-                {isSent && !isOptimistic && <span className="ml-1">✓</span>}
-              </p>
-            </div>
+              
+              {/* Message Timestamp */}
+              <div className={`flex ${isSent ? 'justify-end' : 'justify-start'} mt-2`}>
+                <p className={`text-xs ${isSent ? 'text-blue-200' : 'text-gray-400'} flex items-center gap-1`}>
+                  {new Date(msg.createdAt).toLocaleTimeString([], { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })}
+                  {isSent && !isOptimistic && (
+                    <span className="text-[10px]">✓</span>
+                  )}
+                </p>
+              </div>
+            </motion.div>
           </div>
         </div>
       </motion.div>
     );
   };
 
-  // Connection status component
+  // ✅ Connection status component
   const ConnectionStatus = () => (
-    <div className={`absolute top-2 right-2 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border ${
-      isConnected 
-        ? 'bg-green-500/20 text-green-400 border-green-500/30' 
-        : 'bg-red-500/20 text-red-400 border-red-500/30'
-    }`}>
+    <motion.div 
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`absolute top-2 right-2 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs backdrop-blur-sm border ${
+        isConnected 
+          ? 'bg-green-500/20 text-green-400 border-green-500/30' 
+          : 'bg-red-500/20 text-red-400 border-red-500/30'
+      }`}
+    >
       <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
       {isConnected ? 'Connected' : 'Disconnected'}
-    </div>
+    </motion.div>
   );
-
-  // Debug states
-  useEffect(() => {
-    console.log('🔄 MESSAGES STATE UPDATED:', messages.length, 'messages');
-  }, [messages]);
-
-  useEffect(() => {
-    console.log('🎯 TYPING USERS STATE UPDATED:', Array.from(typingUsers.entries()));
-  }, [typingUsers]);
 
   if (!selectedChat) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-gray-900">
+      <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-purple-900">
         <div className="text-center space-y-6">
-          <div className="text-4xl">💬</div>
-          <h3 className="text-2xl font-bold text-white">Start a Conversation</h3>
-          <p className="text-gray-400">Select a chat from the sidebar to begin messaging</p>
+          <div className="w-32 h-32 bg-gradient-to-r from-indigo-400 to-purple-500 rounded-full flex items-center justify-center shadow-2xl mx-auto">
+            <div className="text-4xl">💬</div>
+          </div>
+          <div>
+            <h3 className="text-2xl font-bold text-white mb-2">
+              Start a Conversation
+            </h3>
+            <p className="text-gray-400">
+              Select a chat from the sidebar to begin messaging
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 relative">
+    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 relative">
       <ConnectionStatus />
 
       {/* Header */}
-      <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-gray-800 border-b border-gray-700">
+      <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-gradient-to-r from-purple-600 to-blue-600 border-b border-purple-500/30 shadow-lg">
         <div className="flex items-center gap-4">
-          <Avatar className="w-14 h-14">
-            <AvatarImage src={selectedChat.profilePicture} />
-            <AvatarFallback className="bg-purple-600 text-white">
+          <Avatar className="w-14 h-14 shadow-lg border-2 border-white/30">
+            <AvatarImage src={selectedChat.profilePicture || selectedChat.avatar || "/default-avatar.png"} />
+            <AvatarFallback className={`bg-gradient-to-r ${getUserColor(selectedChat._id)} text-white font-semibold`}>
               {selectedChat.name?.[0]?.toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <h3 className="text-lg font-bold text-white">{selectedChat.name}</h3>
-            <p className="text-gray-300 text-sm">{getStatusText()}</p>
+            <h3 className="text-lg font-bold text-white">
+              {selectedChat.name}
+            </h3>
+            <p className="text-blue-100 text-sm">
+              {getStatusText()}
+            </p>
           </div>
         </div>
 
@@ -552,29 +623,20 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         >
           <Info className="w-5 h-5" />
         </Button>
-
-        {/* Temporary debug button */}
-        <Button
-          onClick={() => {
-            console.log('🧪 MANUAL TYPING TEST TRIGGERED');
-            handleTyping();
-          }}
-          className="bg-yellow-600 text-white hover:bg-yellow-700 ml-2"
-          size="sm"
-        >
-          Test Typing
-        </Button>
       </div>
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 bg-gray-900 min-h-0">
+      {/* Messages Area - FIXED: Removed background gradients that might cause issues */}
+      <div 
+        ref={chatContainerRef}
+        className="flex-1 overflow-y-auto p-4 bg-gray-900 min-h-0"
+      >
         <div className="space-y-2">
           <AnimatePresence>
             {messages.map(renderMessage)}
           </AnimatePresence>
         </div>
         
-        {/* ✅ FIXED: Enhanced Typing Indicator */}
+        {/* ✅ FIXED: Typing Indicator */}
         {typingUsers.size > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -582,15 +644,22 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
             className="flex justify-start mb-4 px-4"
           >
             <div className="flex items-center gap-3 max-w-[80%]">
-              <div className="px-4 py-3 rounded-2xl bg-blue-600 text-white rounded-bl-md border border-blue-400">
+              {isGroup && (
+                <Avatar className="w-8 h-8">
+                  <AvatarFallback className="bg-gray-600 text-white text-xs">
+                    ⌨️
+                  </AvatarFallback>
+                </Avatar>
+              )}
+              <div className="px-4 py-3 rounded-2xl bg-gray-800 text-white rounded-bl-md border border-gray-600">
                 <div className="flex items-center gap-3">
                   <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
                   <span className="text-sm font-medium">
-                    {Array.from(typingUsers.values())[0]} is typing...
+                    {getStatusText().replace('...', '')}
                   </span>
                 </div>
               </div>
@@ -602,7 +671,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       </div>
 
       {/* Input Area */}
-      <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gray-800 border-t border-gray-700">
+      <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gray-800 border-t border-purple-500/30">
         <div className="flex gap-1">
           <Button variant="ghost" size="icon" className="text-gray-400">
             <Paperclip className="w-5 h-5" />
@@ -622,7 +691,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
             onKeyDown={handleKeyPress}
             disabled={isSending || !isConnected}
             placeholder={!isConnected ? "Connecting..." : isSending ? "Sending..." : "Type your message..."}
-            className="w-full pl-4 pr-12 py-3 bg-gray-700 border border-gray-600 text-white placeholder-gray-400 rounded-2xl focus:border-purple-400"
+            className="w-full pl-4 pr-12 py-3 bg-gray-700 border border-gray-600 text-white placeholder-gray-400 rounded-2xl focus:outline-none focus:border-purple-400"
           />
           <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400">
             <Mic className="w-4 h-4" />
@@ -657,10 +726,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-gray-900 w-full max-w-4xl max-h-[85vh] rounded-2xl border border-gray-700 overflow-hidden"
+              className="bg-gray-900 w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl border border-purple-500/30 overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between p-6 border-b border-gray-700 bg-gray-800">
+              <div className="flex items-center justify-between p-6 border-b border-purple-500/30 bg-purple-600">
                 <h3 className="text-xl font-bold text-white">
                   {isGroup ? 'Group Settings' : 'User Info'} - {selectedChat.name}
                 </h3>
@@ -685,13 +754,15 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                     <div className="flex items-center gap-4 mb-6">
                       <Avatar className="w-20 h-20">
                         <AvatarImage src={selectedChat.profilePicture} />
-                        <AvatarFallback className="bg-purple-600 text-white text-2xl">
+                        <AvatarFallback className="bg-gradient-to-r from-purple-500 to-blue-500 text-white text-2xl">
                           {selectedChat.name?.[0]}
                         </AvatarFallback>
                       </Avatar>
                       <div>
                         <h3 className="text-2xl font-bold text-white">{selectedChat.name}</h3>
-                        <p className="text-gray-300">Private chat</p>
+                        <p className="text-gray-300">
+                          {onlineUsers.has(selectedChat._id) ? 'Online' : 'Offline'}
+                        </p>
                       </div>
                     </div>
                   </div>
