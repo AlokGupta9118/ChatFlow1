@@ -5,36 +5,52 @@ import User from "../models/User.js";
 import GroupJoinRequest from "../models/GroupJoinRequest.js";
 
 // ✅ FIXED: Send private message - SINGLE EMISSION
-
-// ✅ Send message (both private and group)
+// ✅ Send message (works for both private and group)
 export const sendMessage = async (req, res) => {
   try {
     const senderId = req.user._id;
-    const { receiverId, content, messageType = "text" } = req.body;
-    const isGroup = req.body.isGroup || false;
+    const { receiverId, content, messageType = "text", isGroup = false } = req.body;
 
-    if (!senderId || !content?.trim()) {
-      return res.status(400).json({ message: "Missing required fields" });
+    if (!senderId || !content?.trim() || (!receiverId && !isGroup)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Missing required fields" 
+      });
     }
 
-    console.log('📤 Sending message:', { senderId, receiverId, isGroup, content });
+    console.log('📤 Sending message:', { 
+      senderId, 
+      receiverId, 
+      isGroup, 
+      content: content.substring(0, 50) + '...' 
+    });
 
     let chatRoom;
     
     if (isGroup) {
-      // Group message
+      // Group message - use receiverId as the group ID
       chatRoom = await ChatRoom.findById(receiverId);
-      if (!chatRoom) return res.status(404).json({ message: "Group not found" });
+      
+      if (!chatRoom) {
+        return res.status(404).json({ 
+          success: false,
+          message: "Group not found" 
+        });
+      }
 
       // Check if user is participant
       const isParticipant = chatRoom.participants.some(
         p => p.user.toString() === senderId.toString()
       );
+      
       if (!isParticipant) {
-        return res.status(403).json({ message: "Not a group member" });
+        return res.status(403).json({ 
+          success: false,
+          message: "Not a group member" 
+        });
       }
     } else {
-      // Private message - find or create chat room
+      // Private message - find or create chat room between two users
       chatRoom = await ChatRoom.findOne({
         type: "direct",
         participants: {
@@ -46,6 +62,7 @@ export const sendMessage = async (req, res) => {
       });
 
       if (!chatRoom) {
+        // Create new chat room
         chatRoom = new ChatRoom({
           type: "direct",
           participants: [
@@ -65,7 +82,7 @@ export const sendMessage = async (req, res) => {
       sender: senderId,
       type: messageType,
       content: content.trim(),
-      status: 'delivered'
+      status: 'sent'
     });
 
     await newMessage.save();
@@ -78,7 +95,7 @@ export const sendMessage = async (req, res) => {
 
     // Populate message with sender info
     const populatedMessage = await Message.findById(newMessage._id)
-      .populate("sender", "name profilePicture")
+      .populate("sender", "name profilePicture username")
       .lean();
 
     // Prepare real-time message
@@ -87,7 +104,9 @@ export const sendMessage = async (req, res) => {
       ...populatedMessage,
       roomId: roomId,
       isRealTime: true,
-      chatType: isGroup ? 'group' : 'private'
+      chatType: isGroup ? 'group' : 'private',
+      chatRoomId: chatRoom._id,
+      timestamp: new Date().toISOString()
     };
 
     console.log('📨 Emitting message to room:', roomId);
@@ -102,16 +121,21 @@ export const sendMessage = async (req, res) => {
     res.status(201).json({ 
       success: true, 
       message: populatedMessage,
-      chatRoomId: chatRoom._id
+      chatRoomId: chatRoom._id,
+      roomId: roomId
     });
 
   } catch (err) {
     console.error("❌ Error sending message:", err);
-    res.status(500).json({ message: "Failed to send message", error: err.message });
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to send message", 
+      error: err.message 
+    });
   }
 };
 
-// ✅ Get messages for chat
+// ✅ Get messages for any chat type
 export const getMessages = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -121,6 +145,7 @@ export const getMessages = async (req, res) => {
     console.log('📋 Fetching messages for:', { chatId, isGroup, userId });
 
     let chatRoom;
+    let messages = [];
 
     if (isGroup) {
       // Group messages
@@ -129,22 +154,33 @@ export const getMessages = async (req, res) => {
           path: "messages",
           populate: { 
             path: "sender", 
-            select: "name profilePicture" 
+            select: "name profilePicture username" 
           },
           options: { 
             sort: { createdAt: 1 } 
           }
         });
 
-      if (!chatRoom) return res.status(404).json({ message: "Group not found" });
+      if (!chatRoom) {
+        return res.status(404).json({ 
+          success: false,
+          message: "Group not found" 
+        });
+      }
 
       // Check if user is participant
       const isParticipant = chatRoom.participants.some(
         p => p.user.toString() === userId.toString()
       );
+      
       if (!isParticipant) {
-        return res.status(403).json({ message: "Not a group member" });
+        return res.status(403).json({ 
+          success: false,
+          message: "Not a group member" 
+        });
       }
+
+      messages = chatRoom.messages || [];
     } else {
       // Private messages
       chatRoom = await ChatRoom.findOne({
@@ -160,7 +196,7 @@ export const getMessages = async (req, res) => {
         path: "messages",
         populate: { 
           path: "sender", 
-          select: "name profilePicture" 
+          select: "name profilePicture username" 
         },
         options: { 
           sort: { createdAt: 1 } 
@@ -174,21 +210,27 @@ export const getMessages = async (req, res) => {
           chatRoomId: null
         });
       }
+
+      messages = chatRoom.messages || [];
     }
+
+    console.log(`✅ Found ${messages.length} messages for chat ${chatId}`);
 
     res.status(200).json({ 
       success: true,
-      messages: chatRoom.messages || [],
+      messages: messages,
       chatRoomId: chatRoom._id
     });
 
   } catch (err) {
     console.error("❌ Error fetching messages:", err);
-    res.status(500).json({ message: "Failed to fetch messages", error: err.message });
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to fetch messages", 
+      error: err.message 
+    });
   }
 };
-
-
 
 // 🔹 Send join request
 export const requestToJoinGroup = async (req, res) => {

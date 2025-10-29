@@ -12,7 +12,7 @@ const router = express.Router();
 
 router.get("/mygroups", protect, getMyGroups);
 // POST send a message
-router.post("/messages/send", protect, sendMessage);
+
 router.get("/:id/members", protect,getGroupMembers );
 
 
