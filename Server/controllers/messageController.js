@@ -59,7 +59,7 @@ export const getGroupMessages = async (req, res) => {
 };
 
 // ✅ Send private message
-export const sendPrivateMessage = async (req, res) => {
+export const sendMessage= async (req, res) => {
   try {
     const { receiverId, content, messageType = "text" } = req.body;
     const senderId = req.user._id;
