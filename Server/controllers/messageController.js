@@ -4,7 +4,7 @@ import Message from "../models/Message.js";
 import User from "../models/User.js";
 
 // ✅ Get messages for private chat
-export const getPrivateMessages = async (req, res) => {
+export const getMessages = async (req, res) => {
   try {
     const { chatId } = req.params;
     const userId = req.user._id;
