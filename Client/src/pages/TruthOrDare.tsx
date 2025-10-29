@@ -35,8 +35,8 @@ const getUserColor = (userId) => {
   return userColors[index];
 };
 
-// Updated ChatInput component with game-level styling
-const ChatInput = ({ onSendMessage, disabled, onTyping, chatInput, setChatInput }) => {
+// Updated ChatInput component with FIXED typing indicators
+const ChatInput = ({ onSendMessage, disabled, onTyping, onStopTyping, chatInput, setChatInput }) => {
   const inputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
@@ -50,7 +50,7 @@ const ChatInput = ({ onSendMessage, disabled, onTyping, chatInput, setChatInput 
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
       }
-      onTyping(false);
+      onStopTyping();
     }
   };
 
@@ -68,7 +68,7 @@ const ChatInput = ({ onSendMessage, disabled, onTyping, chatInput, setChatInput 
     // Handle typing indicators
     if (value.trim() && !disabled) {
       // User is typing
-      onTyping(true);
+      onTyping();
       
       // Clear existing timeout
       if (typingTimeoutRef.current) {
@@ -77,12 +77,12 @@ const ChatInput = ({ onSendMessage, disabled, onTyping, chatInput, setChatInput 
       
       // Set new timeout to stop typing indicator after 1 second of inactivity
       typingTimeoutRef.current = setTimeout(() => {
-        onTyping(false);
+        onStopTyping();
         typingTimeoutRef.current = null;
       }, 1000);
     } else {
       // Input is empty, stop typing indicator
-      onTyping(false);
+      onStopTyping();
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
@@ -122,7 +122,7 @@ const ChatInput = ({ onSendMessage, disabled, onTyping, chatInput, setChatInput 
   );
 };
 
-// Updated ChatPanel component with fixed scrolling
+// Updated ChatPanel component with FIXED typing indicators display
 const ChatPanel = React.memo(({ 
   chatMessages, 
   playerName, 
@@ -130,6 +130,7 @@ const ChatPanel = React.memo(({
   onSendMessage,
   isConnected,
   onTyping,
+  onStopTyping,
   chatInput,
   setChatInput,
   onClose
@@ -195,7 +196,7 @@ const ChatPanel = React.memo(({
           </div>
         </div>
         
-        {/* Typing indicators */}
+        {/* FIXED: Typing indicators - now shows usernames properly */}
         {typingUsers.size > 0 && (
           <div className="flex items-center mt-2 p-2 bg-white/10 rounded-lg border border-white/20">
             <div className="flex space-x-1 mr-2">
@@ -280,6 +281,7 @@ const ChatPanel = React.memo(({
           onSendMessage={onSendMessage}
           disabled={!isConnected}
           onTyping={onTyping}
+          onStopTyping={onStopTyping}
           chatInput={chatInput}
           setChatInput={setChatInput}
         />
@@ -333,7 +335,7 @@ export default function TruthOrDare({ currentUser }) {
   const [currentProof, setCurrentProof] = useState(null);
   const [truthCompletionText, setTruthCompletionText] = useState("");
 
-  // 🔥 CHAT STATE - UPDATED: Using new ChatPanel component
+  // 🔥 CHAT STATE - UPDATED: Using new ChatPanel component with FIXED typing
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [showChat, setShowChat] = useState(false);
@@ -598,7 +600,7 @@ export default function TruthOrDare({ currentUser }) {
     }
   }, [selectedPlayer, chosenPrompt, roomId, localName]);
 
-  // 🔌 Socket initialization with IMPROVED RECONNECTION & CHAT HANDLERS
+  // 🔌 Socket initialization with FIXED TYPING HANDLERS
   useEffect(() => {
     const sock = io(DEFAULT_SOCKET_URL, { 
       autoConnect: true,
@@ -767,7 +769,7 @@ export default function TruthOrDare({ currentUser }) {
       }
     });
 
-    // 🔥 CHAT SOCKET HANDLERS
+    // 🔥 FIXED: CHAT SOCKET HANDLERS - Proper typing indicators
     sock.on("receive-chat-message", (message) => {
       setChatMessages(prev => [...prev, message]);
       if (message.sender !== localName) {
@@ -775,7 +777,9 @@ export default function TruthOrDare({ currentUser }) {
       }
     });
 
+    // FIXED: Proper typing indicator handling
     sock.on("user-typing", ({ userName, isTyping }) => {
+      console.log("⌨️ Typing indicator:", userName, isTyping);
       setTypingUsers(prev => {
         const newSet = new Set(prev);
         if (isTyping) {
@@ -952,7 +956,7 @@ export default function TruthOrDare({ currentUser }) {
     }
   }, [stage, selectedPlayer, truthDareChoice, chosenPrompt, spinning, roomId, localName, isHost]);
 
-  // 🔥 CHAT FUNCTIONS - UPDATED: Using new ChatPanel component
+  // 🔥 FIXED: CHAT FUNCTIONS - Proper typing indicator handling
   const sendChatMessage = (messageContent) => {
     if (!messageContent.trim() || !socket) return;
 
@@ -968,15 +972,21 @@ export default function TruthOrDare({ currentUser }) {
     setChatInput("");
     
     // Clear typing indicator
-    socket.emit("typing", { roomId, isTyping: false });
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+    handleStopTyping();
   };
 
-  const handleTyping = (isTyping) => {
+  // FIXED: Handle typing start
+  const handleTyping = () => {
     if (!socket) return;
-    socket.emit("typing", { roomId, isTyping });
+    console.log("⌨️ Starting typing indicator");
+    socket.emit("typing", { roomId, userId: localName, userName: localName });
+  };
+
+  // FIXED: Handle typing stop
+  const handleStopTyping = () => {
+    if (!socket) return;
+    console.log("⌨️ Stopping typing indicator");
+    socket.emit("typing-stop", { roomId, userId: localName });
   };
 
   // FIXED: Enhanced chat toggle with better mobile handling
@@ -2113,7 +2123,7 @@ export default function TruthOrDare({ currentUser }) {
                 )}
               </div>
 
-              {/* RIGHT COLUMN - UPDATED CHAT PANEL */}
+              {/* RIGHT COLUMN - UPDATED CHAT PANEL WITH FIXED TYPING */}
               {showChat && (
                 <>
                   {/* Mobile Chat Overlay */}
@@ -2126,6 +2136,7 @@ export default function TruthOrDare({ currentUser }) {
                       onSendMessage={sendChatMessage}
                       isConnected={socket?.connected}
                       onTyping={handleTyping}
+                      onStopTyping={handleStopTyping}
                       chatInput={chatInput}
                       setChatInput={setChatInput}
                       onClose={() => setShowChat(false)}

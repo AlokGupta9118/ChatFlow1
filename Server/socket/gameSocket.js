@@ -135,62 +135,63 @@ export default function gameSocket(io) {
     // Add to your existing socket connection handler:
 
 
-    // ✅ CHAT: Send message to chat room
-    socket.on("send-gamechat-message", ({ roomId, message, chatType = "private" }) => {
-      try {
-        console.log(`💬 Chat message in ${roomId}:`, message);
-        
-        // Create the message object
-        const chatMessage = {
-          _id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          sender: message.sender,
-          senderId: message.senderId,
-          content: message.content,
-          timestamp: new Date().toISOString(),
-          type: message.type || "text",
-          chatType: chatType,
-          roomId: roomId
-        };
+   // ✅ CHAT: Typing indicators for chat
+socket.on("typing", ({ roomId, userId, userName }) => {
+  console.log(`⌨️ ${userName} is typing in room ${roomId}`);
+  socket.to(roomId).emit("user-typing", { 
+    userName, 
+    isTyping: true 
+  });
+});
 
-        // Store in chat history if it's a game room
-        if (chatType === "game") {
-          if (!chatMessages.has(roomId)) {
-            chatMessages.set(roomId, []);
-          }
-          const roomChat = chatMessages.get(roomId);
-          roomChat.push(chatMessage);
-          
-          // Keep only last 100 messages
-          if (roomChat.length > 100) {
-            roomChat.shift();
-          }
-        }
+socket.on("typing-stop", ({ roomId, userId }) => {
+  console.log(`⌨️ ${userId} stopped typing in room ${roomId}`);
+  socket.to(roomId).emit("user-typing", { 
+    userName: userId, // Using userId as userName for simplicity
+    isTyping: false 
+  });
+});
 
-        // Broadcast to ALL users in the room
-        io.to(roomId).emit("receive-chat-message", chatMessage);
-        console.log(`📨 Message broadcast to room ${roomId}`);
-        
-      } catch (error) {
-        console.error('❌ Error sending chat message:', error);
-        socket.emit("chat-error", "Failed to send message");
+// ✅ CHAT: Send game chat message
+socket.on("send-gamechat-message", ({ roomId, message, chatType = "private" }) => {
+  try {
+    console.log(`💬 Chat message in ${roomId}:`, message);
+    
+    // Create the message object
+    const chatMessage = {
+      _id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      sender: message.sender,
+      senderId: message.senderId,
+      content: message.content,
+      timestamp: new Date().toISOString(),
+      type: message.type || "text",
+      chatType: chatType,
+      roomId: roomId
+    };
+
+    // Store in chat history if it's a game room
+    if (chatType === "game") {
+      if (!chatMessages.has(roomId)) {
+        chatMessages.set(roomId, []);
       }
-    });
+      const roomChat = chatMessages.get(roomId);
+      roomChat.push(chatMessage);
+      
+      // Keep only last 100 messages
+      if (roomChat.length > 100) {
+        roomChat.shift();
+      }
+    }
 
-    // ✅ CHAT: Typing indicators for chat
-    socket.on("typing", ({ roomId, userId, userName }) => {
-      socket.to(roomId).emit("user-typing", { 
-        userId, 
-        userName, 
-        isTyping: true 
-      });
-    });
-
-    socket.on("typing-stop", ({ roomId, userId }) => {
-      socket.to(roomId).emit("user-typing", { 
-        userId, 
-        isTyping: false 
-      });
-    });
+    // Broadcast to ALL users in the room
+    io.to(roomId).emit("receive-chat-message", chatMessage);
+    console.log(`📨 Message broadcast to room ${roomId}`);
+    
+  } catch (error) {
+    console.error('❌ Error sending chat message:', error);
+    socket.emit("chat-error", "Failed to send message");
+  }
+});
 
     // ✅ FIXED: User online status
     socket.on("user-online", async (userId) => {
