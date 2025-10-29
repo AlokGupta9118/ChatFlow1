@@ -17,6 +17,7 @@ import { getProfile } from "./controllers/settingController.js";
 import { protect } from "./middleware/authMiddleware.js";
 import gameSocket from "./socket/gameSocket.js";
 import statusRoutes from "./routes/statusRoutes.js";
+import { setupChatSockets } from "./socket/messageSocket.js";
 
 dotenv.config();
 
@@ -71,7 +72,7 @@ const io = new Server(server, {
 
 // Register socket handlers
 gameSocket(io);
-
+setupChatSockets(io);
 // Error handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
