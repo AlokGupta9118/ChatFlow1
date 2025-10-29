@@ -7,8 +7,7 @@ import GroupJoinRequest from "../models/GroupJoinRequest.js";
 
 
 
-// ✅ IMPROVED: Send message with immediate DB storage and real-time delivery
-// ✅ FIXED: Send message with consistent room naming
+// ✅ FIXED: Send private message with immediate real-time delivery
 export const sendMessage = async (req, res) => {
   try {
     const senderId = req.user._id;
@@ -66,6 +65,7 @@ export const sendMessage = async (req, res) => {
     const messageForRealTime = {
       ...populatedMessage,
       senderId: senderId,
+      receiverId: receiverId, // ✅ ADDED: Include receiverId for backup delivery
       roomId: roomId,
       isRealTime: false,
       chatType: 'private'
@@ -74,13 +74,14 @@ export const sendMessage = async (req, res) => {
     // ✅ FIXED: Emit socket message with consistent room naming
     const io = req.app.get('io');
     if (io) {
-      // Emit to the specific chat room
+      // PRIMARY: Emit to the specific private chat room
       io.to(roomId).emit('receive_message', messageForRealTime);
       
-      // Also emit to both users' personal rooms as backup
-      io.to(`user_${receiverId}`).to(`user_${senderId}`).emit('receive_message', messageForRealTime);
+      // SECONDARY: Emit to both users' personal rooms as backup
+      io.to(`user_${receiverId}`).emit('receive_message', messageForRealTime);
+      io.to(`user_${senderId}`).emit('receive_message', messageForRealTime);
       
-      console.log(`📨 Controller emitted message to room: ${roomId}`);
+      console.log(`📨 Controller emitted PRIVATE message to room: ${roomId}`);
     }
 
     res.status(201).json({ 
@@ -159,7 +160,7 @@ export const sendGroupMessage = async (req, res) => {
         io.to(`user_${participant.user}`).emit('receive_message', messageForRealTime);
       });
       
-      console.log(`📨 Controller emitted group message to room: ${groupRoomId}`);
+      console.log(`📨 Controller emitted GROUP message to room: ${groupRoomId}`);
     }
 
     return res.status(201).json({ 

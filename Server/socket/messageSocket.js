@@ -60,7 +60,7 @@ export const setupChatSockets = (io) => {
       console.log(`🚪 User left room: ${formattedRoomId}`);
     });
 
-    // ✅ FIXED: REAL-TIME Message handling
+    // ✅ FIXED: REAL-TIME Message handling for BOTH private and group
     socket.on('send_message', async (data) => {
       try {
         const { roomId, message, chatType = "private" } = data;
@@ -86,10 +86,14 @@ export const setupChatSockets = (io) => {
           status: 'sent'
         };
 
-        // ✅ CRITICAL FIX: Use consistent room naming
-        // Broadcast to ALL users in the room INCLUDING sender
+        // ✅ CRITICAL FIX: Use consistent room naming for BOTH private and group
+        console.log(`📨 Broadcasting message to room: ${roomId}`);
         io.to(roomId).emit('receive_message', chatMessage);
-        console.log(`📨 Real-time message broadcast to room ${roomId}:`, chatMessage.content);
+
+        // ✅ ALSO send to user's personal rooms for backup delivery
+        if (chatType === "private" && message.receiverId) {
+          io.to(`user_${message.receiverId}`).emit('receive_message', chatMessage);
+        }
 
       } catch (error) {
         console.error('❌ Error in send_message:', error);
@@ -97,7 +101,7 @@ export const setupChatSockets = (io) => {
       }
     });
 
-    // ✅ FIXED: Enhanced typing indicators
+    // ✅ FIXED: Enhanced typing indicators for BOTH private and group
     socket.on('typing_start', (data) => {
       const { chatId, userId, userName, isGroup = false } = data;
       const roomId = isGroup ? `group_${chatId}` : `private_${chatId}`;
@@ -132,6 +136,7 @@ export const setupChatSockets = (io) => {
 
     // ✅ FIXED: User status management
     socket.on('user_online', (data) => {
+      console.log('👤 User online:', data.userId);
       socket.broadcast.emit('user_status_change', {
         userId: data.userId,
         status: 'online',

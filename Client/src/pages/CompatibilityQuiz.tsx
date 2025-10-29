@@ -22,7 +22,7 @@ import {
   Coffee, Film, BookOpen, Utensils, Mountain, Palette,
   Zap as Lightning, Moon, Sun, Wifi, WifiOff,
   BarChart3, GitBranch, Eye, EyeOff, RotateCcw,
-  Smartphone, Monitor, ArrowDown, CopyIcon
+  Smartphone, Monitor, ArrowDown, CopyIcon, ArrowLeft
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
@@ -553,6 +553,556 @@ const WaitingScreen = React.memo(({
   );
 });
 
+// NEW: Game Screen Component
+const GameScreen = React.memo(({
+  currentQuestion,
+  currentAnswer,
+  setCurrentAnswer,
+  questions,
+  timeLeft,
+  playerProgress,
+  players,
+  playerName,
+  darkMode,
+  isMobile,
+  isSubmitting,
+  onSubmitAnswer,
+  onOptionSelect,
+  onLeaveRoom
+}) => {
+  const questionContainerRef = useRef(null);
+  const optionsContainerRef = useRef(null);
+
+  // Auto-scroll to question on mobile
+  useEffect(() => {
+    if (isMobile && questionContainerRef.current) {
+      setTimeout(() => {
+        questionContainerRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
+    }
+  }, [currentQuestion, isMobile]);
+
+  const handleOptionSelect = (option) => {
+    onOptionSelect(option);
+  };
+
+  const handleSubmit = () => {
+    if (currentAnswer && !isSubmitting) {
+      onSubmitAnswer();
+    }
+  };
+
+  const currentQuestionData = questions[currentQuestion];
+
+  return (
+    <div className={`min-h-screen p-3 md:p-6 transition-colors duration-300 ${
+      darkMode 
+        ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
+        : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+    }`}>
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 md:mb-8 gap-4">
+          <div className="flex items-center space-x-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onLeaveRoom}
+              className={darkMode ? 'text-white hover:bg-slate-700' : 'text-gray-700 hover:bg-gray-100'}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Leave Game
+            </Button>
+            <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+              darkMode ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
+            }`}>
+              Question {currentQuestion + 1} of {questions.length}
+            </div>
+          </div>
+
+          {/* Timer */}
+          {timeLeft !== null && (
+            <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
+              darkMode ? 'bg-slate-700' : 'bg-white'
+            }`}>
+              <Timer className={`w-4 h-4 ${timeLeft < 10 ? 'text-red-500 animate-pulse' : darkMode ? 'text-blue-400' : 'text-blue-500'}`} />
+              <span className={`font-mono font-bold ${timeLeft < 10 ? 'text-red-500' : darkMode ? 'text-white' : 'text-gray-900'}`}>
+                {timeLeft}s
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Progress Bar */}
+        <div className="mb-6 md:mb-8">
+          <div className="flex justify-between items-center mb-2">
+            <span className={`text-sm ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              Progress
+            </span>
+            <span className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+              {Math.round(((currentQuestion + 1) / questions.length) * 100)}%
+            </span>
+          </div>
+          <Progress 
+            value={((currentQuestion + 1) / questions.length) * 100} 
+            className={`h-2 ${darkMode ? 'bg-slate-700' : 'bg-gray-200'}`}
+          />
+        </div>
+
+        {/* Main Game Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+          {/* Left Column - Players */}
+          <div className="lg:col-span-1">
+            <Card className={`p-4 md:p-6 backdrop-blur-sm border ${
+              darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+            }`}>
+              <h3 className={`text-lg font-semibold mb-4 flex items-center ${
+                darkMode ? 'text-white' : 'text-gray-900'
+              }`}>
+                <Users className="w-5 h-5 mr-2 text-purple-500" />
+                Players
+              </h3>
+              
+              <div className="space-y-3">
+                {players.map((player, index) => (
+                  <div
+                    key={player.name || index}
+                    className={`flex items-center justify-between p-3 rounded-lg ${
+                      darkMode ? 'bg-slate-700/50' : 'bg-white'
+                    } ${player.name === playerName ? 'ring-2 ring-purple-500' : ''}`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className={`${
+                          darkMode ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
+                        }`}>
+                          {player.name ? player.name.charAt(0).toUpperCase() : '?'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className={`font-medium text-sm ${
+                          darkMode ? 'text-white' : 'text-gray-900'
+                        }`}>
+                          {player.name}
+                          {player.name === playerName && (
+                            <Badge variant="secondary" className="ml-2 text-xs">
+                              You
+                            </Badge>
+                          )}
+                        </div>
+                        <div className={`text-xs ${
+                          darkMode ? 'text-slate-400' : 'text-gray-500'
+                        }`}>
+                          Progress: {playerProgress[player.name] || 0}%
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {index === 0 && (
+                      <Crown className="w-4 h-4 text-yellow-500" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+
+          {/* Right Column - Question & Options */}
+          <div className="lg:col-span-2">
+            <Card className={`p-4 md:p-6 backdrop-blur-sm border ${
+              darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+            }`} ref={questionContainerRef}>
+              {/* Question */}
+              <div className="mb-6 md:mb-8">
+                <div className="flex items-center space-x-2 mb-3">
+                  <Badge variant={darkMode ? "secondary" : "default"} className="mb-2">
+                    {currentQuestionData.category}
+                  </Badge>
+                  <Badge variant="outline" className={darkMode ? 'text-slate-300' : 'text-gray-600'}>
+                    Weight: {currentQuestionData.weight}x
+                  </Badge>
+                </div>
+                
+                <h2 className={`text-xl md:text-2xl font-bold mb-4 leading-relaxed ${
+                  darkMode ? 'text-white' : 'text-gray-900'
+                }`}>
+                  {currentQuestionData.question}
+                </h2>
+                
+                <div className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>
+                  Select the option that best describes you
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="space-y-3 mb-6 md:mb-8" ref={optionsContainerRef}>
+                {currentQuestionData.options.map((option, index) => (
+                  <div
+                    key={index}
+                    onClick={() => handleOptionSelect(option)}
+                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 option-item ${
+                      currentAnswer === option
+                        ? darkMode 
+                          ? 'bg-purple-600 border-purple-500 text-white scale-105 shadow-lg' 
+                          : 'bg-purple-500 border-purple-400 text-white scale-105 shadow-lg'
+                        : darkMode
+                          ? 'bg-slate-700 border-slate-600 text-white hover:bg-slate-600 hover:border-slate-500'
+                          : 'bg-white border-gray-200 text-gray-900 hover:bg-gray-50 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm md:text-base">{option}</span>
+                      {currentAnswer === option && (
+                        <CheckCircle className="w-5 h-5" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Submit Button */}
+              <Button
+                onClick={handleSubmit}
+                disabled={!currentAnswer || isSubmitting}
+                size="lg"
+                className="w-full py-3 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    {currentQuestion < questions.length - 1 ? 'Next Question' : 'See Results'}
+                  </>
+                )}
+              </Button>
+
+              {/* Progress Indicator */}
+              <div className="mt-4 text-center">
+                <div className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-xs ${
+                  darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
+                }`}>
+                  <Target className="w-3 h-3" />
+                  <span>
+                    {currentQuestion + 1} of {questions.length} questions completed
+                  </span>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// NEW: Results Screen Component
+const ResultsScreen = React.memo(({
+  bothAnswers,
+  players,
+  playerName,
+  darkMode,
+  isMobile,
+  onPlayAgain,
+  onLeaveRoom
+}) => {
+  const [activeTab, setActiveTab] = useState("overview");
+  const [copied, setCopied] = useState(false);
+  const resultsContainerRef = useRef(null);
+
+  // Calculate compatibility
+  const compatibility = React.useMemo(() => {
+    if (!bothAnswers || typeof bothAnswers !== 'object') {
+      return { 
+        score: 0, 
+        breakdown: {}, 
+        insights: ["No results available yet"], 
+        advancedAnalysis: {}, 
+        advancedFactors: {} 
+      };
+    }
+
+    const allPlayers = Object.keys(bothAnswers);
+    if (allPlayers.length < 2) {
+      return { 
+        score: 0, 
+        breakdown: {}, 
+        insights: ["Waiting for both players to complete the test"], 
+        advancedAnalysis: {}, 
+        advancedFactors: {} 
+      };
+    }
+
+    const [p1, p2] = allPlayers;
+    const ans1 = bothAnswers[p1] || [];
+    const ans2 = bothAnswers[p2] || [];
+    
+    let totalScore = 0;
+    let maxPossibleScore = 0;
+    const categoryScores = {};
+    const insights = [];
+
+    questions.forEach((question, i) => {
+      const weight = question.weight || 1;
+      maxPossibleScore += weight;
+      
+      const answer1 = Array.isArray(ans1) ? ans1[i]?.answer : null;
+      const answer2 = Array.isArray(ans2) ? ans2[i]?.answer : null;
+      
+      if (answer1 && answer2 && answer1 === answer2) {
+        totalScore += weight;
+        const category = question.category || 'General';
+        categoryScores[category] = (categoryScores[category] || 0) + weight;
+      }
+    });
+
+    const finalScore = maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0;
+
+    // Generate insights based on score
+    if (finalScore >= 95) {
+      insights.push("💖 Cosmic Connection! You're practically soulmates");
+      insights.push("✨ Perfect harmony in values, communication, and lifestyle");
+    } else if (finalScore >= 85) {
+      insights.push("🌟 Exceptional Match! Your connection is deep and natural");
+      insights.push("⭐ Strong alignment in core values and life goals");
+    } else if (finalScore >= 75) {
+      insights.push("💫 Great Chemistry! You complement each other beautifully");
+      insights.push("🎯 Good balance of similarities and complementary differences");
+    } else if (finalScore >= 65) {
+      insights.push("🌈 Strong Potential! With understanding, this could flourish");
+      insights.push("💡 Your differences create opportunities for growth");
+    } else if (finalScore >= 50) {
+      insights.push("🎭 Interesting Dynamic! You challenge and inspire each other");
+      insights.push("🌱 Unique combination with room for beautiful development");
+    } else {
+      insights.push("🌀 Unconventional Match! You bring fresh perspectives");
+      insights.push("⚡ Your differences create exciting, unpredictable chemistry");
+    }
+
+    return {
+      score: finalScore,
+      breakdown: categoryScores,
+      insights,
+      player1: p1,
+      player2: p2
+    };
+  }, [bothAnswers]);
+
+  const copyResults = async () => {
+    const resultsText = `
+Compatibility Results: ${compatibility.score}%
+
+Players: ${compatibility.player1} & ${compatibility.player2}
+
+Key Insights:
+${compatibility.insights.join('\n')}
+
+Breakdown:
+${Object.entries(compatibility.breakdown).map(([category, score]) => `${category}: ${score}`).join('\n')}
+    `.trim();
+
+    try {
+      await navigator.clipboard.writeText(resultsText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy results');
+    }
+  };
+
+  const shareResults = async () => {
+    const shareData = {
+      title: 'Our Compatibility Results',
+      text: `We scored ${compatibility.score}% on the compatibility test!`,
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        copyResults();
+      }
+    } catch (error) {
+      console.log('Sharing cancelled');
+    }
+  };
+
+  return (
+    <div className={`min-h-screen p-3 md:p-6 transition-colors duration-300 ${
+      darkMode 
+        ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
+        : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+    }`}>
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8 md:mb-12">
+          <div className="flex justify-center mb-4 md:mb-6">
+            <div className="relative">
+              <Heart className="w-16 h-16 md:w-20 md:h-20 text-pink-500" />
+              <Sparkles className="w-8 h-8 md:w-10 md:h-10 text-yellow-500 absolute -top-2 -right-2 animate-pulse" />
+            </div>
+          </div>
+          
+          <h1 className="text-3xl md:text-5xl font-bold mb-4 md:mb-6 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+            Compatibility Results
+          </h1>
+          
+          <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 mb-6 md:mb-8">
+            {players.map((player, index) => (
+              <div key={player.name} className="flex items-center space-x-3">
+                <Avatar className="w-12 h-12 md:w-16 md:h-16">
+                  <AvatarFallback className={`text-lg ${
+                    darkMode ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
+                  }`}>
+                    {player.name.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <span className={`text-lg md:text-xl font-semibold ${
+                  darkMode ? 'text-white' : 'text-gray-900'
+                }`}>
+                  {player.name}
+                </span>
+              </div>
+            ))}
+            <div className={`text-2xl md:text-3xl font-bold ${
+              darkMode ? 'text-white' : 'text-gray-900'
+            }`}>
+              &
+            </div>
+          </div>
+        </div>
+
+        {/* Main Score Card */}
+        <Card className={`p-6 md:p-8 backdrop-blur-sm border mb-6 md:mb-8 ${
+          darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+        }`}>
+          <div className="text-center">
+            {/* Score Circle */}
+            <div className="relative inline-block mb-6 md:mb-8">
+              <div className="relative">
+                <div className={`w-32 h-32 md:w-40 md:h-40 rounded-full border-8 flex items-center justify-center ${
+                  compatibility.score >= 80 
+                    ? 'border-green-500' 
+                    : compatibility.score >= 60 
+                    ? 'border-yellow-500' 
+                    : 'border-red-500'
+                }`}>
+                  <div className="text-center">
+                    <div className={`text-3xl md:text-4xl font-bold ${
+                      darkMode ? 'text-white' : 'text-gray-900'
+                    }`}>
+                      {compatibility.score}%
+                    </div>
+                    <div className={`text-sm mt-1 ${
+                      darkMode ? 'text-slate-400' : 'text-gray-600'
+                    }`}>
+                      Match Score
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Insights */}
+            <div className="space-y-3 md:space-y-4 mb-6 md:mb-8">
+              {compatibility.insights.map((insight, index) => (
+                <div
+                  key={index}
+                  className={`p-3 md:p-4 rounded-lg border ${
+                    darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white border-gray-200'
+                  }`}
+                >
+                  <p className={`text-sm md:text-base text-center ${
+                    darkMode ? 'text-slate-300' : 'text-gray-700'
+                  }`}>
+                    {insight}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col md:flex-row gap-3 md:gap-4 justify-center">
+              <Button
+                onClick={onPlayAgain}
+                size="lg"
+                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+              >
+                <RotateCcw className="w-5 h-5 mr-2" />
+                Play Again
+              </Button>
+              
+              <Button
+                onClick={shareResults}
+                variant={darkMode ? "outline" : "secondary"}
+                size="lg"
+              >
+                <Share2 className="w-5 h-5 mr-2" />
+                Share Results
+              </Button>
+              
+              <Button
+                onClick={onLeaveRoom}
+                variant={darkMode ? "outline" : "secondary"}
+                size="lg"
+              >
+                <ArrowLeft className="w-5 h-5 mr-2" />
+                Leave Game
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* Detailed Breakdown */}
+        <Card className={`p-6 md:p-8 backdrop-blur-sm border ${
+          darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+        }`}>
+          <h3 className={`text-xl md:text-2xl font-bold mb-6 text-center ${
+            darkMode ? 'text-white' : 'text-gray-900'
+          }`}>
+            Detailed Breakdown
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+            {Object.entries(compatibility.breakdown).map(([category, score]) => (
+              <div
+                key={category}
+                className={`p-4 rounded-lg border ${
+                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white border-gray-200'
+                }`}
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <span className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                    {category}
+                  </span>
+                  <span className={`font-bold ${
+                    score >= 3 ? 'text-green-500' : score >= 2 ? 'text-yellow-500' : 'text-red-500'
+                  }`}>
+                    {score} pts
+                  </span>
+                </div>
+                <Progress 
+                  value={(score / 5) * 100} 
+                  className={`h-2 ${
+                    score >= 3 ? 'bg-green-500' : score >= 2 ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}
+                />
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+});
+
 export default function AdvancedCompatibilityGame() {
   // Core states
   const [roomId, setRoomId] = useState("");
@@ -564,7 +1114,7 @@ export default function AdvancedCompatibilityGame() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Game states - FIXED: Initialize bothAnswers as empty object
+  // Game states
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [answers, setAnswers] = useState<any[]>([]);
@@ -595,33 +1145,14 @@ export default function AdvancedCompatibilityGame() {
   const [isMobile, setIsMobile] = useState(false);
   const [gameState, setGameState] = useState<any>(null);
 
-  // Screenshot sharing states
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [shareSuccess, setShareSuccess] = useState(false);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [showShareModal, setShowShareModal] = useState(false);
-
   // Refs
-  const audioRef = useRef<HTMLAudioElement>(null);
   const submitTimeoutRef = useRef<NodeJS.Timeout>();
-  const screenshotRef = useRef<HTMLDivElement>(null);
-  const mainContainerRef = useRef<HTMLDivElement>(null);
-  const optionsContainerRef = useRef<HTMLDivElement>(null);
-  const questionContainerRef = useRef<HTMLDivElement>(null);
 
-  // FIXED: Enhanced mobile detection and scroll handling
+  // Mobile detection
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      
-      if (mobile) {
-        document.body.classList.add('mobile-device');
-        document.body.style.overflowX = 'hidden';
-      } else {
-        document.body.classList.remove('mobile-device');
-        document.body.style.overflowX = 'auto';
-      }
     };
 
     checkMobile();
@@ -629,12 +1160,10 @@ export default function AdvancedCompatibilityGame() {
 
     return () => {
       window.removeEventListener('resize', checkMobile);
-      document.body.classList.remove('mobile-device');
-      document.body.style.overflowX = 'auto';
     };
   }, []);
 
-  // FIXED: Enhanced state persistence with proper error handling
+  // State persistence
   useEffect(() => {
     const savedState = localStorage.getItem('compatibilityGameState');
     if (savedState) {
@@ -643,17 +1172,6 @@ export default function AdvancedCompatibilityGame() {
         setPlayerName(state.playerName || '');
         setRoomId(state.roomId || '');
         setDarkMode(state.darkMode !== undefined ? state.darkMode : true);
-        
-        if (state.roomId && state.playerName && state.joined) {
-          setTimeout(() => {
-            if (socket.connected) {
-              socket.emit("rejoin-room", {
-                roomId: state.roomId,
-                playerName: state.playerName
-              });
-            }
-          }, 1000);
-        }
       } catch (error) {
         console.error('Error loading saved state:', error);
         localStorage.removeItem('compatibilityGameState');
@@ -661,7 +1179,7 @@ export default function AdvancedCompatibilityGame() {
     }
   }, []);
 
-  // FIXED: Enhanced auto-save with error handling
+  // Auto-save
   useEffect(() => {
     try {
       const state = {
@@ -681,7 +1199,7 @@ export default function AdvancedCompatibilityGame() {
     }
   }, [playerName, roomId, darkMode, joined, gameStarted, currentQuestion, answers, advancedAnswers, gameState]);
 
-  // FIXED: Enhanced socket connection management
+  // Socket connection management
   useEffect(() => {
     const handleConnect = () => {
       setConnectionStatus("connected");
@@ -713,7 +1231,7 @@ export default function AdvancedCompatibilityGame() {
     };
   }, [joined, roomId, playerName]);
 
-  // FIXED: Enhanced socket event handlers with comprehensive error handling
+  // Socket event handlers
   useEffect(() => {
     const handleRoomCreated = (room: any) => {
       if (!room) return;
@@ -722,7 +1240,6 @@ export default function AdvancedCompatibilityGame() {
       setJoined(true);
       setPlayers(room.players || []);
       setGameState(room.gameState || null);
-      playSound("success");
     };
 
     const handleRoomJoined = (room: any) => {
@@ -737,30 +1254,6 @@ export default function AdvancedCompatibilityGame() {
         setCurrentQuestion(room.gameState.currentQuestion || 0);
         setPlayerProgress(room.gameState.playerProgress || {});
       }
-      
-      playSound("success");
-    };
-
-    const handleRejoinSuccess = (data: any) => {
-      if (!data) return;
-      setRoomId(data.roomId || '');
-      setPlayers(data.players || []);
-      setJoined(true);
-      setGameState(data.gameState || null);
-      
-      if (data.gameState?.gameStarted) {
-        setGameStarted(true);
-        setCurrentQuestion(data.gameState.currentQuestion || 0);
-        setPlayerProgress(data.gameState.playerProgress || {});
-        setAnswers(data.playerAnswers || []);
-      }
-      
-      if (data.gameState?.showResults) {
-        setShowResults(true);
-        setBothAnswers(data.gameState.results || {});
-      }
-      
-      playSound("success");
     };
 
     const handleUpdatePlayers = (playersList: any[]) => {
@@ -792,7 +1285,6 @@ export default function AdvancedCompatibilityGame() {
         personalityTraits: []
       });
       setGameState(gameState || null);
-      playSound("success");
     };
 
     const handleQuestionChanged = (data: any) => {
@@ -802,86 +1294,48 @@ export default function AdvancedCompatibilityGame() {
       setGameState(data.gameState || null);
     };
 
-    // FIXED: Critical fix for show-results handler
     const handleShowResults = (data: any) => {
-      console.log("Show results data received:", data);
-      
-      // Ensure data is always an object
       const safeData = data || {};
-      
-      // FIXED: Ensure results is always an object, never null or undefined
       const results = safeData.results || safeData || {};
       
-      // Validate that results is actually an object
       if (typeof results !== 'object' || results === null) {
-        console.error("Results is not an object, setting empty object:", results);
         setBothAnswers({});
       } else {
-        console.log("Setting bothAnswers to:", results);
         setBothAnswers(results);
       }
       
       setShowResults(true);
       setIsSubmitting(false);
       setGameState(safeData.gameState || null);
-      playSound("victory");
-      triggerConfetti();
-    };
-
-    const handlePlayerReaction = (data: {player: string, reaction: string}) => {
-      if (!data || !data.player) return;
-      setPlayerReactions(prev => ({
-        ...prev,
-        [data.player]: data.reaction
-      }));
-      
-      setTimeout(() => {
-        setPlayerReactions(prev => {
-          const newReactions = {...prev};
-          delete newReactions[data.player];
-          return newReactions;
-        });
-      }, 3000);
     };
 
     const handleGameStateUpdate = (newGameState: any) => {
       setGameState(newGameState || null);
     };
 
-    const handleConnectionError = (error: any) => {
-      setConnectionStatus("disconnected");
-      console.error("Connection error:", error);
-    };
-
     // Register event listeners
     socket.on("room-created", handleRoomCreated);
     socket.on("room-joined", handleRoomJoined);
-    socket.on("rejoin-success", handleRejoinSuccess);
     socket.on("update-players", handleUpdatePlayers);
     socket.on("player-progress", handlePlayerProgress);
     socket.on("game-started", handleGameStarted);
     socket.on("question-changed", handleQuestionChanged);
     socket.on("show-results", handleShowResults);
-    socket.on("player-reaction", handlePlayerReaction);
     socket.on("game-state-update", handleGameStateUpdate);
-    socket.on("connect_error", handleConnectionError);
 
     return () => {
       socket.off("room-created", handleRoomCreated);
       socket.off("room-joined", handleRoomJoined);
-      socket.off("rejoin-success", handleRejoinSuccess);
       socket.off("update-players", handleUpdatePlayers);
       socket.off("player-progress", handlePlayerProgress);
       socket.off("game-started", handleGameStarted);
       socket.off("question-changed", handleQuestionChanged);
       socket.off("show-results", handleShowResults);
-      socket.off("player-reaction", handlePlayerReaction);
       socket.off("game-state-update", handleGameStateUpdate);
-      socket.off("connect_error", handleConnectionError);
     };
   }, []);
 
-  // FIXED: Enhanced timer with proper cleanup
+  // Timer
   useEffect(() => {
     if (timeLeft === null || !gameStarted || showResults) return;
     
@@ -896,57 +1350,6 @@ export default function AdvancedCompatibilityGame() {
     
     return () => clearTimeout(timer);
   }, [timeLeft, gameStarted, showResults]);
-
-  // FIXED: Start timer when question changes with better mobile scroll
-  useEffect(() => {
-    if (gameStarted && !showResults && currentQuestion < questions.length) {
-      setTimeLeft(25);
-      
-      if (isMobile && questionContainerRef.current) {
-        setTimeout(() => {
-          questionContainerRef.current?.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start' 
-          });
-        }, 100);
-      }
-    }
-  }, [currentQuestion, gameStarted, showResults, isMobile]);
-
-  // FIXED: Enhanced sound effects with fallback
-  const playSound = (soundName: string) => {
-    if (!soundEnabled) return;
-    
-    try {
-      const sounds: {[key: string]: number} = {
-        select: 800,
-        success: 1200,
-        notification: 600,
-        victory: 1500
-      };
-      
-      const frequency = sounds[soundName];
-      if (frequency && window.AudioContext) {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-        oscillator.type = 'sine';
-        
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.1);
-      }
-    } catch (error) {
-      console.log("Audio not supported");
-    }
-  };
 
   const handleAutoSubmit = () => {
     if (currentAnswer) {
@@ -967,7 +1370,7 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // FIXED: Enhanced room creation with validation - use useCallback to prevent recreation
+  // Room management
   const createRoom = useCallback(() => {
     const trimmedName = playerName.trim();
     if (!trimmedName || trimmedName.length < 2) {
@@ -981,7 +1384,6 @@ export default function AdvancedCompatibilityGame() {
     });
   }, [playerName]);
 
-  // FIXED: Enhanced room joining with validation - use useCallback to prevent recreation
   const joinRoom = useCallback(() => {
     const trimmedName = playerName.trim();
     const trimmedRoomId = roomId.trim();
@@ -1009,12 +1411,10 @@ export default function AdvancedCompatibilityGame() {
     socket.emit("start-game", { roomId });
   };
 
-  // FIXED: Enhanced answer submission with proper validation
   const submitAnswer = () => {
     if (!currentAnswer || isSubmitting) return;
 
     setIsSubmitting(true);
-    playSound("select");
 
     const newAnswers = [...answers, { 
       question: questions[currentQuestion].question,
@@ -1054,174 +1454,10 @@ export default function AdvancedCompatibilityGame() {
     }, 400);
   };
 
-  const sendReaction = (reaction: string) => {
-    socket.emit("player-reaction", { roomId, reaction });
-  };
-
-  const triggerConfetti = () => {
-    if (!animationsEnabled) return;
-    
-    for (let i = 0; i < 75; i++) {
-      setTimeout(() => {
-        const confetti = document.createElement('div');
-        confetti.style.position = 'fixed';
-        confetti.style.width = '12px';
-        confetti.style.height = '12px';
-        confetti.style.background = `hsl(${Math.random() * 360}, 100%, 60%)`;
-        confetti.style.borderRadius = '50%';
-        confetti.style.left = `${Math.random() * 100}%`;
-        confetti.style.top = '-20px';
-        confetti.style.zIndex = '9999';
-        confetti.style.pointerEvents = 'none';
-        confetti.style.animation = `confetti-fall ${1.5 + Math.random() * 2}s ease-out forwards`;
-        
-        document.body.appendChild(confetti);
-        
-        setTimeout(() => {
-          if (document.body.contains(confetti)) {
-            document.body.removeChild(confetti);
-          }
-        }, 4000);
-      }, i * 75);
-    }
-  };
-
-  // FIXED: Enhanced mobile option selection with better scroll
   const handleOptionSelect = (option: string) => {
     setCurrentAnswer(option);
-    playSound("select");
-    
-    if (isMobile) {
-      setTimeout(() => {
-        const submitButton = document.querySelector('button[type="button"]');
-        if (submitButton) {
-          submitButton.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'center' 
-          });
-        }
-      }, 300);
-    }
   };
 
-  // FIXED: Enhanced compatibility calculation with comprehensive null checks
-  const calculateCompatibility = () => {
-    console.log("Calculating compatibility with bothAnswers:", bothAnswers);
-    
-    // FIXED: Comprehensive check for bothAnswers to prevent TypeError
-    if (!bothAnswers || typeof bothAnswers !== 'object' || bothAnswers === null) {
-      console.error("bothAnswers is invalid, returning default:", bothAnswers);
-      return { 
-        score: 0, 
-        breakdown: {}, 
-        insights: ["No results available yet"], 
-        advancedAnalysis: {}, 
-        advancedFactors: {} 
-      };
-    }
-
-    const allPlayers = Object.keys(bothAnswers);
-    console.log("Players found:", allPlayers);
-    
-    if (allPlayers.length < 2) {
-      return { 
-        score: 0, 
-        breakdown: {}, 
-        insights: ["Waiting for both players to complete the test"], 
-        advancedAnalysis: {}, 
-        advancedFactors: {} 
-      };
-    }
-
-    const [p1, p2] = allPlayers;
-    const ans1 = bothAnswers[p1] || [];
-    const ans2 = bothAnswers[p2] || [];
-    
-    let totalScore = 0;
-    let maxPossibleScore = 0;
-    const categoryScores: {[key: string]: number} = {};
-    const insights: string[] = [];
-    const advancedAnalysis: any = {};
-
-    questions.forEach((question, i) => {
-      const weight = question.weight || 1;
-      maxPossibleScore += weight;
-      
-      const answer1 = Array.isArray(ans1) ? ans1[i]?.answer : null;
-      const answer2 = Array.isArray(ans2) ? ans2[i]?.answer : null;
-      
-      if (answer1 && answer2 && answer1 === answer2) {
-        totalScore += weight;
-        const category = question.category || 'General';
-        categoryScores[category] = (categoryScores[category] || 0) + weight;
-      }
-    });
-
-    let advancedScore = 0;
-    let maxAdvancedScore = 0;
-    const advancedMatches: string[] = [];
-
-    const adv1 = (typeof ans1 === 'object' && !Array.isArray(ans1) ? ans1.advancedAnswers : {}) || {};
-    const adv2 = (typeof ans2 === 'object' && !Array.isArray(ans2) ? ans2.advancedAnswers : {}) || {};
-
-    Object.keys(advancedCompatibilityFactors).forEach(factor => {
-      if (adv1[factor] && adv2[factor]) {
-        maxAdvancedScore += 1;
-        if (adv1[factor] === adv2[factor]) {
-          advancedScore += 1;
-          advancedMatches.push(factor);
-        }
-      }
-    });
-
-    const questionScore = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 60 : 0;
-    const advancedFactorScore = maxAdvancedScore > 0 ? (advancedScore / maxAdvancedScore) * 40 : 0;
-    const finalScore = Math.round(questionScore + advancedFactorScore);
-
-    if (finalScore >= 95) {
-      insights.push("💖 Cosmic Connection! You're practically soulmates");
-      insights.push("✨ Perfect harmony in values, communication, and lifestyle");
-    } else if (finalScore >= 85) {
-      insights.push("🌟 Exceptional Match! Your connection is deep and natural");
-      insights.push("⭐ Strong alignment in core values and life goals");
-    } else if (finalScore >= 75) {
-      insights.push("💫 Great Chemistry! You complement each other beautifully");
-      insights.push("🎯 Good balance of similarities and complementary differences");
-    } else if (finalScore >= 65) {
-      insights.push("🌈 Strong Potential! With understanding, this could flourish");
-      insights.push("💡 Your differences create opportunities for growth");
-    } else if (finalScore >= 50) {
-      insights.push("🎭 Interesting Dynamic! You challenge and inspire each other");
-      insights.push("🌱 Unique combination with room for beautiful development");
-    } else {
-      insights.push("🌀 Unconventional Match! You bring fresh perspectives");
-      insights.push("⚡ Your differences create exciting, unpredictable chemistry");
-    }
-
-    advancedAnalysis.matches = advancedMatches;
-    advancedAnalysis.communicationMatch = adv1.communicationStyle === adv2.communicationStyle;
-    advancedAnalysis.loveLanguageMatch = adv1.loveLanguage === adv2.loveLanguage;
-    advancedAnalysis.energyCompatibility = adv1.energyLevel === adv2.energyLevel;
-    advancedAnalysis.socialCompatibility = adv1.socialPreference === adv2.socialPreference;
-
-    const result = {
-      score: finalScore,
-      breakdown: categoryScores,
-      insights,
-      advancedAnalysis,
-      advancedFactors: {
-        communication: adv1.communicationStyle === adv2.communicationStyle ? "Perfect match" : "Different styles",
-        loveLanguages: adv1.loveLanguage === adv2.loveLanguage ? "Same love language" : "Different love languages",
-        energy: adv1.energyLevel === adv2.energyLevel ? "Synced energy" : "Different rhythms",
-        social: adv1.socialPreference === adv2.socialPreference ? "Social harmony" : "Different preferences"
-      }
-    };
-
-    console.log("Final compatibility result:", result);
-    return result;
-  };
-
-  // NEW: Leave room function
   const leaveRoom = useCallback(() => {
     socket.emit("leave-room", { roomId });
     setJoined(false);
@@ -1230,149 +1466,64 @@ export default function AdvancedCompatibilityGame() {
     setPlayers([]);
     setIsHost(false);
     setRoomId("");
+    setCurrentQuestion(0);
+    setCurrentAnswer("");
+    setAnswers([]);
+    setBothAnswers({});
     localStorage.removeItem('compatibilityGameState');
   }, [roomId]);
 
-  // Add enhanced CSS for mobile optimizations
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes confetti-fall {
-        0% {
-          transform: translateY(-20px) rotate(0deg) scale(1);
-          opacity: 1;
-        }
-        100% {
-          transform: translateY(100vh) rotate(720deg) scale(0.5);
-          opacity: 0;
-        }
-      }
-      
-      /* Enhanced Mobile Optimizations */
-      @media (max-width: 768px) {
-        .mobile-text-sm {
-          font-size: 0.875rem;
-        }
-        .mobile-p-3 {
-          padding: 0.75rem;
-        }
-        .mobile-space-y-2 > * + * {
-          margin-top: 0.5rem;
-        }
-        
-        /* FIXED: Better mobile viewport handling */
-        body.mobile-device {
-          overflow-x: hidden !important;
-          position: relative !important;
-          width: 100% !important;
-          height: 100% !important;
-          -webkit-overflow-scrolling: touch;
-        }
-        
-        html {
-          overflow-x: hidden;
-          height: 100%;
-        }
-        
-        /* FIXED: Prevent horizontal scroll */
-        .overflow-x-hidden {
-          overflow-x: hidden !important;
-        }
-        
-        /* FIXED: Better scrolling for all screens */
-        .min-h-screen {
-          min-height: 100vh;
-          min-height: 100dvh; /* Dynamic viewport height for mobile */
-          overflow-y: auto;
-          -webkit-overflow-scrolling: touch;
-        }
-        
-        /* FIXED: Better touch targets for mobile */
-        button, [role="button"] {
-          min-height: 44px;
-          min-width: 44px;
-        }
-        
-        /* FIXED: Improved input handling */
-        input {
-          font-size: 16px !important; /* Prevent zoom on iOS */
-          min-height: 44px;
-        }
-        
-        /* FIXED: Ensure options are easily tappable */
-        .option-item {
-          min-height: 60px;
-          display: flex;
-          align-items: center;
-        }
-        
-        /* FIXED: Better text sizing for mobile */
-        .mobile-text-lg {
-          font-size: 1.125rem;
-        }
-        
-        .mobile-text-xl {
-          font-size: 1.25rem;
-        }
-        
-        /* FIXED: Prevent content shift when keyboard appears */
-        @media (max-height: 500px) {
-          .min-h-screen {
-            min-height: auto;
-            padding: 1rem 0;
-          }
-        }
-      }
-      
-      /* Desktop enhancements */
-      @media (min-width: 769px) {
-        .game-container {
-          min-height: 100vh;
-          overflow-y: auto;
-        }
-      }
-      
-      /* Smooth transitions for all interactive elements */
-      * {
-        transition: all 0.2s ease-in-out;
-      }
-    `;
-    document.head.appendChild(style);
-
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
-
-  // Enhanced cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (submitTimeoutRef.current) {
-        clearTimeout(submitTimeoutRef.current);
-      }
-      
-      const confettiElements = document.querySelectorAll('div[style*="confetti-fall"]');
-      confettiElements.forEach(el => {
-        if (document.body.contains(el)) {
-          document.body.removeChild(el);
-        }
-      });
-    };
-  }, []);
+  const playAgain = () => {
+    setShowResults(false);
+    setGameStarted(false);
+    setCurrentQuestion(0);
+    setCurrentAnswer("");
+    setAnswers([]);
+    setBothAnswers({});
+    setPlayerProgress({});
+    
+    if (isHost) {
+      socket.emit("start-game", { roomId });
+    }
+  };
 
   // Main render logic
   if (showResults) {
-    // Return your ResultsScreen component here
-    return <div>Results Screen - Implement based on your existing code</div>;
+    return (
+      <ResultsScreen
+        bothAnswers={bothAnswers}
+        players={players}
+        playerName={playerName}
+        darkMode={darkMode}
+        isMobile={isMobile}
+        onPlayAgain={playAgain}
+        onLeaveRoom={leaveRoom}
+      />
+    );
   }
 
   if (gameStarted) {
-    // Return your GameScreen component here  
-    return <div>Game Screen - Implement based on your existing code</div>;
+    return (
+      <GameScreen
+        currentQuestion={currentQuestion}
+        currentAnswer={currentAnswer}
+        setCurrentAnswer={setCurrentAnswer}
+        questions={questions}
+        timeLeft={timeLeft}
+        playerProgress={playerProgress}
+        players={players}
+        playerName={playerName}
+        darkMode={darkMode}
+        isMobile={isMobile}
+        isSubmitting={isSubmitting}
+        onSubmitAnswer={submitAnswer}
+        onOptionSelect={handleOptionSelect}
+        onLeaveRoom={leaveRoom}
+      />
+    );
   }
 
   if (joined) {
-    // Return the new WaitingScreen component
     return (
       <WaitingScreen
         roomId={roomId}
@@ -1389,7 +1540,6 @@ export default function AdvancedCompatibilityGame() {
     );
   }
 
-  // Use the memoized JoinCreateScreen component
   return (
     <JoinCreateScreen
       playerName={playerName}
