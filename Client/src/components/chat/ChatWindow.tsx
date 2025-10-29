@@ -1,4 +1,4 @@
-// ChatWindow.jsx - COMPLETE FIXED FRONTEND
+// ChatWindow.jsx (Completely Fixed)
 import { useEffect, useState, useRef, useCallback } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -21,6 +21,8 @@ const createSocket = () => {
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    randomizationFactor: 0.5,
   });
 };
 
@@ -36,6 +38,12 @@ const userColors = [
   'from-pink-500 to-rose-500'
 ];
 
+const messageColors = {
+  sent: 'from-blue-600 to-purple-600',
+  received: 'from-gray-700 to-gray-800',
+  system: 'from-yellow-500 to-orange-500'
+};
+
 const getUserColor = (userId) => {
   if (!userId) return userColors[0];
   const index = userId.toString().split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % userColors.length;
@@ -46,15 +54,18 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [typingUsers, setTypingUsers] = useState(new Map());
+  const [typingUsers, setTypingUsers] = useState(new Set());
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [viewedProfile, setViewedProfile] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [showMenu, setShowMenu] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [friendStatus, setFriendStatus] = useState('offline');
+  const [friendLastSeen, setFriendLastSeen] = useState(null);
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [friendStatus, setFriendStatus] = useState('offline');
-  const [friendLastSeen, setFriendLastSeen] = useState(null);
   
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -75,11 +86,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     const handleConnect = () => {
       console.log('✅ Socket.IO connected:', newSocket.id);
       setIsConnected(true);
-      
-      // Join user room after connection
-      if (userId) {
-        newSocket.emit('join_user', userId);
-      }
     };
 
     const handleDisconnect = () => {
@@ -105,7 +111,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     };
   }, []);
 
-  // ✅ Join user room when connected and userId available
+  // ✅ Join user room when connected
   useEffect(() => {
     if (socket && isConnected && userId) {
       console.log('👤 Joining user room:', userId);
@@ -122,17 +128,13 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     
     socket.emit('join_chat', roomId);
 
-    // Clear typing users when changing chats
-    setTypingUsers(new Map());
-
     return () => {
       console.log('🚪 Leaving chat room:', roomId);
       socket.emit('leave_chat', roomId);
-      setTypingUsers(new Map());
     };
   }, [socket, isConnected, selectedChat?._id, isGroup]);
 
-  // ✅ FIXED: Enhanced real-time message listeners
+  // ✅ REAL-TIME: Enhanced message listeners with duplicate prevention
   useEffect(() => {
     if (!socket || !isConnected) return;
 
@@ -142,7 +144,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       console.log('📨 Received real-time message:', msg);
       
       setMessages(prev => {
-        // Enhanced duplicate prevention
+        // ✅ Enhanced duplicate prevention
         const messageExists = prev.some(m => 
           m._id === msg._id || 
           (m.isRealTime && msg.isRealTime && m.content === msg.content && m.senderId === msg.senderId)
@@ -153,6 +155,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           return prev;
         }
         
+        // ✅ Add message with timestamp for sorting
         const newMessage = {
           ...msg,
           displayTimestamp: new Date().toISOString()
@@ -162,80 +165,36 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       });
     };
 
-    // ✅ FIXED: Typing indicator handler
-    const handleUserTyping = (data) => {
-      console.log('⌨️ Typing event received:', data);
-      
-      setTypingUsers(prev => {
-        const newTypingUsers = new Map(prev);
-        
-        if (data.isTyping) {
-          newTypingUsers.set(data.userId, {
-            userName: data.userName,
-            timestamp: data.timestamp
-          });
-        } else {
-          newTypingUsers.delete(data.userId);
-        }
-        
-        return newTypingUsers;
-      });
+    const handleTypingStart = (data) => {
+      if (data.chatId === selectedChat?._id && data.userId !== userId) {
+        setTypingUsers(prev => new Set(prev).add(data.userId));
+      }
     };
 
-    // ✅ FIXED: User status changes
-    const handleUserStatusChange = (data) => {
-      console.log('🔔 User status change:', data);
-      
-      setOnlineUsers(prev => {
-        const newOnlineUsers = new Set(prev);
-        
-        if (data.status === 'online') {
-          newOnlineUsers.add(data.userId);
-        } else {
-          newOnlineUsers.delete(data.userId);
-        }
-        
-        return newOnlineUsers;
-      });
-
-      // Update friend status for private chats
-      if (!isGroup && data.userId === selectedChat?._id) {
-        setFriendStatus(data.status);
-        setFriendLastSeen(data.lastSeen);
-      }
-
-      // Update group members status if in group chat
-      if (isGroup) {
-        setGroupMembers(prev => 
-          prev.map(member => {
-            const memberId = member.user?._id || member.user;
-            if (memberId === data.userId) {
-              return {
-                ...member,
-                status: data.status,
-                lastSeen: data.lastSeen
-              };
-            }
-            return member;
-          })
-        );
+    const handleTypingStop = (data) => {
+      if (data.chatId === selectedChat?._id && data.userId !== userId) {
+        setTypingUsers(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(data.userId);
+          return newSet;
+        });
       }
     };
 
     // Set up listeners
     socket.on('receive_message', handleReceiveMessage);
-    socket.on('user_typing', handleUserTyping);
-    socket.on('user_status_change', handleUserStatusChange);
+    socket.on('typing_start', handleTypingStart);
+    socket.on('typing_stop', handleTypingStop);
 
     // Clean up
     return () => {
       console.log('🧹 Cleaning up message listeners');
       socket.off('receive_message', handleReceiveMessage);
-      socket.off('user_typing', handleUserTyping);
-      socket.off('user_status_change', handleUserStatusChange);
-      setTypingUsers(new Map());
+      socket.off('typing_start', handleTypingStart);
+      socket.off('typing_stop', handleTypingStop);
+      setTypingUsers(new Set());
     };
-  }, [socket, isConnected, selectedChat?._id, isGroup]);
+  }, [socket, isConnected, selectedChat?._id, userId]);
 
   // ✅ Enhanced message fetching
   const fetchMessages = useCallback(async () => {
@@ -261,6 +220,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
       console.log('✅ Messages fetched:', res.data.messages?.length);
       
+      // ✅ Sort messages by createdAt
       const sortedMessages = (res.data.messages || []).sort((a, b) => 
         new Date(a.createdAt) - new Date(b.createdAt)
       );
@@ -277,63 +237,12 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   }, [selectedChat?._id, isGroup]);
 
-  // ✅ Enhanced group members fetch with online status
-  const fetchGroupMembers = async () => {
-    if (!selectedChat?._id || !isGroup) return;
-
-    const token = getToken();
-    if (!token) return;
-
-    try {
-      const res = await axios.get(
-        `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/members`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      const members = res.data.members || [];
-      setGroupMembers(members);
-
-      // Set current user role
-      const currentUserMember = members.find(m => {
-        if (m.user && typeof m.user === 'object' && m.user._id) {
-          return String(m.user._id) === String(userId);
-        }
-        if (m.user && typeof m.user === 'string') {
-          return String(m.user) === String(userId);
-        }
-        return false;
-      });
-
-      if (currentUserMember) {
-        setUserRole(currentUserMember.role || 'member');
-      } else {
-        setUserRole('member');
-      }
-
-    } catch (err) {
-      console.error("Error fetching group members:", err);
-      setUserRole('member');
-    }
-  };
-
-  // ✅ Enhanced online status for private chats
-  useEffect(() => {
-    if (!isGroup && selectedChat?._id) {
-      // For private chats, initially set as online (you can modify this based on your backend)
-      setOnlineUsers(prev => new Set(prev).add(selectedChat._id));
-      setFriendStatus('online');
-    }
-  }, [isGroup, selectedChat?._id]);
-
-  // Initial data fetch
+  // ✅ Initial messages load
   useEffect(() => {
     fetchMessages();
-    if (isGroup) {
-      fetchGroupMembers();
-    }
-  }, [fetchMessages, isGroup]);
+  }, [fetchMessages]);
 
-  // Auto-scroll to bottom
+  // ✅ Auto-scroll to bottom
   useEffect(() => {
     scrollToBottom();
   }, [messages, typingUsers.size]);
@@ -354,11 +263,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // ✅ FIXED: Emit typing start with correct data structure
+    // Emit typing start
     socket.emit("typing_start", {
       chatId: selectedChat._id,
       userId: userId,
-      userName: user.name || 'User',
+      userName: user.name,
       isGroup: isGroup
     });
 
@@ -367,36 +276,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socket.emit("typing_stop", {
         chatId: selectedChat._id,
         userId: userId,
-        userName: user.name || 'User',
         isGroup: isGroup
       });
-    }, 1000);
+    }, 1500);
   }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name]);
-
-  // ✅ Get online members count for groups
-  const getOnlineMembersCount = () => {
-    if (!isGroup) return onlineUsers.has(selectedChat?._id) ? 1 : 0;
-    
-    return groupMembers.filter(member => {
-      const memberId = member.user?._id || member.user;
-      return onlineUsers.has(memberId?.toString());
-    }).length;
-  };
-
-  // ✅ Get typing display text
-  const getTypingDisplayText = () => {
-    if (typingUsers.size === 0) return null;
-    
-    const typingArray = Array.from(typingUsers.values());
-    
-    if (typingUsers.size === 1) {
-      return `${typingArray[0].userName} is typing...`;
-    } else if (typingUsers.size === 2) {
-      return `${typingArray[0].userName} and ${typingArray[1].userName} are typing...`;
-    } else {
-      return `${typingArray[0].userName} and ${typingUsers.size - 1} others are typing...`;
-    }
-  };
 
   // ✅ ULTRA-IMPROVED: Send message with optimistic UI update
   const handleSendMessage = async () => {
@@ -437,7 +320,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socket.emit("typing_stop", {
         chatId: selectedChat._id,
         userId: userId,
-        userName: user.name || 'User',
         isGroup: isGroup
       });
 
@@ -522,85 +404,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // ✅ Format time utility
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
-  // ✅ Format last seen time
-  const formatLastSeen = (lastSeen) => {
-    if (!lastSeen) return '';
-    const now = new Date();
-    const lastSeenDate = new Date(lastSeen);
-    const diffInMinutes = Math.floor((now - lastSeenDate) / (1000 * 60));
-    
-    if (diffInMinutes < 1) return 'Just now';
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-    return lastSeenDate.toLocaleDateString();
-  };
-
-  // ✅ Get status color
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "online": return "bg-green-500";
-      case "away": return "bg-yellow-400";
-      case "busy": return "bg-red-500";
-      case "offline": return "bg-gray-400";
-      default: return "bg-gray-400";
-    }
-  };
-
-  // ✅ Get status text
-  const getStatusText = (status) => {
-    switch (status) {
-      case "online": return "Online";
-      case "away": return "Away";
-      case "busy": return "Busy";
-      case "offline": return "Offline";
-      default: return "Offline";
-    }
-  };
-
-  // ✅ Get role badge color
-  const getRoleColor = (role) => {
-    switch (role) {
-      case "owner": return "bg-gradient-to-r from-amber-500 to-orange-500";
-      case "admin": return "bg-gradient-to-r from-blue-500 to-cyan-500";
-      default: return "bg-gradient-to-r from-gray-600 to-gray-700";
-    }
-  };
-
-  // ✅ Get role icon
-  const getRoleIcon = (role) => {
-    switch (role) {
-      case "owner": return <Crown className="w-3 h-3" />;
-      case "admin": return <Shield className="w-3 h-3" />;
-      default: return <Users className="w-3 h-3" />;
-    }
-  };
-
-  // ✅ Connection status component
-  const ConnectionStatus = () => (
-    <motion.div 
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`absolute top-2 right-2 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs backdrop-blur-sm border ${
-        isConnected 
-          ? 'bg-green-500/20 text-green-400 border-green-500/30' 
-          : 'bg-red-500/20 text-red-400 border-red-500/30'
-      }`}
-    >
-      <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-      {isConnected ? 'Connected' : 'Disconnected'}
-    </motion.div>
-  );
-
-  // ✅ Render message function
+  // ✅ Enhanced message rendering with better UI
   const renderMessage = (msg, idx) => {
     const senderId = msg.sender?._id || msg.senderId;
     const isSent = senderId?.toString() === userId?.toString();
@@ -705,6 +509,31 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     );
   };
 
+  // ✅ Format time utility
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    return new Date(timestamp).toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  // ✅ Connection status component
+  const ConnectionStatus = () => (
+    <motion.div 
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`absolute top-2 right-2 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs backdrop-blur-sm border ${
+        isConnected 
+          ? 'bg-green-500/20 text-green-400 border-green-500/30' 
+          : 'bg-red-500/20 text-red-400 border-red-500/30'
+      }`}
+    >
+      <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+      {isConnected ? 'Connected' : 'Disconnected'}
+    </motion.div>
+  );
+
   if (!selectedChat) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-gray-900 dark:to-gray-800">
@@ -729,7 +558,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm relative">
       <ConnectionStatus />
 
-      {/* Header with Online Status & Typing Indicators */}
+      {/* Header */}
       <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-xl border-b border-purple-500/30 shadow-lg z-10">
         <div className="flex items-center gap-4">
           <div className="relative group">
@@ -742,66 +571,25 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                 {selectedChat.name?.[0]?.toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            
-            {/* Online Status Dot */}
-            <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
-              isGroup 
-                ? 'bg-indigo-500' 
-                : onlineUsers.has(selectedChat._id) 
-                  ? 'bg-green-500' 
-                  : 'bg-gray-400'
-            }`}></div>
           </div>
-          
           <div className="flex flex-col">
             <h3 className="text-lg font-bold text-white">
               {selectedChat.name}
             </h3>
-            
-            {/* ✅ FIXED: Online Status & Typing Display */}
-            <p className="text-blue-100 text-sm min-h-[20px]">
+            <p className="text-blue-100 text-sm">
               {typingUsers.size > 0 ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2 text-green-300"
-                >
+                <div className="flex items-center gap-2">
                   <div className="flex space-x-1">
                     <div className="w-1.5 h-1.5 bg-green-300 rounded-full animate-bounce"></div>
                     <div className="w-1.5 h-1.5 bg-green-300 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                     <div className="w-1.5 h-1.5 bg-green-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
-                  <span className="font-medium">{getTypingDisplayText()}</span>
-                </motion.div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  {isGroup ? (
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-green-400"></span>
-                      <span>{getOnlineMembersCount()} online • {groupMembers.length} members</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1">
-                      <span className={`w-2 h-2 rounded-full ${getStatusColor(friendStatus)}`}></span>
-                      <span className="capitalize">
-                        {getStatusText(friendStatus)}
-                        {friendStatus === 'offline' && friendLastSeen && (
-                          <span className="ml-1 text-blue-200">
-                            • {formatLastSeen(friendLastSeen)}
-                          </span>
-                        )}
-                      </span>
-                    </span>
-                  )}
-                  
-                  {/* User Role Badge for Groups */}
-                  {isGroup && userRole && (
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getRoleColor(userRole)} text-white`}>
-                      {getRoleIcon(userRole)}
-                      <span className="capitalize">{userRole}</span>
-                    </span>
-                  )}
+                  <span>
+                    {typingUsers.size === 1 ? 'is typing...' : `${typingUsers.size} people are typing...`}
+                  </span>
                 </div>
+              ) : (
+                <span>{isGroup ? 'Group chat' : 'Online'}</span>
               )}
             </p>
           </div>
@@ -926,7 +714,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                   <GroupChatAdminPanel
                     group={selectedChat}
                     currentUser={currentUser}
-                    refreshGroup={fetchGroupMembers}
+                    refreshGroup={fetchMessages}
                   />
                 ) : (
                   <div className="p-6">
@@ -939,10 +727,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                       </Avatar>
                       <div>
                         <h3 className="text-2xl font-bold text-white">{selectedChat.name}</h3>
-                        <p className="text-gray-300">
-                          Status: {friendStatus} {friendStatus === 'offline' && friendLastSeen && `• Last seen ${formatLastSeen(friendLastSeen)}`}
-                        </p>
-                        <p className="text-gray-400 text-sm">Direct Message</p>
+                        <p className="text-gray-300">Direct Message</p>
                       </div>
                     </div>
                   </div>
