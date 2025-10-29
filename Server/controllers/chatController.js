@@ -7,6 +7,11 @@ import GroupJoinRequest from "../models/GroupJoinRequest.js";
 
 
 
+// controllers/chatController.js - UPDATED
+import ChatRoom from "../models/ChatRoom.js";
+import Message from "../models/Message.js";
+import User from "../models/User.js";
+
 // ✅ IMPROVED: Send message with immediate DB storage and real-time delivery
 export const sendMessage = async (req, res) => {
   try {
@@ -65,23 +70,22 @@ export const sendMessage = async (req, res) => {
       ...populatedMessage,
       senderId: senderId,
       roomId: `private_${chatRoom._id}`,
-      isRealTime: false // This is from DB, not real-time
+      isRealTime: false
     };
 
     // ✅ Emit socket message for real-time delivery
-    if (req.app.get('io')) {
-      const io = req.app.get('io');
-      
+    const io = req.app.get('io');
+    if (io) {
       // Emit to both users' personal rooms and the chat room
       io.to(`user_${receiverId}`).to(`user_${senderId}`).emit('receive_message', messageForRealTime);
       
-      // Also emit to the chat room for group consistency
+      // Also emit to the chat room for consistency
       io.to(`private_${chatRoom._id}`).emit('receive_message', messageForRealTime);
     }
 
     res.status(201).json({ 
       success: true, 
-      message: messageForRealTime 
+      message: populatedMessage 
     });
 
   } catch (err) {
@@ -143,8 +147,8 @@ export const sendGroupMessage = async (req, res) => {
     };
 
     // ✅ Emit socket message for real-time delivery
-    if (req.app.get('io')) {
-      const io = req.app.get('io');
+    const io = req.app.get('io');
+    if (io) {
       io.to(`group_${roomId}`).emit('receive_message', messageForRealTime);
       
       // Also emit to all participants' personal rooms
