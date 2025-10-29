@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const socket = io(import.meta.env.VITE_API_URL);
 
-const ChatList = ({ onSelectChat, selectedChat }) => {
+const ChatList = ({ onSelectChat, selectedChat, currentUser }) => {
   const [friends, setFriends] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,7 +17,9 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   const [unreadCounts, setUnreadCounts] = useState({});
   const [activeCategory, setActiveCategory] = useState("all");
   const [showAdminPanel, setShowAdminPanel] = useState(null);
-  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+
+  // ✅ Get current user from props or localStorage
+  const user = currentUser || JSON.parse(localStorage.getItem("user") || "{}");
 
   // ✅ Fetch user statuses for friends
   const fetchUserStatuses = async (friendIds: string[]) => {
@@ -126,9 +128,9 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     })();
 
     socket.on("receive_message", (msg) => {
-      if (!currentUser?._id) return;
+      if (!user?._id) return;
       const senderId = msg.sender?._id || msg.senderId;
-      if (senderId === currentUser._id) return;
+      if (senderId === user._id) return;
       const key = msg.chatRoom?._id || senderId;
       setUnreadCounts((prev) => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
     });
@@ -183,17 +185,25 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     normalize(g?.name).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // ✅ FIXED: Enhanced handleSelect function with proper isGroup detection
   const handleSelect = (chat, isGroup = false) => {
     console.log("🎯 ChatList: handleSelect called", {
       chat: chat?.name,
       isGroup,
-      chatType: isGroup ? "GROUP" : "PRIVATE"
+      chatType: isGroup ? "GROUP" : "PRIVATE",
+      hasId: !!chat?._id
     });
     
+    if (!chat?._id) {
+      console.error("❌ Cannot select chat: No _id found", chat);
+      return;
+    }
+
     const key = chat._id;
     setUnreadCounts((prev) => ({ ...prev, [key]: 0 }));
     
     if (onSelectChat) {
+      // ✅ FIXED: Always pass isGroup parameter
       onSelectChat(chat, isGroup);
     } else {
       console.error("❌ onSelectChat callback is not defined!");
@@ -232,7 +242,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
 
   const getUserRoleInGroup = (group) => {
     const participant = group.participants.find(
-      (p) => String(p.user?._id || p.user) === String(currentUser._id)
+      (p) => String(p.user?._id || p.user) === String(user._id)
     );
     return participant?.role || "member";
   };
@@ -316,14 +326,14 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
         ) : displayedItems.length > 0 ? (
           <AnimatePresence mode="popLayout">
             {displayedItems.map((item, index) => {
-              const isGroup = item.participants;
+              const isGroup = item.participants && Array.isArray(item.participants);
               const itemName = item?.name || "Unnamed";
               const isSelected = selectedChat?._id === item._id;
               const unread = unreadCounts[item._id] || 0;
 
               if (isGroup) {
                 const participant = item.participants.find(
-                  (p) => String(p.user?._id || p.user) === String(currentUser._id)
+                  (p) => String(p.user?._id || p.user) === String(user._id)
                 );
                 const role = participant?.role || "Member";
                 const memberCount = item.participants?.length || 0;
@@ -348,6 +358,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                     <div
                       onClick={() => {
                         console.log("🎯 Clicked on GROUP:", itemName);
+                        // ✅ FIXED: Explicitly pass isGroup=true for groups
                         handleSelect(item, true);
                       }}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
@@ -478,6 +489,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                     <div
                       onClick={() => {
                         console.log("🎯 Clicked on PRIVATE CHAT:", itemName);
+                        // ✅ FIXED: Explicitly pass isGroup=false for friends
                         handleSelect(item, false);
                       }}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${

@@ -13,12 +13,38 @@ const ChatPage = ({ currentUser }) => {
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
+  // ✅ FIXED: Enhanced user handling
+  const getUserData = () => {
+    try {
+      const user = currentUser || JSON.parse(localStorage.getItem("user") || "{}");
+      const userId = user?._id || user?.id;
+      
+      if (!userId) {
+        console.error('❌ No user ID available in ChatPage');
+        return { user: null, userId: null };
+      }
+      
+      return { user, userId };
+    } catch (error) {
+      console.error('❌ Error getting user data in ChatPage:', error);
+      return { user: null, userId: null };
+    }
+  };
+
+  const { user, userId } = getUserData();
+
   const handleSelectChat = (chat, isGroup = false) => {
     console.log("🔄 ChatPage: Selected chat:", { 
       chat: chat?.name, 
       isGroup,
-      chatType: isGroup ? "GROUP" : "PRIVATE"
+      chatType: isGroup ? "GROUP" : "PRIVATE",
+      userId: userId
     });
+    
+    if (!chat?._id) {
+      console.error("❌ Cannot select chat: No _id found", chat);
+      return;
+    }
     
     setSelectedChat(chat);
     setIsGroupSelected(isGroup);
@@ -64,9 +90,10 @@ const ChatPage = ({ currentUser }) => {
       selectedChat: selectedChat?.name,
       isGroupSelected,
       hasParticipants: selectedChat?.participants,
-      participantsCount: selectedChat?.participants?.length
+      participantsCount: selectedChat?.participants?.length,
+      userId: userId
     });
-  }, [selectedChat, isGroupSelected]);
+  }, [selectedChat, isGroupSelected, userId]);
 
   return (
     <div className="h-screen w-full flex overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-black text-gray-900 dark:text-gray-200">
@@ -123,6 +150,21 @@ const ChatPage = ({ currentUser }) => {
             FlowLink Chat
           </h1>
           
+          {/* User status indicator */}
+          <div className="hidden lg:flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            {userId ? (
+              <>
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span>Connected</span>
+              </>
+            ) : (
+              <>
+                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                <span>Offline</span>
+              </>
+            )}
+          </div>
+          
           {/* Spacer for mobile to balance the hamburger menu */}
           <div className="lg:hidden w-10 h-10" />
         </header>
@@ -165,16 +207,16 @@ const ChatPage = ({ currentUser }) => {
               <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
                 {isGroupView ? (
                   <GroupChatSidebar
-                    currentUser={currentUser}
+                    currentUser={user}
                     onSelectGroup={(group) => {
                       console.log("🎯 Group selected from GroupChatSidebar:", group?.name);
-                      handleSelectChat(group, true); // Force isGroup to true
+                      handleSelectChat(group, true);
                     }}
                   />
                 ) : (
-                  // FIXED: Make sure ChatList passes the isGroup parameter correctly
+                  // ✅ FIXED: Pass currentUser prop to ChatList
                   <ChatList
-                    currentUser={currentUser}
+                    currentUser={user}
                     onSelectChat={(chat, isGroup = false) => {
                       console.log("🎯 Chat selected from ChatList:", { 
                         chat: chat?.name, 
@@ -208,6 +250,7 @@ const ChatPage = ({ currentUser }) => {
                 {/* Debug info */}
                 <div className="text-xs text-gray-500 bg-white/50 px-2 py-1 rounded">
                   {isGroupSelected ? "GROUP" : "PRIVATE"}
+                  {!userId && " • NO USER"}
                 </div>
                 
                 {/* Mobile hamburger in chat view */}
@@ -222,17 +265,16 @@ const ChatPage = ({ currentUser }) => {
                 </button>
               </div>
 
-              {/* Chat Window - Make sure isGroup prop is passed correctly */}
+              {/* Chat Window */}
               <div className="flex-1 overflow-hidden flex flex-col">
                 <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-
-
-<ChatWindow
-  currentUser={currentUser}
-  selectedChat={selectedChat}
-  isGroup={isGroupSelected}
-  onToggleGroupInfo={() => setShowGroupInfo((prev) => !prev)}
-/>
+                  {/* ✅ FIXED: Pass proper user data to ChatWindow */}
+                  <ChatWindow
+                    currentUser={user}
+                    selectedChat={selectedChat}
+                    isGroup={isGroupSelected}
+                    onToggleGroupInfo={() => setShowGroupInfo((prev) => !prev)}
+                  />
                 </div>
               </div>
 
@@ -260,7 +302,7 @@ const ChatPage = ({ currentUser }) => {
                   <div className="h-full overflow-y-auto pt-4">
                     <GroupChatAdminPanel
                       group={selectedChat}
-                      currentUser={currentUser}
+                      currentUser={user}
                       refreshGroup={() => console.log("Reload group")}
                     />
                   </div>
@@ -270,6 +312,13 @@ const ChatPage = ({ currentUser }) => {
           )}
         </div>
       </div>
+
+      {/* Connection Status Overlay */}
+      {!userId && (
+        <div className="fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg animate-pulse">
+          ⚠️ User not authenticated
+        </div>
+      )}
     </div>
   );
 };
