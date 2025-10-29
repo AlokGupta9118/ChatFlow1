@@ -8,6 +8,7 @@ import GroupJoinRequest from "../models/GroupJoinRequest.js";
 
 
 // ✅ IMPROVED: Send message with immediate DB storage and real-time delivery
+// ✅ FIXED: Send message with consistent room naming
 export const sendMessage = async (req, res) => {
   try {
     const senderId = req.user._id;
@@ -60,22 +61,26 @@ export const sendMessage = async (req, res) => {
       .populate("sender", "name profilePicture")
       .lean();
 
-    // ✅ Enhanced message object for real-time
+    // ✅ FIXED: Consistent room naming for real-time
+    const roomId = `private_${chatRoom._id}`;
     const messageForRealTime = {
       ...populatedMessage,
       senderId: senderId,
-      roomId: `private_${chatRoom._id}`,
-      isRealTime: false
+      roomId: roomId,
+      isRealTime: false,
+      chatType: 'private'
     };
 
-    // ✅ Emit socket message for real-time delivery
+    // ✅ FIXED: Emit socket message with consistent room naming
     const io = req.app.get('io');
     if (io) {
-      // Emit to both users' personal rooms and the chat room
+      // Emit to the specific chat room
+      io.to(roomId).emit('receive_message', messageForRealTime);
+      
+      // Also emit to both users' personal rooms as backup
       io.to(`user_${receiverId}`).to(`user_${senderId}`).emit('receive_message', messageForRealTime);
       
-      // Also emit to the chat room for consistency
-      io.to(`private_${chatRoom._id}`).emit('receive_message', messageForRealTime);
+      console.log(`📨 Controller emitted message to room: ${roomId}`);
     }
 
     res.status(201).json({ 
@@ -89,7 +94,7 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-// ✅ IMPROVED: Send group message
+// ✅ FIXED: Send group message
 export const sendGroupMessage = async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -133,23 +138,28 @@ export const sendGroupMessage = async (req, res) => {
       .populate("sender", "name profilePicture")
       .lean();
 
-    // ✅ Enhanced message object for real-time
+    // ✅ FIXED: Consistent room naming
+    const groupRoomId = `group_${roomId}`;
     const messageForRealTime = {
       ...populatedMessage,
       senderId: userId,
-      roomId: `group_${roomId}`,
-      isRealTime: false
+      roomId: groupRoomId,
+      isRealTime: false,
+      chatType: 'group'
     };
 
-    // ✅ Emit socket message for real-time delivery
+    // ✅ FIXED: Emit to group room consistently
     const io = req.app.get('io');
     if (io) {
-      io.to(`group_${roomId}`).emit('receive_message', messageForRealTime);
+      // Primary: Emit to group room
+      io.to(groupRoomId).emit('receive_message', messageForRealTime);
       
-      // Also emit to all participants' personal rooms
+      // Secondary: Emit to all participants' personal rooms
       room.participants.forEach(participant => {
         io.to(`user_${participant.user}`).emit('receive_message', messageForRealTime);
       });
+      
+      console.log(`📨 Controller emitted group message to room: ${groupRoomId}`);
     }
 
     return res.status(201).json({ 
@@ -163,7 +173,7 @@ export const sendGroupMessage = async (req, res) => {
   }
 };
 
-// ✅ IMPROVED: Get messages with better error handling
+// ✅ Keep existing getMessages and getGroupMessages (they're fine)
 export const getMessages = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -206,7 +216,6 @@ export const getMessages = async (req, res) => {
   }
 };
 
-// ✅ IMPROVED: Get group messages
 export const getGroupMessages = async (req, res) => {
   try {
     const { roomId } = req.params;
