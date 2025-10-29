@@ -1,6 +1,6 @@
 
 // socket/gameSocket.js
-import User from "../models/User";
+import UserModel from "../models/User";
 
 export default function gameSocket(io) {
   const rooms = {}; // { roomId: { roomId, players: [], status, currentPlayer, currentPrompt, currentChoice, answers: {}, proofs: {}, scores: {}, playerStats: {}, roundNumber: 1 } }
@@ -134,7 +134,7 @@ export default function gameSocket(io) {
     socket.on("user-online", async (userId) => {
       if (!userId) return;
       try {
-        await User.findByIdAndUpdate(userId, { status: "online", lastSeen: new Date() });
+        await UserModel.findByIdAndUpdate(userId, { status: "online", lastSeen: new Date() });
         console.log(`✅ ${userId} is now online`);
       } catch (err) {
         console.error("Error updating user to online:", err.message);
@@ -145,7 +145,7 @@ export default function gameSocket(io) {
     socket.on("user-logout", async (userId) => {
       if (!userId) return;
       try {
-        await User.findByIdAndUpdate(userId, { status: "offline", lastSeen: new Date() });
+        await UserModel.findByIdAndUpdate(userId, { status: "offline", lastSeen: new Date() });
         console.log(`👋 ${userId} logged out`);
       } catch (err) {
         console.error("Error setting user offline on logout:", err.message);
@@ -1293,7 +1293,7 @@ export default function gameSocket(io) {
       // Update user status to offline
       if (socket.userId) {
         try {
-          await User.findByIdAndUpdate(socket.userId, { 
+          await UserModel.findByIdAndUpdate(socket.userId, { 
             status: "offline", 
             lastSeen: new Date() 
           });
