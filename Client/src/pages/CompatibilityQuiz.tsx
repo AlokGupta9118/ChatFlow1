@@ -159,9 +159,6 @@ export default function AdvancedCompatibilityGame() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // Input focus states - NEW: Track which input is focused
-  const [focusedInput, setFocusedInput] = useState<string | null>(null);
-
   // Refs
   const audioRef = useRef<HTMLAudioElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -180,29 +177,20 @@ export default function AdvancedCompatibilityGame() {
       
       if (mobile) {
         document.body.classList.add('mobile-device');
-        // FIX: Better mobile viewport handling
         document.body.style.overflowX = 'hidden';
-        document.body.style.position = 'relative';
-        document.documentElement.style.overflowX = 'hidden';
       } else {
         document.body.classList.remove('mobile-device');
         document.body.style.overflowX = 'auto';
-        document.body.style.position = 'static';
-        document.documentElement.style.overflowX = 'auto';
       }
     };
 
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    window.addEventListener('orientationchange', checkMobile);
 
     return () => {
       window.removeEventListener('resize', checkMobile);
-      window.removeEventListener('orientationchange', checkMobile);
       document.body.classList.remove('mobile-device');
       document.body.style.overflowX = 'auto';
-      document.body.style.position = 'static';
-      document.documentElement.style.overflowX = 'auto';
     };
   }, []);
 
@@ -1573,35 +1561,8 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // FIXED: Enhanced Join/Create Screen with proper input handling
+  // FIXED: SIMPLIFIED Join/Create Screen - Removed all the complex focus handling
   const JoinCreateScreen = () => {
-    // FIXED: Handle input focus properly
-    const handleNameFocus = () => {
-      setFocusedInput('name');
-      if (isMobile) {
-        setTimeout(() => {
-          nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
-      }
-    };
-
-    const handleRoomFocus = () => {
-      setFocusedInput('room');
-      if (isMobile) {
-        setTimeout(() => {
-          roomInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
-      }
-    };
-
-    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setPlayerName(e.target.value);
-    };
-
-    const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setRoomId(e.target.value.toUpperCase());
-    };
-
     return (
       <div 
         ref={mainContainerRef}
@@ -1654,8 +1615,7 @@ export default function AdvancedCompatibilityGame() {
                 id="playerName"
                 placeholder="Enter your name"
                 value={playerName}
-                onChange={handleNameChange}
-                onFocus={handleNameFocus}
+                onChange={(e) => setPlayerName(e.target.value)}
                 onKeyPress={(e) => {
                   if (e.key === 'Enter' && playerName.trim() && !roomId.trim()) {
                     createRoom();
@@ -1663,11 +1623,8 @@ export default function AdvancedCompatibilityGame() {
                     joinRoom();
                   }
                 }}
-                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'} ${
-                  focusedInput === 'name' ? 'ring-2 ring-purple-500' : ''
-                }`}
+                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
                 autoComplete="name"
-                autoFocus={!isMobile} // Don't auto-focus on mobile to prevent keyboard issues
               />
             </div>
             
@@ -1680,16 +1637,13 @@ export default function AdvancedCompatibilityGame() {
                 id="roomId"
                 placeholder="Enter room code to join"
                 value={roomId}
-                onChange={handleRoomChange}
-                onFocus={handleRoomFocus}
+                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
                 onKeyPress={(e) => {
                   if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
                     joinRoom();
                   }
                 }}
-                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'} ${
-                  focusedInput === 'room' ? 'ring-2 ring-blue-500' : ''
-                }`}
+                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
                 autoComplete="off"
               />
             </div>
@@ -1861,12 +1815,6 @@ export default function AdvancedCompatibilityGame() {
       /* Smooth transitions for all interactive elements */
       * {
         transition: all 0.2s ease-in-out;
-      }
-      
-      /* FIXED: Better focus states for accessibility */
-      input:focus {
-        outline: none;
-        ring: 2px;
       }
     `;
     document.head.appendChild(style);
