@@ -69,8 +69,26 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
 
-  // ✅ MISSING FUNCTION: View current chat profile
+  // ✅ Safe access to selectedChat properties
+  const getSelectedChatName = () => {
+    if (isGroup) {
+      return selectedChat?.name || "Group Chat";
+    }
+    return selectedChat?.name || selectedChat?.username || "Unknown User";
+  };
+
+  const getSelectedChatAvatar = () => {
+    return selectedChat?.profilePicture || selectedChat?.avatar || "/default-avatar.png";
+  };
+
+  const getSelectedChatId = () => {
+    return selectedChat?._id;
+  };
+
+  // ✅ View current chat profile
   const handleViewChatProfile = () => {
+    if (!selectedChat) return;
+    
     if (isGroup) {
       setShowAdminPanel(true);
     } else {
@@ -78,14 +96,14 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // ✅ MISSING FUNCTION: Check if user is admin/owner
+  // ✅ Check if user is admin/owner
   const isUserAdmin = () => {
     return userRole === 'admin' || userRole === 'owner';
   };
 
-  // ✅ MISSING FUNCTION: Fetch friend status
+  // ✅ Fetch friend status
   const fetchFriendStatus = async () => {
-    if (!selectedChat?._id || isGroup) return;
+    if (!getSelectedChatId() || isGroup) return;
     
     const token = getToken();
     if (!token) return;
@@ -93,11 +111,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     try {
       const res = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/status/statuses`,
-        { userIds: [selectedChat._id] },
+        { userIds: [getSelectedChatId()] },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      const statusData = res.data.statuses?.[selectedChat._id];
+      const statusData = res.data.statuses?.[getSelectedChatId()];
       setFriendStatus(statusData?.status || 'offline');
       setFriendLastSeen(statusData?.lastSeen || null);
     } catch (err) {
@@ -107,16 +125,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // ✅ MISSING FUNCTION: Fetch group members with status
+  // ✅ Fetch group members with status
   const fetchGroupMembers = async () => {
-    if (!selectedChat?._id || !isGroup) return;
+    if (!getSelectedChatId() || !isGroup) return;
 
     const token = getToken();
     if (!token) return;
 
     try {
       const res = await axios.get(
-        `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/members`,
+        `${import.meta.env.VITE_API_URL}/chatroom/${getSelectedChatId()}/members`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -168,7 +186,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // ✅ MISSING FUNCTION: Get online members count
+  // ✅ Get online members count
   const getOnlineMembersCount = () => {
     return groupMembers.filter(member => {
       const status = member.user?.status || 'offline';
@@ -176,16 +194,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }).length;
   };
 
-  // ✅ MISSING FUNCTION: Fetch pending requests
+  // ✅ Fetch pending requests
   const fetchPendingRequests = async () => {
-    if (!selectedChat?._id || !isGroup || !isUserAdmin()) return;
+    if (!getSelectedChatId() || !isGroup || !isUserAdmin()) return;
 
     const token = getToken();
     if (!token) return;
 
     try {
       const res = await axios.get(
-        `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/pending-requests`,
+        `${import.meta.env.VITE_API_URL}/chatroom/${getSelectedChatId()}/pending-requests`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setPendingRequests(res.data.requests || []);
@@ -227,15 +245,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       if (socketRef.current) {
         socketRef.current.off('receive-chat-message');
         socketRef.current.off('user-typing');
+        socketRef.current.off('user-status-change');
       }
     };
   }, [userId]);
 
   // ✅ Join/leave chat room when selectedChat changes
   useEffect(() => {
-    if (!socketRef.current || !isConnected || !selectedChat?._id) return;
+    if (!socketRef.current || !isConnected || !getSelectedChatId()) return;
 
-    const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
+    const roomId = isGroup ? `group_${getSelectedChatId()}` : `private_${getSelectedChatId()}`;
     console.log('🚪 Joining chat room:', roomId);
     
     // Join chat room
@@ -290,21 +309,21 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socketRef.current.off('user-typing', handleTyping);
       setTypingUsers(new Set()); // Clear typing users when leaving room
     };
-  }, [socketRef.current, isConnected, selectedChat?._id, isGroup, userId]);
+  }, [socketRef.current, isConnected, getSelectedChatId(), isGroup, userId]);
 
   // ✅ Fetch initial messages from backend (ONLY ONCE when chat opens)
   const fetchMessages = useCallback(async () => {
-    if (!selectedChat?._id || hasInitialLoad) return;
+    if (!getSelectedChatId()) return;
 
     const token = getToken();
     if (!token) return;
 
     try {
-      console.log('📋 Fetching INITIAL messages from backend for chat:', selectedChat._id);
+      console.log('📋 Fetching INITIAL messages from backend for chat:', getSelectedChatId());
       
       const endpoint = isGroup
-        ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/getGroupmessages`
-        : `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}`;
+        ? `${import.meta.env.VITE_API_URL}/chatroom/${getSelectedChatId()}/getGroupmessages`
+        : `${import.meta.env.VITE_API_URL}/chatroom/messages/${getSelectedChatId()}`;
 
       const res = await axios.get(endpoint, {
         headers: { Authorization: `Bearer ${token}` },
@@ -318,13 +337,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       setMessages([]);
       setHasInitialLoad(true);
     }
-  }, [selectedChat?._id, isGroup, hasInitialLoad]);
+  }, [getSelectedChatId(), isGroup]);
 
   // ✅ Load messages only when chat changes (reset hasInitialLoad)
   useEffect(() => {
     setHasInitialLoad(false);
-    fetchMessages();
-  }, [selectedChat?._id, isGroup]);
+    setMessages([]);
+    if (getSelectedChatId()) {
+      fetchMessages();
+    }
+  }, [getSelectedChatId(), isGroup]);
 
   // ✅ Scroll to bottom when messages change
   useEffect(() => {
@@ -345,7 +367,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     } else if (!isGroup && selectedChat) {
       fetchFriendStatus();
     }
-  }, [selectedChat?._id, isGroup, userId]);
+  }, [getSelectedChatId(), isGroup, userId]);
 
   // ✅ Listen for real-time status changes
   useEffect(() => {
@@ -353,7 +375,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
     if (!isGroup) {
       socketRef.current.on("user-status-change", ({ userId: statusUserId, status, lastSeen }) => {
-        if (statusUserId === selectedChat._id) {
+        if (statusUserId === getSelectedChatId()) {
           setFriendStatus(status);
           setFriendLastSeen(lastSeen);
         }
@@ -384,7 +406,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         socketRef.current.off("user-status-change");
       }
     };
-  }, [socketRef.current, selectedChat?._id, isGroup]);
+  }, [socketRef.current, getSelectedChatId(), isGroup]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -403,14 +425,14 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
   // ✅ Optimized typing handler
   const handleTyping = useCallback(() => {
-    if (!socketRef.current || !isConnected || !selectedChat?._id) return;
+    if (!socketRef.current || !isConnected || !getSelectedChatId()) return;
 
     // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
+    const roomId = isGroup ? `group_${getSelectedChatId()}` : `private_${getSelectedChatId()}`;
     
     // Emit typing start
     socketRef.current.emit("chat-typing-start", {
@@ -427,12 +449,12 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         userName: user.name
       });
     }, 1000);
-  }, [isConnected, selectedChat?._id, isGroup, userId, user.name]);
+  }, [isConnected, getSelectedChatId(), isGroup, userId, user.name]);
 
   // ✅ FIXED: No duplicate message sending
   const handleSendMessage = async () => {
     const messageContent = newMessage.trim();
-    if (!messageContent || !socketRef.current || !isConnected || isSending) return;
+    if (!messageContent || !socketRef.current || !isConnected || isSending || !getSelectedChatId()) return;
 
     setIsSending(true);
     const token = getToken();
@@ -461,7 +483,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
-    const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
+    const roomId = isGroup ? `group_${getSelectedChatId()}` : `private_${getSelectedChatId()}`;
     socketRef.current.emit("chat-typing-stop", { 
       roomId, 
       userId: userId,
@@ -472,18 +494,18 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       // ✅ 4. Prepare message data for backend
       const msgData = isGroup
         ? { 
-            chatRoomId: selectedChat._id, 
+            chatRoomId: getSelectedChatId(), 
             content: messageContent, 
             messageType: "text" 
           }
         : { 
-            receiverId: selectedChat._id, 
+            receiverId: getSelectedChatId(), 
             content: messageContent, 
             messageType: "text" 
           };
 
       const endpoint = isGroup
-        ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/sendGroupmessages`
+        ? `${import.meta.env.VITE_API_URL}/chatroom/${getSelectedChatId()}/sendGroupmessages`
         : `${import.meta.env.VITE_API_URL}/chatroom/messages/send`;
 
       // ✅ 5. Send to backend for storage
@@ -657,6 +679,35 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     </motion.div>
   );
 
+  // ✅ Message status indicator
+  const MessageStatus = ({ status, isOptimistic }) => {
+    if (isOptimistic) {
+      return (
+        <div className="flex items-center gap-1 text-xs text-gray-400">
+          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
+          <span>Sending...</span>
+        </div>
+      );
+    }
+    
+    if (status === 'failed') {
+      return (
+        <div className="flex items-center gap-1 text-xs text-red-400">
+          <div className="w-2 h-2 rounded-full bg-red-400"></div>
+          <span>Failed</span>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="flex items-center gap-1 text-xs text-gray-400">
+        <div className="w-2 h-2 rounded-full bg-green-400"></div>
+        <span>Sent</span>
+      </div>
+    );
+  };
+
+  // ✅ Early return if no selectedChat
   if (!selectedChat) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-gray-900 dark:to-gray-800">
@@ -689,9 +740,9 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
               className="w-14 h-14 shadow-lg border-2 border-white/30 cursor-pointer hover:scale-105 transition-transform"
               onClick={handleViewChatProfile}
             >
-              <AvatarImage src={selectedChat.profilePicture || selectedChat.avatar || "/default-avatar.png"} />
-              <AvatarFallback className={`bg-gradient-to-r ${getUserColor(selectedChat._id)} text-white font-semibold`}>
-                {selectedChat.name?.[0]?.toUpperCase()}
+              <AvatarImage src={getSelectedChatAvatar()} />
+              <AvatarFallback className={`bg-gradient-to-r ${getUserColor(getSelectedChatId())} text-white font-semibold`}>
+                {getSelectedChatName()[0]?.toUpperCase() || "?"}
               </AvatarFallback>
             </Avatar>
             <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
@@ -706,7 +757,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
               className="text-lg font-bold text-white cursor-pointer hover:text-purple-200 transition-colors"
               onClick={handleViewChatProfile}
             >
-              {selectedChat.name}
+              {getSelectedChatName()}
             </h3>
             <p className="text-blue-100 text-sm">
               {typingUsers.size > 0 ? (
@@ -898,19 +949,18 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                       <div className="flex items-center gap-2">
                         <p className="leading-relaxed text-sm flex-1">{msg.content}</p>
                         {isOptimistic && (
-                          <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-                        )}
-                        {isFailed && (
-                          <div className="text-red-400 text-xs" title={msg.error}>
-                            ❌
+                          <div className="flex-shrink-0">
+                            <MessageStatus status={msg.status} isOptimistic={isOptimistic} />
                           </div>
                         )}
                       </div>
-                      <div className={`flex ${isSent ? 'justify-end' : 'justify-start'} mt-2`}>
-                        <p className={`text-xs ${isSent ? 'text-blue-200' : 'text-gray-400'}`}>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-xs opacity-70">
                           {formatTime(msg.createdAt)}
-                          {isOptimistic && ' • Sending...'}
-                        </p>
+                        </span>
+                        {isSent && !isOptimistic && (
+                          <MessageStatus status={msg.status} isOptimistic={false} />
+                        )}
                       </div>
                     </motion.div>
                   </div>
@@ -919,92 +969,101 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
             );
           })}
         </AnimatePresence>
-        
-        {/* Typing Indicator */}
-        {typingUsers.size > 0 && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center gap-3 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 max-w-max"
-          >
-            <div className="flex space-x-1">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-            </div>
-            <span className="text-green-300 text-sm font-medium">
-              {getTypingText()}
-            </span>
-          </motion.div>
-        )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area - COMPLETED */}
-      <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gradient-to-r from-gray-800 to-gray-900 backdrop-blur-xl border-t border-purple-500/30 shadow-lg relative">
-        <div className="flex gap-1">
-          <motion.button 
-            whileHover={{ scale: 1.1 }} 
-            whileTap={{ scale: 0.9 }} 
-            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
-            title="Attach file"
+      {/* Typing Indicator */}
+      <AnimatePresence>
+        {typingUsers.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="px-6 py-2 bg-gradient-to-r from-purple-500/10 to-blue-500/10 backdrop-blur-sm border-t border-purple-500/20"
           >
-            <Paperclip className="w-5 h-5" />
-          </motion.button>
-          <motion.button 
-            whileHover={{ scale: 1.1 }} 
-            whileTap={{ scale: 0.9 }} 
-            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
-            title="Send image"
-          >
-            <Image className="w-5 h-5" />
-          </motion.button>
-          
-          {/* Emoji Picker */}
-          <div className="relative">
-            <motion.button 
-              whileHover={{ scale: 1.1 }} 
-              whileTap={{ scale: 0.9 }} 
-              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
-              title="Add emoji"
-            >
-              <Smile className="w-5 h-5" />
-            </motion.button>
-            
+            <div className="flex items-center gap-2 text-sm text-purple-300">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              </div>
+              {getTypingText()}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Message Input */}
+      <div className="p-6 bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-xl border-t border-purple-500/20">
+        <div className="flex items-end gap-3">
+          <div className="flex-1 relative">
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder={`Message ${getSelectedChatName()}...`}
+                value={newMessage}
+                onChange={handleInputChange}
+                onKeyPress={handleKeyPress}
+                className="w-full bg-gray-700/50 backdrop-blur-sm border-purple-500/30 text-white placeholder-gray-400 rounded-2xl px-4 py-3 pr-24 focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all duration-200"
+                disabled={isSending}
+              />
+              
+              {/* Action Buttons */}
+              <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="p-2 text-gray-400 hover:text-purple-400 transition-colors"
+                  type="button"
+                >
+                  <Smile className="w-5 h-5" />
+                </motion.button>
+                
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  className="p-2 text-gray-400 hover:text-purple-400 transition-colors"
+                  type="button"
+                >
+                  <Paperclip className="w-5 h-5" />
+                </motion.button>
+                
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  className="p-2 text-gray-400 hover:text-purple-400 transition-colors"
+                  type="button"
+                >
+                  <Image className="w-5 h-5" />
+                </motion.button>
+              </div>
+            </div>
+
+            {/* Emoji Picker */}
             <AnimatePresence>
               {showEmojiPicker && <EmojiPicker />}
             </AnimatePresence>
           </div>
-        </div>
 
-        {/* Message Input */}
-        <div className="flex-1 relative">
-          <Input
-            value={newMessage}
-            onChange={handleInputChange}
-            onKeyPress={handleKeyPress}
-            placeholder={isSending ? "Sending..." : `Message ${selectedChat.name}...`}
-            className="w-full bg-gray-700/50 backdrop-blur-sm border-2 border-purple-500/30 text-white placeholder-gray-400 rounded-2xl px-4 py-3 pr-12 focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 transition-all"
-            disabled={isSending}
-          />
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleSendMessage}
+            disabled={!newMessage.trim() || isSending}
+            className={`p-3 rounded-2xl shadow-lg transition-all duration-200 ${
+              newMessage.trim() && !isSending
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white'
+                : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            {isSending ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
+          </motion.button>
         </div>
-
-        {/* Send Button */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handleSendMessage}
-          disabled={!newMessage.trim() || isSending}
-          className="p-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 text-white rounded-xl shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Send message"
-        >
-          {isSending ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
-            <Send className="w-5 h-5" />
-          )}
-        </motion.button>
       </div>
 
       {/* Group Admin Panel */}
@@ -1014,11 +1073,9 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
             chatRoom={selectedChat}
             isOpen={showAdminPanel}
             onClose={() => setShowAdminPanel(false)}
-            currentUser={user}
-            userRole={userRole}
+            currentUserRole={userRole}
             pendingRequests={pendingRequests}
             onUpdateMembers={fetchGroupMembers}
-            onUpdateRequests={fetchPendingRequests}
           />
         )}
       </AnimatePresence>
