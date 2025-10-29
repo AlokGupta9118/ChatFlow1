@@ -1,174 +1,173 @@
-// controllers/chatController.js
-import ChatRoom from "../models/ChatRoom.js";
-import Message from "../models/Message.js";
-import User from "../models/User.js";
+// Server/socket/messageSocket.js
+export const setupChatSockets = (io) => {
+  io.on('connection', (socket) => {
+    console.log('✅ User connected:', socket.id);
 
-// ✅ FIXED: Send private message - SINGLE EMISSION
-export const sendMessage = async (req, res) => {
-  try {
-    const senderId = req.user._id;
-    const { receiverId, content, messageType = "text" } = req.body;
+    // Store user's current rooms
+    socket.userRooms = new Set();
 
-    if (!senderId || !receiverId || !content?.trim()) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    console.log('📤 Sending message from:', senderId, 'to:', receiverId);
-
-    // Find or create chat room
-    let chatRoom = await ChatRoom.findOne({
-      type: "direct",
-      participants: {
-        $all: [
-          { $elemMatch: { user: senderId } },
-          { $elemMatch: { user: receiverId } }
-        ]
+    // ✅ FIXED: Join user's personal room
+    socket.on('join_user', (userId) => {
+      if (userId) {
+        socket.userId = userId;
+        const userRoom = `user_${userId}`;
+        
+        // Leave previous user room if any
+        if (socket.userRooms.has(userRoom)) {
+          socket.leave(userRoom);
+        }
+        
+        socket.join(userRoom);
+        socket.userRooms.add(userRoom);
+        
+        console.log(`👤 User ${userId} joined personal room: ${userRoom}`);
+        
+        // Broadcast online status
+        socket.broadcast.emit('user_status_change', { 
+          userId,
+          status: 'online',
+          lastSeen: new Date().toISOString()
+        });
       }
     });
 
-    if (!chatRoom) {
-      chatRoom = new ChatRoom({
-        type: "direct",
-        participants: [
-          { user: senderId, role: "member" },
-          { user: receiverId, role: "member" },
-        ],
-        createdBy: senderId,
+    // ✅ FIXED: Enhanced chat room joining
+    socket.on('join_chat', (data) => {
+      const { roomId, isGroup = false, chatRoomId } = data;
+      if (!roomId) return;
+
+      // ✅ CRITICAL: Consistent room naming
+      const actualRoomId = isGroup ? `group_${roomId}` : `private_${chatRoomId || roomId}`;
+      
+      console.log(`🚪 User ${socket.userId} joining room: ${actualRoomId}`);
+
+      // Leave previous chat rooms (only one active chat at a time)
+      socket.userRooms.forEach(room => {
+        if (room.startsWith('group_') || room.startsWith('private_')) {
+          socket.leave(room);
+          socket.userRooms.delete(room);
+          console.log(`🚪 Left previous room: ${room}`);
+        }
       });
-      await chatRoom.save();
-      console.log('✅ Created new chat room:', chatRoom._id);
-    }
-
-    // Create and save message
-    const newMessage = new Message({
-      chatRoom: chatRoom._id,
-      sender: senderId,
-      type: messageType,
-      content: content.trim(),
-      status: 'delivered'
+      
+      // Join new room
+      socket.join(actualRoomId);
+      socket.userRooms.add(actualRoomId);
+      socket.currentChat = { 
+        roomId: roomId, 
+        isGroup: isGroup, 
+        actualRoomId: actualRoomId,
+        chatRoomId: chatRoomId 
+      };
+      
+      console.log(`✅ User ${socket.userId} successfully joined: ${actualRoomId}`);
     });
 
-    await newMessage.save();
-
-    // Update chat room
-    chatRoom.messages.push(newMessage._id);
-    chatRoom.lastMessage = newMessage._id;
-    chatRoom.lastActivity = new Date();
-    await chatRoom.save();
-
-    // Populate message with sender info
-    const populatedMessage = await Message.findById(newMessage._id)
-      .populate("sender", "name profilePicture")
-      .lean();
-
-    // ✅ FIXED: SINGLE room ID for private chats
-    const roomId = `private_${chatRoom._id}`;
-    const messageForRealTime = {
-      ...populatedMessage,
-      senderId: senderId,
-      receiverId: receiverId,
-      roomId: roomId,
-      chatRoom: chatRoom._id,
-      isRealTime: true,
-      chatType: 'private'
-    };
-
-    console.log('📨 Emitting to private room ONLY:', roomId);
-
-    // ✅ FIXED: SINGLE emission to the correct room
-    const io = req.app.get('io');
-    if (io) {
-      // ONLY emit to the private chat room - NO duplicate emissions
-      io.to(roomId).emit('receive_message', messageForRealTime);
-      console.log('✅ Private message emitted to SINGLE room:', roomId);
-    }
-
-    res.status(201).json({ 
-      success: true, 
-      message: populatedMessage,
-      chatRoomId: chatRoom._id
+    // ✅ FIXED: Enhanced typing indicators with PROPER room handling
+    socket.on('typing_start', (data) => {
+      const { chatId, userId, userName, isGroup = false, chatRoomId } = data;
+      
+      // ✅ CRITICAL: Use EXACT same room logic as join_chat
+      const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
+      
+      console.log(`⌨️ ${userName} started typing in ${roomId}`);
+      
+      // Broadcast to all OTHER users in the room
+      socket.to(roomId).emit('user_typing', {
+        userId,
+        userName,
+        isTyping: true,
+        chatId: chatId,
+        roomId: roomId,
+        isGroup: isGroup,
+        timestamp: new Date().toISOString()
+      });
     });
 
-  } catch (err) {
-    console.error("❌ Error in sendMessage:", err);
-    res.status(500).json({ message: "Failed to send message", error: err.message });
-  }
-};
-
-// ✅ FIXED: Send group message - SINGLE EMISSION
-export const sendGroupMessage = async (req, res) => {
-  try {
-    const { roomId } = req.params;
-    const { content, mediaUrl, messageType = "text" } = req.body;
-    const userId = req.user._id;
-
-    if (!content?.trim() && !mediaUrl) {
-      return res.status(400).json({ message: "Message content cannot be empty" });
-    }
-
-    console.log('📤 Sending group message to room:', roomId);
-
-    // Find the chat room
-    const room = await ChatRoom.findById(roomId);
-    if (!room) return res.status(404).json({ message: "Room not found" });
-
-    // Check if user is a participant
-    const isParticipant = room.participants.some(
-      (p) => p.user.toString() === userId.toString()
-    );
-    if (!isParticipant) {
-      return res.status(403).json({ message: "You are not a participant of this room" });
-    }
-
-    // Create and save message
-    const newMessage = await Message.create({
-      chatRoom: roomId,
-      sender: userId,
-      content: content?.trim() || null,
-      mediaUrl: mediaUrl || null,
-      type: messageType,
-      status: 'delivered'
+    socket.on('typing_stop', (data) => {
+      const { chatId, userId, isGroup = false, chatRoomId } = data;
+      
+      // ✅ CRITICAL: Use EXACT same room logic as join_chat
+      const roomId = isGroup ? `group_${chatId}` : `private_${chatRoomId || chatId}`;
+      
+      console.log(`⌨️ User ${userId} stopped typing in ${roomId}`);
+      
+      socket.to(roomId).emit('user_typing', {
+        userId,
+        isTyping: false,
+        chatId: chatId,
+        roomId: roomId,
+        isGroup: isGroup
+      });
     });
 
-    // Update chat room
-    room.messages.push(newMessage._id);
-    room.lastMessage = newMessage._id;
-    room.lastActivity = new Date();
-    await room.save();
+    // ✅ FIXED: REAL-TIME Message handling - PREVENT DUPLICATES
+    socket.on('send_message', async (data) => {
+      try {
+        const { roomId, message, chatType = "private" } = data;
+        
+        console.log('💬 Socket send_message received for room:', roomId);
 
-    // Populate sender info
-    const populatedMessage = await Message.findById(newMessage._id)
-      .populate("sender", "name profilePicture")
-      .lean();
+        if (!roomId) {
+          console.error('❌ No roomId provided for message');
+          return;
+        }
 
-    // ✅ FIXED: SINGLE room ID for group chats
-    const groupRoomId = `group_${roomId}`;
-    const messageForRealTime = {
-      ...populatedMessage,
-      senderId: userId,
-      roomId: groupRoomId,
-      chatRoom: roomId,
-      isRealTime: true,
-      chatType: 'group'
-    };
+        // Create message object
+        const chatMessage = {
+          _id: message._id || `temp_${Date.now()}`,
+          sender: message.sender,
+          senderId: message.senderId,
+          content: message.content,
+          createdAt: message.createdAt || new Date().toISOString(),
+          type: message.type || "text",
+          chatType: chatType,
+          roomId: roomId,
+          isRealTime: true,
+          status: 'sent'
+        };
 
-    console.log('📨 Emitting group message to room ONLY:', groupRoomId);
+        console.log(`📨 Broadcasting to SINGLE room: ${roomId}`);
+        
+        // ✅ FIXED: SINGLE emission to the specific room ONLY
+        io.to(roomId).emit('receive_message', chatMessage);
 
-    // ✅ FIXED: SINGLE emission to the correct room
-    const io = req.app.get('io');
-    if (io) {
-      // ONLY emit to group room - NO duplicate emissions
-      io.to(groupRoomId).emit('receive_message', messageForRealTime);
-      console.log('✅ Group message emitted to SINGLE room:', groupRoomId);
-    }
+        console.log(`✅ Socket message emitted to room: ${roomId}`);
 
-    return res.status(201).json({ 
-      success: true, 
-      message: populatedMessage 
+      } catch (error) {
+        console.error('❌ Error in send_message:', error);
+        socket.emit('chat_error', { error: 'Failed to send message' });
+      }
     });
 
-  } catch (err) {
-    console.error("❌ sendGroupMessage error:", err);
-    res.status(500).json({ message: "Failed to send message", error: err.message });
-  }
+    // User status management
+    socket.on('user_online', (data) => {
+      console.log('👤 User online:', data.userId);
+      socket.broadcast.emit('user_status_change', {
+        userId: data.userId,
+        status: 'online',
+        lastSeen: new Date().toISOString()
+      });
+    });
+
+    // ✅ FIXED: Enhanced disconnect handling
+    socket.on('disconnect', (reason) => {
+      console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
+      
+      if (socket.userId) {
+        socket.broadcast.emit('user_status_change', {
+          userId: socket.userId,
+          status: 'offline',
+          lastSeen: new Date().toISOString()
+        });
+      }
+
+      // Clean up rooms
+      socket.userRooms.clear();
+    });
+
+    socket.on('error', (error) => {
+      console.error('❌ Socket error:', error);
+    });
+  });
 };
