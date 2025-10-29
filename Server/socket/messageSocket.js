@@ -1,4 +1,4 @@
-// socketSetup.js (or wherever your socket setup is)
+// socketSetup.js
 export const setupChatSockets = (io) => {
   io.on('connection', (socket) => {
     console.log('✅ User connected:', socket.id);
@@ -20,6 +20,13 @@ export const setupChatSockets = (io) => {
         socket.userRooms.add(userRoom);
         
         console.log(`👤 User ${userId} joined personal room: ${userRoom}`);
+        
+        // ✅ FIXED: Broadcast online status to ALL users
+        socket.broadcast.emit('user_status_change', { 
+          userId,
+          status: 'online',
+          lastSeen: new Date().toISOString()
+        });
       }
     });
 
@@ -121,10 +128,6 @@ export const setupChatSockets = (io) => {
       }
     });
 
-    // ... (other socket events remain the same)
-  });
-
-
     // ✅ FIXED: User status management
     socket.on('user_online', (data) => {
       console.log('👤 User online:', data.userId);
@@ -159,5 +162,5 @@ export const setupChatSockets = (io) => {
     socket.on('error', (error) => {
       console.error('❌ Socket error:', error);
     });
-  
+  });
 };
