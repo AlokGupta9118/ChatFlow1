@@ -18,6 +18,7 @@ import { protect } from "./middleware/authMiddleware.js";
 import gameSocket from "./socket/gameSocket.js";
 import statusRoutes from "./routes/statusRoutes.js";
 import chatRoutes from "./routes/chat.js";
+import SocketService from "./socket/messageSocket.js";
 dotenv.config();
 
 const app = express();
