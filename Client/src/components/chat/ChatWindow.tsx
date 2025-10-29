@@ -15,7 +15,7 @@ const createSocket = () => {
   return io(import.meta.env.VITE_API_URL, {
     transports: ['websocket', 'polling'],
     upgrade: true,
-    forceNew: true,
+    forceNew: false,
     timeout: 10000,
     reconnection: true,
     reconnectionAttempts: 5,
@@ -45,9 +45,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [viewedProfile, setViewedProfile] = useState(null);
+  const [typingUsers, setTypingUsers] = useState(new Set());
   const [userRole, setUserRole] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
   const [showMenu, setShowMenu] = useState(false);
@@ -56,147 +54,196 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [friendLastSeen, setFriendLastSeen] = useState(null);
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [hasInitialLoad, setHasInitialLoad] = useState(false);
   
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const menuRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const socketRef = useRef(null);
 
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
 
-  // ✅ Initialize Socket.IO connection
+  // ✅ Safe access to selectedChat properties
+  const getSelectedChatName = () => {
+    if (isGroup) {
+      return selectedChat?.name || "Group Chat";
+    }
+    return selectedChat?.name || selectedChat?.username || "Unknown User";
+  };
+
+  const getSelectedChatAvatar = () => {
+    return selectedChat?.profilePicture || selectedChat?.avatar || "/default-avatar.png";
+  };
+
+  const getSelectedChatId = () => {
+    return selectedChat?._id;
+  };
+
+  // ✅ Single socket instance
   useEffect(() => {
-    const newSocket = createSocket();
-    setSocket(newSocket);
+    if (!socketRef.current) {
+      const newSocket = createSocket();
+      socketRef.current = newSocket;
+      setSocket(newSocket);
 
-    newSocket.on('connect', () => {
-      console.log('✅ Socket.IO connected:', newSocket.id);
-      setIsConnected(true);
-    });
+      newSocket.on('connect', () => {
+        console.log('✅ Socket.IO connected:', newSocket.id);
+        setIsConnected(true);
+        
+        if (userId) {
+          newSocket.emit('join_user', { userId });
+        }
+      });
 
-    newSocket.on('disconnect', () => {
-      console.log('❌ Socket.IO disconnected');
-      setIsConnected(false);
-    });
+      newSocket.on('disconnect', () => {
+        console.log('❌ Socket.IO disconnected');
+        setIsConnected(false);
+      });
 
-    newSocket.on('connect_error', (error) => {
-      console.error('❌ Socket.IO connection error:', error);
-      setIsConnected(false);
-    });
+      newSocket.on('connect_error', (error) => {
+        console.error('❌ Socket.IO connection error:', error);
+        setIsConnected(false);
+      });
+    }
 
     return () => {
-      console.log('🧹 Cleaning up socket connection');
-      newSocket.disconnect();
-      newSocket.removeAllListeners();
+      // Cleanup only specific listeners, keep socket alive
+      if (socketRef.current) {
+        socketRef.current.off('receive-chat-message');
+        socketRef.current.off('user-typing');
+      }
     };
-  }, []);
+  }, [userId]);
 
-  // ✅ Join user room when socket is connected and userId is available
+  // ✅ Join/leave chat room when selectedChat changes
   useEffect(() => {
-    if (socket && isConnected && userId) {
-      console.log('👤 Joining user room:', userId);
-      socket.emit('join_user', userId);
-    }
-  }, [socket, isConnected, userId]);
+    if (!socketRef.current || !isConnected || !getSelectedChatId()) return;
 
-  // ✅ Join chat room when selectedChat changes
-  useEffect(() => {
-    if (!socket || !isConnected || !selectedChat?._id) return;
-
-    const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
+    const roomId = isGroup ? `group_${getSelectedChatId()}` : `private_${getSelectedChatId()}`;
     console.log('🚪 Joining chat room:', roomId);
     
-    socket.emit('join_chat', roomId);
+    // Join chat room
+    socketRef.current.emit('join-chat-room', { roomId, userId });
 
-    return () => {
-      console.log('🚪 Leaving chat room:', roomId);
-      socket.emit('leave_chat', roomId);
-    };
-  }, [socket, isConnected, selectedChat?._id, isGroup]);
-
-  // ✅ Set up real-time message listeners
-  useEffect(() => {
-    if (!socket || !isConnected) return;
-
-    console.log('👂 Setting up message listeners');
-
-    // Handle incoming messages
+    // ✅ Set up REAL-TIME message listener (ONLY for messages from others)
     const handleReceiveMessage = (msg) => {
-      console.log('📨 Received message:', msg);
+      console.log('📨 Received real-time message from others:', msg);
       
-      setMessages(prev => {
-        // Check if message already exists to prevent duplicates
-        const messageExists = prev.some(m => m._id === msg._id);
-        if (messageExists) return prev;
+      // ✅ CRITICAL: Only process messages from other users
+      if (msg.senderId !== userId) {
+        setMessages(prev => {
+          // Check if message already exists to prevent duplicates
+          const messageExists = prev.some(m => 
+            m._id === msg._id || 
+            (m.content === msg.content && m.senderId === msg.senderId && 
+             Math.abs(new Date(m.createdAt) - new Date(msg.createdAt)) < 1000)
+          );
+          
+          if (!messageExists) {
+            console.log('✅ Adding real-time message from other user');
+            return [...prev, { ...msg, isRealTime: true }];
+          }
+          return prev;
+        });
+      }
+    };
+
+    // ✅ Enhanced typing indicators
+    const handleTyping = (data) => {
+      console.log('⌨️ Typing update:', data);
+      setTypingUsers(prev => {
+        const newSet = new Set(prev);
         
-        return [...prev, msg];
+        if (data.isTyping) {
+          newSet.add(data.userName);
+        } else {
+          newSet.delete(data.userName);
+        }
+        
+        return newSet;
       });
     };
 
-    // Handle typing indicators
-    const handleTypingStart = (data) => {
-      if (data.chatId === selectedChat?._id && data.userId !== userId) {
-        setIsTyping(true);
-      }
-    };
+    socketRef.current.on('receive-chat-message', handleReceiveMessage);
+    socketRef.current.on('user-typing', handleTyping);
 
-    const handleTypingStop = (data) => {
-      if (data.chatId === selectedChat?._id && data.userId !== userId) {
-        setIsTyping(false);
-      }
-    };
-
-    // Listen for events
-    socket.on('receive_message', handleReceiveMessage);
-    socket.on('typing_start', handleTypingStart);
-    socket.on('typing_stop', handleTypingStop);
-    socket.on('message_sent', handleReceiveMessage); // Alternative event name
-
-    // Clean up listeners
     return () => {
-      console.log('🧹 Cleaning up message listeners');
-      socket.off('receive_message', handleReceiveMessage);
-      socket.off('typing_start', handleTypingStart);
-      socket.off('typing_stop', handleTypingStop);
-      socket.off('message_sent', handleReceiveMessage);
+      console.log('🚪 Leaving chat room:', roomId);
+      socketRef.current.emit('leave-chat-room', { roomId, userId });
+      socketRef.current.off('receive-chat-message', handleReceiveMessage);
+      socketRef.current.off('user-typing', handleTyping);
+      setTypingUsers(new Set()); // Clear typing users when leaving room
     };
-  }, [socket, isConnected, selectedChat?._id, userId]);
+  }, [socketRef.current, isConnected, getSelectedChatId(), isGroup, userId]);
 
-  // ✅ Fetch messages when selected chat changes
+  // ✅ Fetch initial messages from backend (ONLY ONCE when chat opens)
   const fetchMessages = useCallback(async () => {
-    if (!selectedChat?._id) return;
+    if (!getSelectedChatId() || hasInitialLoad) return;
 
     const token = getToken();
     if (!token) return;
 
     try {
-      console.log('📋 Fetching messages for chat:', selectedChat._id);
+      console.log('📋 Fetching INITIAL messages from backend for chat:', getSelectedChatId());
       
       const endpoint = isGroup
-        ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/getGroupmessages`
-        : `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}`;
+        ? `${import.meta.env.VITE_API_URL}/chatroom/${getSelectedChatId()}/getGroupmessages`
+        : `${import.meta.env.VITE_API_URL}/chatroom/messages/${getSelectedChatId()}`;
 
       const res = await axios.get(endpoint, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      console.log('✅ Messages fetched:', res.data.messages?.length);
+      console.log('✅ Initial messages loaded from backend:', res.data.messages?.length);
       setMessages(res.data.messages || []);
+      setHasInitialLoad(true);
     } catch (err) {
-      console.error("❌ Error fetching messages:", err);
+      console.error("❌ Error fetching initial messages:", err);
       setMessages([]);
+      setHasInitialLoad(true);
     }
-  }, [selectedChat?._id, isGroup]);
+  }, [getSelectedChatId(), isGroup, hasInitialLoad]);
 
-  // ✅ Initial messages load
+  // ✅ Load messages only when chat changes (reset hasInitialLoad)
   useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
+    setHasInitialLoad(false);
+    setMessages([]);
+    if (getSelectedChatId()) {
+      fetchMessages();
+    }
+  }, [getSelectedChatId(), isGroup]);
 
-  // ✅ Friend status functions
+  // ✅ Scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // ✅ View current chat profile
+  const handleViewChatProfile = () => {
+    if (!selectedChat) return;
+    
+    if (isGroup) {
+      setShowAdminPanel(true);
+    } else {
+      toast.info("User profile feature coming soon!");
+    }
+  };
+
+  // ✅ Check if user is admin/owner
+  const isUserAdmin = () => {
+    return userRole === 'admin' || userRole === 'owner';
+  };
+
+  // ✅ Fetch friend status
   const fetchFriendStatus = async () => {
-    if (!selectedChat?._id || isGroup) return;
+    if (!getSelectedChatId() || isGroup) return;
     
     const token = getToken();
     if (!token) return;
@@ -204,11 +251,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     try {
       const res = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/status/statuses`,
-        { userIds: [selectedChat._id] },
+        { userIds: [getSelectedChatId()] },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      const statusData = res.data.statuses?.[selectedChat._id];
+      const statusData = res.data.statuses?.[getSelectedChatId()];
       setFriendStatus(statusData?.status || 'offline');
       setFriendLastSeen(statusData?.lastSeen || null);
     } catch (err) {
@@ -218,71 +265,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // ✅ Listen for real-time status changes
-  useEffect(() => {
-    if (!selectedChat || !socket) return;
-
-    if (!isGroup) {
-      fetchFriendStatus();
-      
-      socket.on("user-status-change", ({ userId, status, lastSeen }) => {
-        if (userId === selectedChat._id) {
-          setFriendStatus(status);
-          setFriendLastSeen(lastSeen);
-        }
-      });
-    } else {
-      socket.on("user-status-change", ({ userId, status, lastSeen }) => {
-        setGroupMembers(prev => 
-          prev.map(member => {
-            const memberId = member.user?._id || member.user;
-            if (memberId === userId) {
-              return {
-                ...member,
-                user: {
-                  ...member.user,
-                  status,
-                  lastSeen
-                }
-              };
-            }
-            return member;
-          })
-        );
-      });
-    }
-
-    return () => {
-      socket.off("user-status-change");
-    };
-  }, [socket, selectedChat?._id, isGroup]);
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setShowMenu(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   // ✅ Fetch group members with status
   const fetchGroupMembers = async () => {
-    if (!selectedChat?._id || !isGroup) return;
+    if (!getSelectedChatId() || !isGroup) return;
 
     const token = getToken();
     if (!token) return;
 
     try {
       const res = await axios.get(
-        `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/members`,
+        `${import.meta.env.VITE_API_URL}/chatroom/${getSelectedChatId()}/members`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -342,15 +334,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }).length;
   };
 
+  // ✅ Fetch pending requests
   const fetchPendingRequests = async () => {
-    if (!selectedChat?._id || !isGroup || !isUserAdmin()) return;
+    if (!getSelectedChatId() || !isGroup || !isUserAdmin()) return;
 
     const token = getToken();
     if (!token) return;
 
     try {
       const res = await axios.get(
-        `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/pending-requests`,
+        `${import.meta.env.VITE_API_URL}/chatroom/${getSelectedChatId()}/pending-requests`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setPendingRequests(res.data.requests || []);
@@ -360,21 +353,228 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // View current chat profile
-  const handleViewChatProfile = () => {
-    if (isGroup) {
-      setShowAdminPanel(true);
+  // ✅ MISSING USE EFFECT: Fetch group members and friend status
+  useEffect(() => {
+    if (isGroup && selectedChat) {
+      fetchGroupMembers();
+      if (isUserAdmin()) {
+        fetchPendingRequests();
+      }
+    } else if (!isGroup && selectedChat) {
+      fetchFriendStatus();
+    }
+  }, [getSelectedChatId(), isGroup, userId]);
+
+  // ✅ Listen for real-time status changes
+  useEffect(() => {
+    if (!selectedChat || !socketRef.current) return;
+
+    if (!isGroup) {
+      socketRef.current.on("user-status-change", ({ userId: statusUserId, status, lastSeen }) => {
+        if (statusUserId === getSelectedChatId()) {
+          setFriendStatus(status);
+          setFriendLastSeen(lastSeen);
+        }
+      });
     } else {
-      toast.info("User profile feature coming soon!");
+      socketRef.current.on("user-status-change", ({ userId: statusUserId, status, lastSeen }) => {
+        setGroupMembers(prev => 
+          prev.map(member => {
+            const memberId = member.user?._id || member.user;
+            if (memberId === statusUserId) {
+              return {
+                ...member,
+                user: {
+                  ...member.user,
+                  status,
+                  lastSeen
+                }
+              };
+            }
+            return member;
+          })
+        );
+      });
+    }
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.off("user-status-change");
+      }
+    };
+  }, [socketRef.current, getSelectedChatId(), isGroup]);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // ✅ Optimized typing handler
+  const handleTyping = useCallback(() => {
+    if (!socketRef.current || !isConnected || !getSelectedChatId()) return;
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    const roomId = isGroup ? `group_${getSelectedChatId()}` : `private_${getSelectedChatId()}`;
+    
+    // Emit typing start
+    socketRef.current.emit("chat-typing-start", {
+      roomId,
+      userId: userId,
+      userName: user.name
+    });
+
+    // Set timeout to stop typing
+    typingTimeoutRef.current = setTimeout(() => {
+      socketRef.current.emit("chat-typing-stop", {
+        roomId,
+        userId: userId,
+        userName: user.name
+      });
+    }, 1000);
+  }, [isConnected, getSelectedChatId(), isGroup, userId, user.name]);
+
+  // ✅ FIXED: No duplicate message sending with optimistic updates
+  const handleSendMessage = async () => {
+    const messageContent = newMessage.trim();
+    if (!messageContent || !socketRef.current || !isConnected || isSending || !getSelectedChatId()) return;
+
+    setIsSending(true);
+    const token = getToken();
+    if (!token) {
+      setIsSending(false);
+      return;
+    }
+
+    // ✅ 1. Create message with temporary ID for optimistic update
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const optimisticMessage = {
+      _id: tempId,
+      content: messageContent,
+      sender: { _id: userId, name: user.name, profilePicture: user.profilePicture },
+      senderId: userId,
+      createdAt: new Date().toISOString(),
+      isOptimistic: true,
+      status: 'sending'
+    };
+
+    // ✅ 2. Update UI immediately with optimistic message
+    setMessages(prev => [...prev, optimisticMessage]);
+    setNewMessage("");
+    
+    // ✅ 3. Clear typing indicator
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    const roomId = isGroup ? `group_${getSelectedChatId()}` : `private_${getSelectedChatId()}`;
+    socketRef.current.emit("chat-typing-stop", { 
+      roomId, 
+      userId: userId,
+      userName: user.name 
+    });
+
+    try {
+      // ✅ 4. Prepare message data for backend
+      const msgData = isGroup
+        ? { 
+            chatRoomId: getSelectedChatId(), 
+            content: messageContent, 
+            messageType: "text" 
+          }
+        : { 
+            receiverId: getSelectedChatId(), 
+            content: messageContent, 
+            messageType: "text" 
+          };
+
+      const endpoint = isGroup
+        ? `${import.meta.env.VITE_API_URL}/chatroom/${getSelectedChatId()}/sendGroupmessages`
+        : `${import.meta.env.VITE_API_URL}/chatroom/messages/send`;
+
+      // ✅ 5. Send to backend for storage
+      const res = await axios.post(endpoint, msgData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const sentMessage = res.data.message;
+      console.log('📤 Message saved to database:', sentMessage);
+
+      // ✅ 6. Replace optimistic message with real one from backend
+      setMessages(prev => 
+        prev.map(msg => 
+          msg._id === tempId ? { ...sentMessage, status: 'sent' } : msg
+        )
+      );
+
+      // ✅ 7. CRITICAL: Emit socket event for real-time delivery to OTHERS ONLY
+      socketRef.current.emit("send-chat-message", {
+        roomId: roomId,
+        message: {
+          ...sentMessage,
+          senderId: userId,
+          sender: { _id: userId, name: user.name, profilePicture: user.profilePicture }
+        },
+        chatType: isGroup ? "group" : "private"
+      });
+
+      console.log('📨 Real-time message sent to other users');
+
+    } catch (err) {
+      console.error("❌ Error sending message:", err);
+      
+      // ✅ 8. Mark message as failed
+      setMessages(prev =>
+        prev.map(msg =>
+          msg._id === tempId ? { 
+            ...msg, 
+            status: 'failed', 
+            error: err.response?.data?.message || 'Failed to send' 
+          } : msg
+        )
+      );
+
+      if (err.response?.status !== 403) {
+        toast.error("Failed to send message");
+      }
+    } finally {
+      setIsSending(false);
     }
   };
 
-  // Check if user is admin/owner
-  const isUserAdmin = () => {
-    return userRole === 'admin' || userRole === 'owner';
+  // ✅ Handle Enter key press
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
   };
 
-  // Get role badge color
+  // ✅ Handle input change with typing indicator
+  const handleInputChange = (e) => {
+    setNewMessage(e.target.value);
+    handleTyping();
+  };
+
+  // ✅ Format typing users text
+  const getTypingText = () => {
+    const users = Array.from(typingUsers);
+    if (users.length === 0) return null;
+    if (users.length === 1) return `${users[0]} is typing...`;
+    if (users.length === 2) return `${users[0]} and ${users[1]} are typing...`;
+    return `${users[0]} and ${users.length - 1} others are typing...`;
+  };
+
+  // ✅ Get role badge color
   const getRoleColor = (role) => {
     switch (role) {
       case "owner": return "bg-gradient-to-r from-amber-500 to-orange-500 text-white";
@@ -383,7 +583,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // Get role icon
+  // ✅ Get role icon
   const getRoleIcon = (role) => {
     switch (role) {
       case "owner": return <Crown className="w-3 h-3" />;
@@ -414,97 +614,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  useEffect(() => {
-    if (isGroup && selectedChat) {
-      fetchGroupMembers();
-      if (isUserAdmin()) {
-        fetchPendingRequests();
-      }
-    }
-  }, [selectedChat?._id, isGroup, userId]);
-
-  useEffect(scrollToBottom, [messages]);
-
-  // ✅ Improved typing handler with debouncing
-  const handleTyping = useCallback(() => {
-    if (!socket || !isConnected || !selectedChat?._id) return;
-
-    // Clear existing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    // Emit typing start
-    socket.emit("typing_start", {
-      chatId: selectedChat._id,
-      userId: userId,
-      isGroup: isGroup
-    });
-
-    // Set timeout to stop typing
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("typing_stop", {
-        chatId: selectedChat._id,
-        userId: userId,
-        isGroup: isGroup
-      });
-    }, 1000);
-  }, [socket, isConnected, selectedChat?._id, userId, isGroup]);
-
-  // ✅ Improved send message function
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !socket || !isConnected) return;
-
-    const token = getToken();
-    if (!token) return;
-
-    try {
-      const msgData = isGroup
-        ? { chatRoomId: selectedChat._id, content: newMessage, messageType: "text" }
-        : { receiverId: selectedChat._id, content: newMessage, messageType: "text" };
-
-      const endpoint = isGroup
-        ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/sendGroupmessages`
-        : `${import.meta.env.VITE_API_URL}/chatroom/messages/send`;
-
-      const res = await axios.post(endpoint, msgData, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const sentMessage = res.data.message;
-      console.log('📤 Message sent:', sentMessage);
-
-      // ✅ Optimistically update UI immediately
-      setMessages(prev => [...prev, sentMessage]);
-      setNewMessage("");
-
-      // ✅ Emit socket event for real-time delivery
-      const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
-      socket.emit("send_message", {
-        ...sentMessage,
-        roomId: roomId
-      });
-
-      // Stop typing
-      socket.emit("typing_stop", {
-        chatId: selectedChat._id,
-        userId: userId,
-        isGroup: isGroup
-      });
-
-      // Clear typing timeout
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-
-    } catch (err) {
-      console.error("❌ Error sending message:", err);
-      if (err.response?.status !== 403) {
-        toast.error("Failed to send message");
-      }
-    }
-  };
-
   const formatTime = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString([], { 
       hour: '2-digit', 
@@ -512,7 +621,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     });
   };
 
-  // ✅ Format last seen time
   const formatLastSeen = (lastSeen) => {
     if (!lastSeen) return '';
     const now = new Date();
@@ -525,7 +633,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     return lastSeenDate.toLocaleDateString();
   };
 
-  // ✅ Connection status indicator (optional, for debugging)
+  // ✅ Connection status indicator
   const ConnectionStatus = () => (
     <div className={`absolute top-2 right-2 flex items-center gap-2 px-2 py-1 rounded-full text-xs ${
       isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
@@ -535,7 +643,36 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     </div>
   );
 
-  if (!selectedChat)
+  // ✅ Message status indicator
+  const MessageStatus = ({ status, isOptimistic }) => {
+    if (isOptimistic) {
+      return (
+        <div className="flex items-center gap-1 text-xs text-blue-400">
+          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
+          <span>Sending...</span>
+        </div>
+      );
+    }
+    
+    if (status === 'failed') {
+      return (
+        <div className="flex items-center gap-1 text-xs text-red-400">
+          <div className="w-2 h-2 rounded-full bg-red-400"></div>
+          <span>Failed</span>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="flex items-center gap-1 text-xs text-green-400">
+        <div className="w-2 h-2 rounded-full bg-green-400"></div>
+        <span>Sent</span>
+      </div>
+    );
+  };
+
+  // ✅ Early return if no selectedChat
+  if (!selectedChat) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-gray-900 dark:to-gray-800">
         <div className="text-center space-y-6">
@@ -553,24 +690,23 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         </div>
       </div>
     );
+  }
 
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm relative">
-      {/* Connection Status Indicator */}
       <ConnectionStatus />
 
-      {/* Header - Fixed height */}
+      {/* Header */}
       <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-xl border-b border-purple-500/30 shadow-lg z-10">
-        {/* ... (rest of your JSX remains the same) */}
         <div className="flex items-center gap-4">
           <div className="relative group">
             <Avatar 
               className="w-14 h-14 shadow-lg border-2 border-white/30 cursor-pointer hover:scale-105 transition-transform"
               onClick={handleViewChatProfile}
             >
-              <AvatarImage src={selectedChat.profilePicture || selectedChat.avatar || "/default-avatar.png"} />
-              <AvatarFallback className={`bg-gradient-to-r ${getUserColor(selectedChat._id)} text-white font-semibold`}>
-                {selectedChat.name?.[0]?.toUpperCase()}
+              <AvatarImage src={getSelectedChatAvatar()} />
+              <AvatarFallback className={`bg-gradient-to-r ${getUserColor(getSelectedChatId())} text-white font-semibold`}>
+                {getSelectedChatName()[0]?.toUpperCase() || "?"}
               </AvatarFallback>
             </Avatar>
             <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
@@ -585,17 +721,17 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
               className="text-lg font-bold text-white cursor-pointer hover:text-purple-200 transition-colors"
               onClick={handleViewChatProfile}
             >
-              {selectedChat.name}
+              {getSelectedChatName()}
             </h3>
             <p className="text-blue-100 text-sm">
-              {isTyping ? (
+              {typingUsers.size > 0 ? (
                 <div className="flex items-center gap-2">
                   <div className="flex space-x-1">
                     <div className="w-1.5 h-1.5 bg-green-300 rounded-full animate-bounce"></div>
                     <div className="w-1.5 h-1.5 bg-green-300 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                     <div className="w-1.5 h-1.5 bg-green-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
-                  <span>typing...</span>
+                  <span>{getTypingText()}</span>
                 </div>
               ) : isGroup ? (
                 <div className="flex items-center gap-2">
@@ -699,16 +835,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                             </span>
                           </button>
                         )}
-                        
-                        <div className="border-t border-purple-500/20 mt-2 pt-2 px-4">
-                          <div className="text-xs text-purple-300 flex items-center justify-between">
-                            <span>Your role:</span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getRoleColor(userRole)}`}>
-                              {getRoleIcon(userRole)}
-                              <span className="capitalize">{userRole}</span>
-                            </span>
-                          </div>
-                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -739,21 +865,25 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
             const senderId = msg.sender?._id || msg.senderId;
             const isSent = senderId?.toString() === userId?.toString();
             const userColor = getUserColor(senderId);
+            const isOptimistic = msg.isOptimistic;
+            const isFailed = msg.status === 'failed';
 
             return (
               <motion.div
                 key={msg._id || idx}
                 initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+                animate={{ 
+                  opacity: isOptimistic ? 0.7 : 1, 
+                  y: 0 
+                }}
                 exit={{ opacity: 0, y: -20 }}
-                className={`flex ${isSent ? "justify-end" : "justify-start"}`}
+                className={`flex ${isSent ? "justify-end" : "justify-start"} ${isOptimistic ? 'opacity-70' : ''} ${isFailed ? 'border border-red-400/30 rounded-2xl' : ''}`}
               >
                 <div className={`flex items-end gap-3 max-w-[80%] ${isSent ? "flex-row-reverse" : ""}`}>
+                  
                   {!isSent && isGroup && (
                     <div className="relative group flex-shrink-0">
-                      <Avatar 
-                        className="w-10 h-10 shadow-md border-2 border-white/30 cursor-pointer hover:scale-105 transition-transform"
-                      >
+                      <Avatar className="w-10 h-10 shadow-md border-2 border-white/30">
                         <AvatarImage src={msg.sender?.profilePicture || "/default-avatar.png"} />
                         <AvatarFallback className={`text-xs bg-gradient-to-r ${userColor} text-white`}>
                           {msg.sender?.name?.[0] || "?"}
@@ -778,13 +908,23 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                         isSent
                           ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md border-blue-400/30"
                           : "bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-bl-md border-gray-600/30"
-                      }`}
+                      } ${isFailed ? 'border-red-400/50' : ''}`}
                     >
-                      <p className="leading-relaxed text-sm">{msg.content}</p>
-                      <div className={`flex ${isSent ? 'justify-end' : 'justify-start'} mt-2`}>
-                        <p className={`text-xs ${isSent ? 'text-blue-200' : 'text-gray-400'}`}>
+                      <div className="flex items-center gap-2">
+                        <p className="leading-relaxed text-sm flex-1">{msg.content}</p>
+                        {isOptimistic && (
+                          <div className="flex-shrink-0">
+                            <MessageStatus status={msg.status} isOptimistic={isOptimistic} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-xs opacity-70">
                           {formatTime(msg.createdAt)}
-                        </p>
+                        </span>
+                        {isSent && !isOptimistic && (
+                          <MessageStatus status={msg.status} isOptimistic={false} />
+                        )}
                       </div>
                     </motion.div>
                   </div>
@@ -793,151 +933,108 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
             );
           })}
         </AnimatePresence>
-        
-        {/* Typing Indicator */}
-        {isTyping && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center gap-3 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 max-w-max"
-          >
-            <div className="flex space-x-1">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-            </div>
-            <span className="text-green-300 text-sm font-medium">
-              {selectedChat.name} is typing...
-            </span>
-          </motion.div>
-        )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
-      <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gradient-to-r from-gray-800 to-gray-900 backdrop-blur-xl border-t border-purple-500/30 shadow-lg">
-        <div className="flex gap-1">
-          <motion.button 
-            whileHover={{ scale: 1.1 }} 
-            whileTap={{ scale: 0.9 }} 
-            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
-          >
-            <Paperclip className="w-5 h-5" />
-          </motion.button>
-          <motion.button 
-            whileHover={{ scale: 1.1 }} 
-            whileTap={{ scale: 0.9 }} 
-            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
-          >
-            <Image className="w-5 h-5" />
-          </motion.button>
-          <motion.button 
-            whileHover={{ scale: 1.1 }} 
-            whileTap={{ scale: 0.9 }} 
-            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
-          >
-            <Smile className="w-5 h-5" />
-          </motion.button>
-        </div>
-        
-        <div className="flex-1 relative">
-          <Input
-            value={newMessage}
-            onChange={(e) => {
-              setNewMessage(e.target.value);
-              handleTyping();
-            }}
-            onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-            placeholder="Type your message..."
-            className="w-full pl-4 pr-12 py-3 bg-gray-700/50 border-2 border-purple-500/30 text-white placeholder-gray-400 rounded-2xl focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 backdrop-blur-sm transition-all"
-          />
-          <motion.button 
-            whileHover={{ scale: 1.05 }} 
-            whileTap={{ scale: 0.95 }}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-purple-400 transition-colors"
-          >
-            <Mic className="w-4 h-4" />
-          </motion.button>
-        </div>
-        
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handleSendMessage}
-          disabled={!newMessage.trim() || !isConnected}
-          className="p-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg shadow-purple-500/25 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border-2 border-purple-400/30"
-        >
-          <Send className="w-5 h-5" />
-        </motion.button>
-      </div>
-
-      {/* Admin Panel Modal */}
+      {/* Typing Indicator */}
       <AnimatePresence>
-        {showAdminPanel && (
+        {typingUsers.size > 0 && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-            onClick={() => setShowAdminPanel(false)}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="px-6 py-2 bg-gradient-to-r from-purple-500/10 to-blue-500/10 backdrop-blur-sm border-t border-purple-500/20"
           >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-gradient-to-br from-gray-900 to-purple-900 w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl border border-purple-500/30 overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between p-6 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-sm">
-                <h3 className="text-xl font-bold text-white">
-                  Group Settings - {selectedChat.name}
-                </h3>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => setShowAdminPanel(false)}
-                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
-                >
-                  <X className="w-5 h-5 text-white" />
-                </motion.button>
+            <div className="flex items-center gap-2 text-sm text-purple-300">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
               </div>
-              <div className="overflow-y-auto max-h-[60vh]">
-                <GroupChatAdminPanel
-                  group={selectedChat}
-                  currentUser={currentUser}
-                  refreshGroup={fetchGroupMembers}
-                />
-              </div>
-            </motion.div>
+              {getTypingText()}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Add custom scrollbar styles */}
-      <style jsx>{`
-        .custom-scrollbar {
-          scrollbar-width: thin;
-          scrollbar-color: rgba(168, 85, 247, 0.5) transparent;
-        }
+      {/* Message Input */}
+      <div className="p-6 bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-xl border-t border-purple-500/20">
+        <div className="flex items-end gap-3">
+          <div className="flex-1 relative">
+            <Input
+              type="text"
+              placeholder={`Message ${getSelectedChatName()}...`}
+              value={newMessage}
+              onChange={handleInputChange}
+              onKeyPress={handleKeyPress}
+              className="w-full bg-gray-700/50 backdrop-blur-sm border-purple-500/30 text-white placeholder-gray-400 rounded-2xl px-4 py-3 pr-24 focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all duration-200"
+              disabled={isSending}
+            />
+            
+            {/* Action Buttons */}
+            <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                className="p-2 text-gray-400 hover:text-purple-400 transition-colors"
+                type="button"
+              >
+                <Smile className="w-5 h-5" />
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                className="p-2 text-gray-400 hover:text-purple-400 transition-colors"
+                type="button"
+              >
+                <Paperclip className="w-5 h-5" />
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                className="p-2 text-gray-400 hover:text-purple-400 transition-colors"
+                type="button"
+              >
+                <Image className="w-5 h-5" />
+              </motion.button>
+            </div>
+          </div>
 
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleSendMessage}
+            disabled={!newMessage.trim() || isSending}
+            className={`p-3 rounded-2xl shadow-lg transition-all duration-200 ${
+              newMessage.trim() && !isSending
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white'
+                : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            {isSending ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
+          </motion.button>
+        </div>
+      </div>
 
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-          border-radius: 10px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: linear-gradient(to bottom, #8b5cf6, #3b82f6);
-          border-radius: 10px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(to bottom, #7c3aed, #2563eb);
-        }
-      `}</style>
+      {/* Group Admin Panel */}
+      <AnimatePresence>
+        {showAdminPanel && (
+          <GroupChatAdminPanel
+            chatRoom={selectedChat}
+            isOpen={showAdminPanel}
+            onClose={() => setShowAdminPanel(false)}
+            currentUserRole={userRole}
+            pendingRequests={pendingRequests}
+            onUpdateMembers={fetchGroupMembers}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
