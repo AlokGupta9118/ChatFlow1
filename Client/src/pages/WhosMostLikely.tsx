@@ -664,7 +664,7 @@ const WhosMostLikely = () => {
 
   // Back to main menu function
   const backToMainMenu = () => {
-    navigate("/Game");
+    navigate("/Games");
   };
 
   // Player Card Component
