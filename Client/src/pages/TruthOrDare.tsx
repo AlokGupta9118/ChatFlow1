@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { 
   Volume2, VolumeX, Settings, Users, Crown, Sparkles, Timer, Trophy, 
   Gamepad2, Camera, X, Ban, MessageCircle, Send, Smile, Paperclip, ArrowLeft,
-  Loader2
+  Loader2, ChevronDown, ChevronUp
 } from "lucide-react";
 
 const DEFAULT_SOCKET_URL = `${import.meta.env.VITE_API_URL}`;
@@ -100,23 +100,23 @@ const ChatInput = ({ onSendMessage, disabled, onTyping, chatInput, setChatInput 
   }, []);
 
   return (
-    <div className="flex gap-3 p-4 bg-transparent safe-area-inset-bottom">
+    <div className="flex gap-2 p-3 bg-transparent safe-area-inset-bottom">
       <Input
         ref={inputRef}
         value={chatInput}
         onChange={handleChange}
         onKeyPress={handleKeyPress}
         placeholder={disabled ? "Connecting..." : "Type your message..."}
-        className="flex-1 bg-gray-700 border-2 border-purple-500/50 text-white placeholder-gray-400 min-h-[48px] text-sm rounded-xl focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 transition-all"
+        className="flex-1 bg-gray-700 border-2 border-purple-500/50 text-white placeholder-gray-400 min-h-[44px] text-sm rounded-xl focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 transition-all"
         disabled={disabled}
       />
       <Button
         onClick={handleSubmit}
         disabled={!chatInput.trim() || disabled}
-        className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white flex-shrink-0 min-w-[60px] min-h-[48px] shadow-lg rounded-xl border-2 border-purple-400/30 transition-all transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+        className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white flex-shrink-0 min-w-[50px] min-h-[44px] shadow-lg rounded-xl border-2 border-purple-400/30 transition-all transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
         size="sm"
       >
-        <Send className="w-5 h-5" />
+        <Send className="w-4 h-4" />
       </Button>
     </div>
   );
@@ -147,10 +147,9 @@ const ChatPanel = React.memo(({
   const scrollToBottom = useCallback(() => {
     if (chatContainerRef.current) {
       const container = chatContainerRef.current;
-      // Use setTimeout to ensure DOM is updated
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         container.scrollTop = container.scrollHeight;
-      }, 100);
+      });
     }
   }, []);
 
@@ -158,33 +157,20 @@ const ChatPanel = React.memo(({
     scrollToBottom();
   }, [chatMessages, scrollToBottom]);
 
-  // Auto-scroll when new messages arrive
-  useEffect(() => {
-    const observer = new MutationObserver(scrollToBottom);
-    if (chatContainerRef.current) {
-      observer.observe(chatContainerRef.current, {
-        childList: true,
-        subtree: true
-      });
-    }
-    
-    return () => observer.disconnect();
-  }, [scrollToBottom]);
-
   return (
-    <Card className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm shadow-2xl rounded-xl border-2 border-purple-500/30 chat-container-fix">
+    <Card className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm shadow-2xl rounded-xl border-2 border-purple-500/30">
       {/* Chat Header */}
-      <div className="p-4 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-xl flex-shrink-0">
+      <div className="p-3 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-xl flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             <div className="relative">
-              <MessageCircle className="w-6 h-6 text-white" />
-              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+              <MessageCircle className="w-5 h-5 text-white" />
+              <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border-2 border-white ${
                 isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'
               }`} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Game Chat</h3>
+              <h3 className="text-base font-bold text-white">Game Chat</h3>
               <p className="text-blue-100 text-xs">
                 {isConnected ? "Live with players" : "Connecting..."}
               </p>
@@ -195,14 +181,14 @@ const ChatPanel = React.memo(({
               isConnected 
                 ? "bg-green-500 hover:bg-green-600 text-white" 
                 : "bg-red-500 hover:bg-red-600 text-white"
-            } shadow-lg`}>
-              {isConnected ? "🟢 Online" : "🔴 Offline"}
+            } shadow-lg text-xs`}>
+              {isConnected ? "🟢" : "🔴"}
             </Badge>
             <Button
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="md:hidden h-6 w-6 p-0 text-white hover:bg-white/20"
+              className="h-6 w-6 p-0 text-white hover:bg-white/20"
             >
               <X className="w-3 h-3" />
             </Button>
@@ -211,13 +197,13 @@ const ChatPanel = React.memo(({
         
         {/* Typing indicators */}
         {typingUsers.size > 0 && (
-          <div className="flex items-center mt-3 p-2 bg-white/10 rounded-lg border border-white/20">
+          <div className="flex items-center mt-2 p-2 bg-white/10 rounded-lg border border-white/20">
             <div className="flex space-x-1 mr-2">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
-            <span className="text-green-300 text-sm font-medium">
+            <span className="text-green-300 text-xs font-medium">
               {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
             </span>
           </div>
@@ -227,19 +213,19 @@ const ChatPanel = React.memo(({
       {/* Chat Messages - FIXED SCROLLING */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 chat-messages-fix custom-scrollbar"
+        className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0 custom-scrollbar"
         style={{ 
           WebkitOverflowScrolling: 'touch',
           overflowY: 'auto'
         }}
       >
         {chatMessages.length === 0 ? (
-          <div className="text-center text-gray-300 py-12">
-            <div className="bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <MessageCircle className="w-8 h-8 text-purple-300" />
+          <div className="text-center text-gray-300 py-8">
+            <div className="bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+              <MessageCircle className="w-6 h-6 text-purple-300" />
             </div>
-            <p className="text-lg font-semibold text-white mb-2">No messages yet</p>
-            <p className="text-purple-200 text-sm">Start the conversation!</p>
+            <p className="text-base font-semibold text-white mb-1">No messages yet</p>
+            <p className="text-purple-200 text-xs">Start the conversation!</p>
           </div>
         ) : (
           chatMessages.map((message, index) => {
@@ -251,30 +237,30 @@ const ChatPanel = React.memo(({
                 key={message.id}
                 className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
               >
-                <div className={`max-w-[85%] rounded-2xl p-4 shadow-lg ${
+                <div className={`max-w-[85%] rounded-2xl p-3 shadow-lg ${
                   isOwnMessage
                     ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md'
                     : 'bg-gradient-to-r from-gray-700 to-gray-800 border border-gray-600 text-white rounded-bl-md'
                 }`}>
                   {/* Sender name for others' messages */}
                   {!isOwnMessage && (
-                    <div className="flex items-center space-x-2 mb-2">
-                      <div className={`w-6 h-6 rounded-full bg-gradient-to-r ${userColor} flex items-center justify-center text-xs font-bold text-white`}>
+                    <div className="flex items-center space-x-2 mb-1">
+                      <div className={`w-5 h-5 rounded-full bg-gradient-to-r ${userColor} flex items-center justify-center text-xs font-bold text-white`}>
                         {message.sender.charAt(0).toUpperCase()}
                       </div>
-                      <span className="font-bold text-sm text-gray-200">
+                      <span className="font-bold text-xs text-gray-200">
                         {message.sender}
                       </span>
                     </div>
                   )}
                   
                   {/* Message content */}
-                  <div className="text-sm break-words leading-relaxed">
+                  <div className="text-xs break-words leading-relaxed">
                     {message.content}
                   </div>
                   
                   {/* Message time */}
-                  <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mt-2`}>
+                  <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mt-1`}>
                     <div className={`text-xs ${
                       isOwnMessage ? 'text-blue-200' : 'text-gray-400'
                     }`}>
@@ -378,7 +364,10 @@ export default function TruthOrDare({ currentUser }) {
         height: 100vh;
         height: calc(var(--vh, 1vh) * 100);
         overflow: hidden;
-        position: relative;
+        position: fixed;
+        width: 100%;
+        top: 0;
+        left: 0;
       }
       
       .mobile-scroll-container {
@@ -386,23 +375,11 @@ export default function TruthOrDare({ currentUser }) {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
-        position: relative;
       }
       
-      .chat-container-fix {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        min-height: 0;
-        position: relative;
-      }
-      
-      .chat-messages-fix {
-        flex: 1;
-        overflow-y: auto;
-        min-height: 0;
-        -webkit-overflow-scrolling: touch;
-        padding-bottom: env(safe-area-inset-bottom, 0px);
+      .game-content-container {
+        min-height: 100%;
+        padding-bottom: env(safe-area-inset-bottom, 20px);
       }
       
       .safe-area-padding {
@@ -412,7 +389,7 @@ export default function TruthOrDare({ currentUser }) {
       }
       
       .safe-area-inset-bottom {
-        padding-bottom: env(safe-area-inset-bottom, 0px);
+        margin-bottom: env(safe-area-inset-bottom, 0px);
       }
 
       .custom-scrollbar {
@@ -421,7 +398,7 @@ export default function TruthOrDare({ currentUser }) {
       }
 
       .custom-scrollbar::-webkit-scrollbar {
-        width: 6px;
+        width: 4px;
       }
 
       .custom-scrollbar::-webkit-scrollbar-track {
@@ -443,18 +420,19 @@ export default function TruthOrDare({ currentUser }) {
         .mobile-viewport-fix {
           height: 100vh;
           height: -webkit-fill-available;
-          overflow: hidden;
+          position: fixed;
         }
         
         .mobile-scroll-container {
           height: 100%;
           overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
         }
         
         .safe-area-padding {
-          padding-left: max(1rem, env(safe-area-inset-left, 1rem));
-          padding-right: max(1rem, env(safe-area-inset-right, 1rem));
-          padding-bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
+          padding-left: max(0.75rem, env(safe-area-inset-left, 0.75rem));
+          padding-right: max(0.75rem, env(safe-area-inset-right, 0.75rem));
+          padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
         }
         
         /* Fix for bottom content being cut off */
@@ -473,6 +451,34 @@ export default function TruthOrDare({ currentUser }) {
           min-height: 44px;
           min-width: 44px;
         }
+
+        /* Mobile chat overlay */
+        .mobile-chat-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 50;
+          background: rgba(0, 0, 0, 0.8);
+        }
+
+        .mobile-chat-container {
+          position: fixed;
+          top: 10%;
+          left: 5%;
+          right: 5%;
+          bottom: 10%;
+          z-index: 60;
+        }
+      }
+
+      /* Desktop chat */
+      @media (min-width: 769px) {
+        .desktop-chat-container {
+          height: 600px;
+          max-height: 70vh;
+        }
       }
 
       /* Prevent content shift when keyboard appears */
@@ -484,6 +490,11 @@ export default function TruthOrDare({ currentUser }) {
       .keyboard-open {
         animation: keyboardAppear 0.3s ease-out;
       }
+
+      /* Smooth animations */
+      * {
+        transition: all 0.2s ease-in-out;
+      }
     `;
 
     const styleSheet = document.createElement("style");
@@ -494,37 +505,16 @@ export default function TruthOrDare({ currentUser }) {
     const updateViewportHeight = () => {
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
-      
-      // Add keyboard detection
-      const visualViewport = window.visualViewport;
-      if (visualViewport) {
-        const viewportHeight = visualViewport.height;
-        const windowHeight = window.innerHeight;
-        
-        if (viewportHeight < windowHeight) {
-          document.body.classList.add('keyboard-open');
-        } else {
-          document.body.classList.remove('keyboard-open');
-        }
-      }
     };
     
     updateViewportHeight();
     window.addEventListener('resize', updateViewportHeight);
     window.addEventListener('orientationchange', updateViewportHeight);
     
-    // Visual viewport for keyboard detection
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', updateViewportHeight);
-    }
-    
     return () => {
       document.head.removeChild(styleSheet);
       window.removeEventListener('resize', updateViewportHeight);
       window.removeEventListener('orientationchange', updateViewportHeight);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', updateViewportHeight);
-      }
     };
   }, []);
 
@@ -537,7 +527,7 @@ export default function TruthOrDare({ currentUser }) {
             top: mainContainerRef.current.scrollHeight, 
             behavior: 'smooth' 
           });
-        }, 300);
+        }, 100);
       }
     };
 
@@ -549,11 +539,7 @@ export default function TruthOrDare({ currentUser }) {
     if (chosenPrompt) {
       handleScrollToBottom();
     }
-    
-    if (showChat) {
-      handleScrollToBottom();
-    }
-  }, [stage, selectedPlayer, chosenPrompt, showChat]);
+  }, [stage, selectedPlayer, chosenPrompt]);
 
   // NEW: Automatically set prompt type based on selected player's choice
   useEffect(() => {
@@ -991,6 +977,11 @@ export default function TruthOrDare({ currentUser }) {
   const handleTyping = (isTyping) => {
     if (!socket) return;
     socket.emit("typing", { roomId, isTyping });
+  };
+
+  // FIXED: Enhanced chat toggle with better mobile handling
+  const toggleChat = () => {
+    setShowChat(!showChat);
   };
 
   // NEW: Manual reconnection function
@@ -1479,15 +1470,15 @@ export default function TruthOrDare({ currentUser }) {
               </div>
 
               <div className="flex items-center justify-between md:justify-end space-x-2 md:space-x-3">
-                {/* CHAT TOGGLE BUTTON */}
+                {/* FIXED: Enhanced Chat Toggle Button */}
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        onClick={() => setShowChat(!showChat)}
-                        className="text-white hover:bg-white/20 h-8 w-8 md:h-10 md:w-10"
+                        onClick={toggleChat}
+                        className="text-white hover:bg-white/20 h-8 w-8 md:h-10 md:w-10 relative"
                       >
                         <MessageCircle className="w-4 h-4 md:w-5 md:h-5" />
                         {chatMessages.length > 0 && (
@@ -2124,22 +2115,42 @@ export default function TruthOrDare({ currentUser }) {
 
               {/* RIGHT COLUMN - UPDATED CHAT PANEL */}
               {showChat && (
-                <div className="space-y-4 md:space-y-6">
-                  <ChatPanel 
-                    chatMessages={chatMessages}
-                    playerName={localName}
-                    typingUsers={typingUsers}
-                    onSendMessage={sendChatMessage}
-                    isConnected={socket?.connected}
-                    onTyping={handleTyping}
-                    chatInput={chatInput}
-                    setChatInput={setChatInput}
-                    onClose={() => setShowChat(false)}
-                  />
-                </div>
+                <>
+                  {/* Mobile Chat Overlay */}
+                  <div className="lg:hidden mobile-chat-overlay" onClick={() => setShowChat(false)} />
+                  <div className={`${window.innerWidth < 1024 ? 'mobile-chat-container' : 'desktop-chat-container'}`}>
+                    <ChatPanel 
+                      chatMessages={chatMessages}
+                      playerName={localName}
+                      typingUsers={typingUsers}
+                      onSendMessage={sendChatMessage}
+                      isConnected={socket?.connected}
+                      onTyping={handleTyping}
+                      chatInput={chatInput}
+                      setChatInput={setChatInput}
+                      onClose={() => setShowChat(false)}
+                    />
+                  </div>
+                </>
               )}
             </div>
           </div>
+
+          {/* FIXED: Mobile Chat Toggle Button - Always visible and working */}
+          {!showChat && (
+            <Button
+              onClick={toggleChat}
+              className="fixed bottom-4 left-4 z-40 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-2xl rounded-full w-12 h-12 border-2 border-white/20 safe-area-inset-bottom"
+              style={{ marginBottom: 'env(safe-area-inset-bottom, 0)' }}
+            >
+              <MessageCircle className="w-5 h-5" />
+              {chatMessages.filter(m => m.sender !== localName && !m.read).length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-xs w-4 h-4 flex items-center justify-center">
+                  {chatMessages.filter(m => m.sender !== localName && !m.read).length}
+                </span>
+              )}
+            </Button>
+          )}
 
           {/* Proof Viewing Modal */}
           {showProofModal && (
