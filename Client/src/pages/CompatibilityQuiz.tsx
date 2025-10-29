@@ -159,6 +159,9 @@ export default function AdvancedCompatibilityGame() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
+  // Input focus states - NEW: Track which input is focused
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
+
   // Refs
   const audioRef = useRef<HTMLAudioElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -177,20 +180,29 @@ export default function AdvancedCompatibilityGame() {
       
       if (mobile) {
         document.body.classList.add('mobile-device');
+        // FIX: Better mobile viewport handling
         document.body.style.overflowX = 'hidden';
+        document.body.style.position = 'relative';
+        document.documentElement.style.overflowX = 'hidden';
       } else {
         document.body.classList.remove('mobile-device');
         document.body.style.overflowX = 'auto';
+        document.body.style.position = 'static';
+        document.documentElement.style.overflowX = 'auto';
       }
     };
 
     checkMobile();
     window.addEventListener('resize', checkMobile);
+    window.addEventListener('orientationchange', checkMobile);
 
     return () => {
       window.removeEventListener('resize', checkMobile);
+      window.removeEventListener('orientationchange', checkMobile);
       document.body.classList.remove('mobile-device');
       document.body.style.overflowX = 'auto';
+      document.body.style.position = 'static';
+      document.documentElement.style.overflowX = 'auto';
     };
   }, []);
 
@@ -1561,8 +1573,35 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // Join/Create Screen
+  // FIXED: Enhanced Join/Create Screen with proper input handling
   const JoinCreateScreen = () => {
+    // FIXED: Handle input focus properly
+    const handleNameFocus = () => {
+      setFocusedInput('name');
+      if (isMobile) {
+        setTimeout(() => {
+          nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+    };
+
+    const handleRoomFocus = () => {
+      setFocusedInput('room');
+      if (isMobile) {
+        setTimeout(() => {
+          roomInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+    };
+
+    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setPlayerName(e.target.value);
+    };
+
+    const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setRoomId(e.target.value.toUpperCase());
+    };
+
     return (
       <div 
         ref={mainContainerRef}
@@ -1615,7 +1654,8 @@ export default function AdvancedCompatibilityGame() {
                 id="playerName"
                 placeholder="Enter your name"
                 value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
+                onChange={handleNameChange}
+                onFocus={handleNameFocus}
                 onKeyPress={(e) => {
                   if (e.key === 'Enter' && playerName.trim() && !roomId.trim()) {
                     createRoom();
@@ -1623,9 +1663,11 @@ export default function AdvancedCompatibilityGame() {
                     joinRoom();
                   }
                 }}
-                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
+                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'} ${
+                  focusedInput === 'name' ? 'ring-2 ring-purple-500' : ''
+                }`}
                 autoComplete="name"
-                autoFocus
+                autoFocus={!isMobile} // Don't auto-focus on mobile to prevent keyboard issues
               />
             </div>
             
@@ -1638,9 +1680,16 @@ export default function AdvancedCompatibilityGame() {
                 id="roomId"
                 placeholder="Enter room code to join"
                 value={roomId}
-                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-               
-                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'}`}
+                onChange={handleRoomChange}
+                onFocus={handleRoomFocus}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
+                    joinRoom();
+                  }
+                }}
+                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'} ${
+                  focusedInput === 'room' ? 'ring-2 ring-blue-500' : ''
+                }`}
                 autoComplete="off"
               />
             </div>
@@ -1737,39 +1786,53 @@ export default function AdvancedCompatibilityGame() {
           margin-top: 0.5rem;
         }
         
-        /* Prevent horizontal scroll and enable smooth vertical scroll */
-        body {
-          overflow-x: hidden;
+        /* FIXED: Better mobile viewport handling */
+        body.mobile-device {
+          overflow-x: hidden !important;
+          position: relative !important;
+          width: 100% !important;
+          height: 100% !important;
           -webkit-overflow-scrolling: touch;
-          height: 100%;
         }
         
         html {
+          overflow-x: hidden;
           height: 100%;
-          overflow: hidden;
         }
         
-        /* Better touch targets for mobile */
+        /* FIXED: Prevent horizontal scroll */
+        .overflow-x-hidden {
+          overflow-x: hidden !important;
+        }
+        
+        /* FIXED: Better scrolling for all screens */
+        .min-h-screen {
+          min-height: 100vh;
+          min-height: 100dvh; /* Dynamic viewport height for mobile */
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        
+        /* FIXED: Better touch targets for mobile */
         button, [role="button"] {
           min-height: 44px;
           min-width: 44px;
         }
         
-        /* Improved scrolling for game screens */
-        .game-container {
-          height: 100vh;
-          overflow-y: auto;
-          -webkit-overflow-scrolling: touch;
+        /* FIXED: Improved input handling */
+        input {
+          font-size: 16px !important; /* Prevent zoom on iOS */
+          min-height: 44px;
         }
         
-        /* Ensure options are easily tappable */
+        /* FIXED: Ensure options are easily tappable */
         .option-item {
           min-height: 60px;
           display: flex;
           align-items: center;
         }
         
-        /* Better text sizing for mobile */
+        /* FIXED: Better text sizing for mobile */
         .mobile-text-lg {
           font-size: 1.125rem;
         }
@@ -1778,9 +1841,12 @@ export default function AdvancedCompatibilityGame() {
           font-size: 1.25rem;
         }
         
-        /* Prevent zoom on input focus */
-        input, select, textarea {
-          font-size: 16px;
+        /* FIXED: Prevent content shift when keyboard appears */
+        @media (max-height: 500px) {
+          .min-h-screen {
+            min-height: auto;
+            padding: 1rem 0;
+          }
         }
       }
       
@@ -1795,6 +1861,12 @@ export default function AdvancedCompatibilityGame() {
       /* Smooth transitions for all interactive elements */
       * {
         transition: all 0.2s ease-in-out;
+      }
+      
+      /* FIXED: Better focus states for accessibility */
+      input:focus {
+        outline: none;
+        ring: 2px;
       }
     `;
     document.head.appendChild(style);
