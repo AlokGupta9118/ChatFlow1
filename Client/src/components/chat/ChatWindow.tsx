@@ -39,21 +39,37 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const socketRef = useRef(null);
   const processedMessagesRef = useRef(new Set());
 
+  // ✅ FIXED: Get user from localStorage if currentUser is not provided
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
 
-  // Debug states
+  // ✅ FIXED: Debug to check user data
   useEffect(() => {
-    console.log('🔄 MESSAGES STATE UPDATED:', messages.length, 'messages');
-  }, [messages]);
+    console.log('👤 USER DATA:', { 
+      userId, 
+      userName: user?.name || user?.username,
+      currentUser: !!currentUser,
+      localStorageUser: !!JSON.parse(localStorage.getItem("user"))
+    });
+  }, [userId, user, currentUser]);
 
+  // ✅ FIXED: Ensure user data is stored in localStorage
   useEffect(() => {
-    console.log('🎯 TYPING USERS STATE UPDATED:', Array.from(typingUsers.entries()));
-  }, [typingUsers]);
+    if (currentUser && !localStorage.getItem("user")) {
+      console.log('💾 Storing user data in localStorage');
+      localStorage.setItem("user", JSON.stringify(currentUser));
+    }
+  }, [currentUser]);
 
-  // ✅ Single socket connection management
+  // ✅ FIXED: Enhanced socket connection with user ID validation
   useEffect(() => {
     console.log('🔌 Initializing socket connection...');
+    
+    if (!userId) {
+      console.log('❌ Cannot initialize socket: No user ID');
+      return;
+    }
+
     const newSocket = createSocket();
     socketRef.current = newSocket;
     setSocket(newSocket);
@@ -62,10 +78,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       console.log('✅ Socket.IO connected:', newSocket.id);
       setIsConnected(true);
       
-      if (userId) {
-        console.log('👤 Joining user room after connect:', userId);
-        newSocket.emit('join_user', userId);
-      }
+      console.log('👤 Joining user room after connect:', userId);
+      newSocket.emit('join_user', userId);
     };
 
     const handleDisconnect = () => {
@@ -73,11 +87,19 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       setIsConnected(false);
     };
 
+    const handleConnectError = (error) => {
+      console.error('❌ Socket connection error:', error);
+    };
+
     newSocket.on('connect', handleConnect);
     newSocket.on('disconnect', handleDisconnect);
+    newSocket.on('connect_error', handleConnectError);
 
     return () => {
       console.log('🧹 Cleaning up socket connection');
+      newSocket.off('connect', handleConnect);
+      newSocket.off('disconnect', handleDisconnect);
+      newSocket.off('connect_error', handleConnectError);
       newSocket.disconnect();
     };
   }, [userId]);
@@ -114,7 +136,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       setMessages(sortedMessages);
       processedMessagesRef.current.clear();
 
-      // Store chatRoomId for private chats
       if (!isGroup && res.data.chatRoomId) {
         setCurrentChatRoomId(res.data.chatRoomId);
         console.log('💾 Stored chatRoomId for private chat:', res.data.chatRoomId);
@@ -133,19 +154,20 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     fetchMessages();
   }, [fetchMessages]);
 
-  // ✅ FIXED: Enhanced chat room joining - ONLY when socket is ready
+  // ✅ FIXED: Enhanced room joining with user ID validation
   useEffect(() => {
-    if (!socket || !isConnected || !selectedChat?._id) {
+    if (!socket || !isConnected || !selectedChat?._id || !userId) {
       console.log('❌ Cannot join room - missing requirements:', {
         socket: !!socket,
         connected: isConnected,
-        selectedChat: !!selectedChat?._id
+        selectedChat: !!selectedChat?._id,
+        userId: userId
       });
       return;
     }
 
-    // Small delay to ensure socket is fully connected
-    const joinRoom = setTimeout(() => {
+    // Small delay to ensure socket is ready
+    const timeoutId = setTimeout(() => {
       const roomData = {
         roomId: selectedChat._id,
         isGroup: isGroup,
@@ -157,21 +179,20 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }, 100);
 
     return () => {
-      clearTimeout(joinRoom);
-      console.log('🚪 Cleaning up room joining');
+      clearTimeout(timeoutId);
     };
-  }, [socket, isConnected, selectedChat?._id, isGroup, currentChatRoomId]);
+  }, [socket, isConnected, selectedChat?._id, userId, isGroup, currentChatRoomId]);
 
-  // ✅ FIXED: Enhanced typing listeners - PROPER room validation
+  // ✅ FIXED: Enhanced typing listeners with better debugging
   useEffect(() => {
-    if (!socket || !isConnected || !selectedChat?._id) return;
+    if (!socket || !isConnected || !selectedChat?._id || !userId) return;
 
     console.log('🎯 Setting up typing listeners for chat:', selectedChat._id);
 
     const handleUserTyping = (data) => {
       console.log('🎯 TYPING EVENT RECEIVED:', data);
       
-      // ✅ CRITICAL: Calculate expected room ID exactly like backend
+      // Calculate expected room ID
       const expectedRoomId = isGroup ? 
         `group_${selectedChat._id}` : 
         `private_${currentChatRoomId || selectedChat._id}`;
@@ -184,7 +205,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         typingStatus: data.isTyping ? 'START' : 'STOP'
       });
       
-      // ✅ CRITICAL: Only process if it's for current chat AND not from current user
+      // Only process if it's for current chat AND not from current user
       if (data.roomId === expectedRoomId && data.userId !== userId) {
         console.log('🎯 PROCESSING TYPING EVENT for user:', data.userName);
         
@@ -261,14 +282,53 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     });
   }, [messages, typingUsers.size]);
 
-  // ✅ FIXED: Enhanced typing handler
-  
+  // ✅ FIXED: Enhanced typing handler with user ID validation
+  const handleTyping = useCallback(() => {
+    if (!socket || !isConnected || !selectedChat?._id || !userId) {
+      console.log('❌ Typing: Missing requirements', {
+        socket: !!socket,
+        connected: isConnected,
+        selectedChat: !!selectedChat?._id,
+        userId: userId
+      });
+      return;
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    const typingData = {
+      chatId: selectedChat._id,
+      userId: userId,
+      userName: user.name || user.username || 'User',
+      isGroup: isGroup,
+      chatRoomId: currentChatRoomId
+    };
+
+    console.log('🎯 EMITTING TYPING START:', typingData);
+    socket.emit("typing_start", typingData);
+
+    typingTimeoutRef.current = setTimeout(() => {
+      const stopData = {
+        chatId: selectedChat._id,
+        userId: userId,
+        isGroup: isGroup,
+        chatRoomId: currentChatRoomId
+      };
+      
+      console.log('🎯 EMITTING TYPING STOP:', stopData);
+      socket.emit("typing_stop", stopData);
+      typingTimeoutRef.current = null;
+    }, 2000);
+  }, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, user.username, currentChatRoomId]);
+
   // Enhanced input change handler
   const handleInputChange = (e) => {
     const value = e.target.value;
     setNewMessage(value);
     
-    if (value.trim() && socket && isConnected) {
+    if (value.trim() && socket && isConnected && userId) {
       handleTyping();
     }
   };
@@ -283,7 +343,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   // Send message with optimistic update
   const handleSendMessage = async () => {
     const messageContent = newMessage.trim();
-    if (!messageContent || !socket || !isConnected || isSending) return;
+    if (!messageContent || !socket || !isConnected || isSending || !userId) return;
 
     const token = getToken();
     if (!token) {
@@ -361,64 +421,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       setIsSending(false);
     }
   };
-
-    // ✅ Add this debugging function to check socket room status
-const checkRoomStatus = useCallback(() => {
-  if (!socket || !selectedChat?._id) return;
-  
-  console.log('🔍 CHECKING ROOM STATUS:');
-  console.log('🔍 Current User ID:', userId);
-  console.log('🔍 Selected Chat ID:', selectedChat._id);
-  console.log('🔍 Current Chat Room ID:', currentChatRoomId);
-  console.log('🔍 Is Group:', isGroup);
-  console.log('🔍 Expected Room ID:', isGroup ? `group_${selectedChat._id}` : `private_${currentChatRoomId || selectedChat._id}`);
-  console.log('🔍 Socket Connected:', isConnected);
-  console.log('🔍 Socket ID:', socket?.id);
-}, [socket, selectedChat?._id, userId, currentChatRoomId, isGroup, isConnected]);
-
-// Call this when component mounts or when chat changes
-useEffect(() => {
-  checkRoomStatus();
-}, [checkRoomStatus]);
-
-// ✅ Enhanced typing handler with debugging
-const handleTyping = useCallback(() => {
-  if (!socket || !isConnected || !selectedChat?._id) {
-    console.log('❌ Typing: Missing requirements');
-    checkRoomStatus();
-    return;
-  }
-
-  if (typingTimeoutRef.current) {
-    clearTimeout(typingTimeoutRef.current);
-  }
-
-  const typingData = {
-    chatId: selectedChat._id,
-    userId: userId,
-    userName: user.name || user.username || 'User',
-    isGroup: isGroup,
-    chatRoomId: currentChatRoomId
-  };
-
-  console.log('🎯 EMITTING TYPING START:', typingData);
-  socket.emit("typing_start", typingData);
-
-  typingTimeoutRef.current = setTimeout(() => {
-    const stopData = {
-      chatId: selectedChat._id,
-      userId: userId,
-      isGroup: isGroup,
-      chatRoomId: currentChatRoomId
-    };
-    
-    console.log('🎯 EMITTING TYPING STOP:', stopData);
-    socket.emit("typing_stop", stopData);
-    typingTimeoutRef.current = null;
-  }, 2000);
-}, [socket, isConnected, selectedChat?._id, userId, isGroup, user.name, user.username, currentChatRoomId, checkRoomStatus]);
-
-  
 
   // ✅ FIXED: Enhanced typing indicator display
   const getStatusText = () => {
@@ -502,6 +504,15 @@ const handleTyping = useCallback(() => {
     </div>
   );
 
+  // Debug states
+  useEffect(() => {
+    console.log('🔄 MESSAGES STATE UPDATED:', messages.length, 'messages');
+  }, [messages]);
+
+  useEffect(() => {
+    console.log('🎯 TYPING USERS STATE UPDATED:', Array.from(typingUsers.entries()));
+  }, [typingUsers]);
+
   if (!selectedChat) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-gray-900">
@@ -541,17 +552,18 @@ const handleTyping = useCallback(() => {
         >
           <Info className="w-5 h-5" />
         </Button>
-        {/* Add this temporary debug button */}
-<Button
-  onClick={() => {
-    console.log('🧪 MANUAL TYPING TEST TRIGGERED');
-    handleTyping();
-  }}
-  className="bg-yellow-600 text-white"
->
-  Test Typing
-</Button>
 
+        {/* Temporary debug button */}
+        <Button
+          onClick={() => {
+            console.log('🧪 MANUAL TYPING TEST TRIGGERED');
+            handleTyping();
+          }}
+          className="bg-yellow-600 text-white hover:bg-yellow-700 ml-2"
+          size="sm"
+        >
+          Test Typing
+        </Button>
       </div>
 
       {/* Messages Area */}
@@ -562,7 +574,7 @@ const handleTyping = useCallback(() => {
           </AnimatePresence>
         </div>
         
-        {/* ✅ FIXED: Typing Indicator */}
+        {/* ✅ FIXED: Enhanced Typing Indicator */}
         {typingUsers.size > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -570,20 +582,15 @@ const handleTyping = useCallback(() => {
             className="flex justify-start mb-4 px-4"
           >
             <div className="flex items-center gap-3 max-w-[80%]">
-              {isGroup && (
-                <Avatar className="w-8 h-8">
-                  <AvatarFallback className="bg-gray-600 text-white text-xs">⌨️</AvatarFallback>
-                </Avatar>
-              )}
-              <div className="px-4 py-3 rounded-2xl bg-gray-800 text-white rounded-bl-md border border-gray-600">
+              <div className="px-4 py-3 rounded-2xl bg-blue-600 text-white rounded-bl-md border border-blue-400">
                 <div className="flex items-center gap-3">
                   <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
                   <span className="text-sm font-medium">
-                    {getStatusText().replace('...', '')}
+                    {Array.from(typingUsers.values())[0]} is typing...
                   </span>
                 </div>
               </div>
@@ -596,6 +603,18 @@ const handleTyping = useCallback(() => {
 
       {/* Input Area */}
       <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gray-800 border-t border-gray-700">
+        <div className="flex gap-1">
+          <Button variant="ghost" size="icon" className="text-gray-400">
+            <Paperclip className="w-5 h-5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="text-gray-400">
+            <Image className="w-5 h-5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="text-gray-400">
+            <Smile className="w-5 h-5" />
+          </Button>
+        </div>
+        
         <div className="flex-1 relative">
           <Input
             value={newMessage}
@@ -605,6 +624,9 @@ const handleTyping = useCallback(() => {
             placeholder={!isConnected ? "Connecting..." : isSending ? "Sending..." : "Type your message..."}
             className="w-full pl-4 pr-12 py-3 bg-gray-700 border border-gray-600 text-white placeholder-gray-400 rounded-2xl focus:border-purple-400"
           />
+          <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400">
+            <Mic className="w-4 h-4" />
+          </Button>
         </div>
         
         <Button

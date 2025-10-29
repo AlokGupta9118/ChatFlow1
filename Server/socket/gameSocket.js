@@ -144,7 +144,7 @@ socket.on("typing", ({ roomId, userId, userName }) => {
   });
 });
 
-socket.on("typing-stop", ({ roomId, userId }) => {
+socket.on("chat-typing-stop", ({ roomId, userId }) => {
   console.log(`⌨️ ${userId} stopped typing in room ${roomId}`);
   socket.to(roomId).emit("user-typing", { 
     userName: userId, // Using userId as userName for simplicity

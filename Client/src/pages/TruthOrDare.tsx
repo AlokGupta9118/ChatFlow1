@@ -986,7 +986,7 @@ export default function TruthOrDare({ currentUser }) {
   const handleStopTyping = () => {
     if (!socket) return;
     console.log("⌨️ Stopping typing indicator");
-    socket.emit("typing-stop", { roomId, userId: localName });
+    socket.emit("chat-typing-stop", { roomId, userId: localName });
   };
 
   // FIXED: Enhanced chat toggle with better mobile handling
