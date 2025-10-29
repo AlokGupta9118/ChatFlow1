@@ -247,7 +247,7 @@ socket.on("message-read", ({ messageId, roomId }) => {
     });
 
     // ✅ CHAT: Typing indicators for chat
-    socket.on("chat-gametyping-start", ({ roomId, userId, userName }) => {
+    socket.on("typing", ({ roomId, userId, userName }) => {
       socket.to(roomId).emit("user-typing", { 
         userId, 
         userName, 
@@ -255,7 +255,7 @@ socket.on("message-read", ({ messageId, roomId }) => {
       });
     });
 
-    socket.on("chat-gametyping-stop", ({ roomId, userId }) => {
+    socket.on("typing-stop", ({ roomId, userId }) => {
       socket.to(roomId).emit("user-typing", { 
         userId, 
         isTyping: false 
