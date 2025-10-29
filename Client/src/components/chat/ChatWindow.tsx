@@ -1,3 +1,4 @@
+// ChatWindow.jsx (FINAL VERSION - WORKING TYPING INDICATORS)
 import { useEffect, useState, useRef, useCallback } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -46,7 +47,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [typingUsers, setTypingUsers] = useState(new Map());
+  const [typingUsers, setTypingUsers] = useState(new Map()); // ✅ CHANGED: Using Map to store userId -> userName
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -58,23 +59,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const chatContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const socketRef = useRef(null);
-  const processedMessagesRef = useRef(new Set());
-  const lastMessageRef = useRef(null);
 
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
 
-  // Debug: Log state changes
-  useEffect(() => {
-    console.log('🔄 MESSAGES STATE UPDATED:', messages.length, 'messages');
-    console.log('📝 MESSAGES CONTENT:', messages);
-  }, [messages]);
-
-  useEffect(() => {
-    console.log('🎯 TYPING USERS STATE UPDATED:', Array.from(typingUsers.entries()));
-  }, [typingUsers]);
-
-  // ✅ Single socket connection management
+  // ✅ Socket connection management
   useEffect(() => {
     console.log('🔌 Initializing socket connection...');
     const newSocket = createSocket();
@@ -114,6 +103,14 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     };
   }, [userId]);
 
+  // ✅ Join user room when connected
+  useEffect(() => {
+    if (socket && isConnected && userId) {
+      console.log('👤 Joining user room:', userId);
+      socket.emit('join_user', userId);
+    }
+  }, [socket, isConnected, userId]);
+
   // ✅ Enhanced message fetching
   const fetchMessages = useCallback(async () => {
     if (!selectedChat?._id) return;
@@ -144,8 +141,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       );
       
       setMessages(sortedMessages);
-      processedMessagesRef.current.clear();
 
+      // ✅ CRITICAL: Store chatRoomId for private chats
       if (!isGroup && res.data.chatRoomId) {
         setCurrentChatRoomId(res.data.chatRoomId);
         console.log('💾 Stored chatRoomId for private chat:', res.data.chatRoomId);
@@ -181,11 +178,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
     return () => {
       console.log('🚪 Leaving chat room');
-      setTypingUsers(new Map());
+      setTypingUsers(new Map()); // ✅ CHANGED: Clear Map instead of Set
     };
   }, [socket, isConnected, selectedChat?._id, isGroup, currentChatRoomId]);
 
-  // ✅ FIXED: Enhanced typing listeners - SIMPLIFIED
+  // ✅ FIXED: Enhanced typing listeners with NAME SUPPORT
   useEffect(() => {
     if (!socket || !isConnected || !selectedChat?._id) return;
 
@@ -194,23 +191,41 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     const handleUserTyping = (data) => {
       console.log('🎯 TYPING EVENT RECEIVED:', data);
       
-      // SIMPLIFIED: Just check if it's not from current user
-      if (data.userId !== userId) {
+      // ✅ FIXED: Calculate expected room ID exactly like backend
+      const expectedRoomId = isGroup ? 
+        `group_${selectedChat._id}` : 
+        `private_${currentChatRoomId || selectedChat._id}`;
+      
+      console.log('🎯 ROOM COMPARISON:', {
+        expected: expectedRoomId,
+        received: data.roomId,
+        matches: data.roomId === expectedRoomId,
+        isCurrentUser: data.userId === userId
+      });
+      
+      // Only process if it's for current chat AND not from current user
+      if (data.roomId === expectedRoomId && data.userId !== userId) {
         console.log('🎯 PROCESSING TYPING EVENT for user:', data.userName);
         
-        setTypingUsers(prev => {
-          const newMap = new Map(prev);
-          
-          if (data.isTyping) {
+        if (data.isTyping) {
+          // ✅ FIXED: Store both user ID and name in Map
+          setTypingUsers(prev => {
+            const newMap = new Map(prev);
             newMap.set(data.userId, data.userName || 'Someone');
             console.log('🎯 ADDED typing user:', data.userName, 'Total:', newMap.size);
-          } else {
+            return newMap;
+          });
+        } else {
+          setTypingUsers(prev => {
+            const newMap = new Map(prev);
+            const userName = newMap.get(data.userId) || 'Someone';
             newMap.delete(data.userId);
-            console.log('🎯 REMOVED typing user, Remaining:', newMap.size);
-          }
-          
-          return newMap;
-        });
+            console.log('🎯 REMOVED typing user:', userName, 'Remaining:', newMap.size);
+            return newMap;
+          });
+        }
+      } else {
+        console.log('🎯 IGNORING typing event - wrong room or own typing');
       }
     };
 
@@ -221,42 +236,47 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       socket.off('user_typing', handleUserTyping);
       setTypingUsers(new Map());
     };
-  }, [socket, isConnected, selectedChat?._id, userId]);
+  }, [socket, isConnected, selectedChat?._id, userId, isGroup, currentChatRoomId]);
 
-  // ✅ FIXED: SIMPLIFIED Message listener - REMOVE STRICT ROOM CHECKING
+  // ✅ FIXED: REAL-TIME Message listener - PREVENT DUPLICATES
   useEffect(() => {
-    if (!socket || !isConnected || !selectedChat?._id) return;
+    if (!socket || !isConnected) return;
 
     console.log('👂 Setting up real-time message listeners');
 
     const handleReceiveMessage = (msg) => {
-      console.log('📨 Received real-time message:', msg._id, msg.content);
+      console.log('📨 Received real-time message:', msg);
       
-      // SIMPLIFIED: Just add the message if it's not a duplicate
-      const messageKey = `${msg._id}_${msg.createdAt}`;
+      // ✅ FIXED: Strict room matching to prevent duplicates
+      let isForCurrentChat = false;
       
-      if (processedMessagesRef.current.has(messageKey)) {
-        console.log('🔄 Skipping duplicate message:', msg._id);
-        return;
+      if (isGroup) {
+        isForCurrentChat = msg.roomId === `group_${selectedChat?._id}`;
+      } else {
+        isForCurrentChat = msg.roomId === `private_${currentChatRoomId}`;
       }
-
-      processedMessagesRef.current.add(messageKey);
       
-      setMessages(prev => {
-        // Check for duplicates
-        const messageExists = prev.some(m => m._id === msg._id);
-        
-        if (messageExists) {
-          console.log('🔄 Message already exists in state:', msg._id);
-          return prev;
-        }
-        
-        console.log('➕ Adding new message to state:', msg._id);
-        return [...prev, { 
-          ...msg, 
-          displayTimestamp: new Date().toISOString() 
-        }];
-      });
+      if (isForCurrentChat) {
+        console.log('✅ Adding message to current chat');
+        setMessages(prev => {
+          // ✅ FIXED: Check for duplicates by _id AND content/timestamp
+          const messageExists = prev.some(m => 
+            m._id === msg._id || 
+            (m.content === msg.content && 
+             Math.abs(new Date(m.createdAt) - new Date(msg.createdAt)) < 1000)
+          );
+          
+          if (messageExists) {
+            console.log('🔄 Skipping duplicate message');
+            return prev;
+          }
+          
+          console.log('➕ Adding new message to state');
+          return [...prev, { ...msg, displayTimestamp: new Date().toISOString() }];
+        });
+      } else {
+        console.log('❌ Message not for current chat, ignoring');
+      }
     };
 
     socket.on('receive_message', handleReceiveMessage);
@@ -264,7 +284,40 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     return () => {
       socket.off('receive_message', handleReceiveMessage);
     };
-  }, [socket, isConnected, selectedChat?._id]);
+  }, [socket, isConnected, selectedChat?._id, isGroup, currentChatRoomId]);
+
+  // ✅ FIXED: User status listener
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    const handleUserStatusChange = (data) => {
+      console.log('👤 User status changed:', data);
+      
+      setUserStatus(prev => ({
+        ...prev,
+        [data.userId]: {
+          status: data.status,
+          lastSeen: data.lastSeen
+        }
+      }));
+      
+      setOnlineUsers(prev => {
+        const newSet = new Set(prev);
+        if (data.status === 'online') {
+          newSet.add(data.userId);
+        } else {
+          newSet.delete(data.userId);
+        }
+        return newSet;
+      });
+    };
+
+    socket.on('user_status_change', handleUserStatusChange);
+
+    return () => {
+      socket.off('user_status_change', handleUserStatusChange);
+    };
+  }, [socket, isConnected]);
 
   // ✅ Auto-scroll to bottom
   useEffect(() => {
@@ -274,11 +327,11 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ 
       behavior: "smooth",
-      block: "nearest"
+      block: "end"
     });
   };
 
-  // ✅ FIXED: Enhanced typing handler
+  // ✅ FIXED: Enhanced typing handler with NAME SUPPORT
   const handleTyping = useCallback(() => {
     if (!socket || !isConnected || !selectedChat?._id) {
       console.log('❌ Typing: Missing requirements');
@@ -289,6 +342,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       clearTimeout(typingTimeoutRef.current);
     }
 
+    // ✅ FIXED: Include ALL required data including userName
     const typingData = {
       chatId: selectedChat._id,
       userId: userId,
@@ -318,6 +372,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     const value = e.target.value;
     setNewMessage(value);
     
+    // Only trigger typing if there's content and we're connected
     if (value.trim() && socket && isConnected) {
       handleTyping();
     }
@@ -330,7 +385,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // ✅ FIXED: Send message with OPTIMISTIC UPDATE
+  // ✅ FIXED: Send message with proper room ID handling
   const handleSendMessage = async () => {
     const messageContent = newMessage.trim();
     if (!messageContent || !socket || !isConnected || isSending) return;
@@ -344,12 +399,13 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     setIsSending(true);
 
     try {
-      // Stop typing
+      // ✅ FIXED: Immediately stop typing when sending
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
       }
       
+      // Emit typing stop immediately
       socket.emit("typing_stop", {
         chatId: selectedChat._id,
         userId: userId,
@@ -357,24 +413,20 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         chatRoomId: currentChatRoomId
       });
 
-      // Create optimistic message
+      // Optimistic update
       const tempMessageId = `temp_${Date.now()}`;
       const optimisticMessage = {
         _id: tempMessageId,
-        content: messageContent,
-        sender: {
-          _id: userId,
-          name: user.name || user.username,
-          profilePicture: user.profilePicture
-        },
+        sender: { _id: userId, name: user.name, profilePicture: user.profilePicture },
         senderId: userId,
+        content: messageContent,
         createdAt: new Date().toISOString(),
         type: "text",
-        isOptimistic: true,
-        status: 'sending'
+        isRealTime: true,
+        status: 'sending',
+        isOptimistic: true
       };
 
-      // Add optimistic message immediately
       setMessages(prev => [...prev, optimisticMessage]);
       setNewMessage("");
 
@@ -401,47 +453,67 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       });
 
       const sentMessage = res.data.message;
-      console.log('✅ Message saved to DB:', sentMessage._id);
+      console.log('✅ Message saved to DB:', sentMessage);
 
-      // Replace optimistic message with real one
-      setMessages(prev => {
-        const filtered = prev.filter(msg => msg._id !== tempMessageId);
-        const exists = filtered.some(msg => msg._id === sentMessage._id);
-        if (!exists) {
-          return [...filtered, { ...sentMessage, status: 'delivered' }];
-        }
-        return filtered;
-      });
+      // Replace optimistic message
+      setMessages(prev => 
+        prev.map(msg => 
+          msg._id === tempMessageId ? { ...sentMessage, status: 'sent' } : msg
+        )
+      );
 
-      processedMessagesRef.current.add(`${sentMessage._id}_${sentMessage.createdAt}`);
+      // ✅ FIXED: Use proper room ID based on chat type
+      const roomId = isGroup ? 
+        `group_${selectedChat._id}` : 
+        `private_${res.data.chatRoomId || currentChatRoomId}`;
+
+      console.log('📤 Emitting socket message to room:', roomId);
+
+      // ✅ FIXED: Only emit if we have a valid roomId
+      if (roomId && roomId !== 'private_null') {
+        socket.emit("send_message", {
+          roomId: roomId,
+          message: {
+            ...sentMessage,
+            senderId: userId,
+            receiverId: isGroup ? null : selectedChat._id,
+            isRealTime: true
+          },
+          chatType: isGroup ? "group" : "private"
+        });
+      } else {
+        console.warn('⚠️ No valid roomId for socket emission');
+      }
 
     } catch (err) {
       console.error("❌ Error sending message:", err);
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.isOptimistic ? { ...msg, status: 'error', error: true } : msg
+        )
+      );
       toast.error("Failed to send message");
-      
-      // Remove optimistic message on error
-      setMessages(prev => prev.filter(msg => !msg.isOptimistic || msg.status !== 'sending'));
     } finally {
       setIsSending(false);
     }
   };
 
-  // ✅ FIXED: Enhanced typing indicator display
+  // ✅ FIXED: Enhanced typing indicator display with NAMES
   const getStatusText = () => {
     if (typingUsers.size > 0) {
-      const typingArray = Array.from(typingUsers.values());
+      const typingArray = Array.from(typingUsers.entries());
       console.log('🎯 Currently typing users with names:', typingArray);
       
       if (typingArray.length === 1) {
-        return `${typingArray[0]} is typing...`;
-      } else if (typingArray.length === 2) {
-        return `${typingArray[0]} and ${typingArray[1]} are typing...`;
+        const [userId, userName] = typingArray[0];
+        return `${userName} is typing...`; // ✅ Shows actual name!
       } else {
-        return `${typingArray[0]} and ${typingArray.length - 1} others are typing...`;
+        const names = typingArray.map(([_, userName]) => userName).join(', ');
+        return `${names} are typing...`;
       }
     }
     
-    // Default status
+    // Default status text when no one is typing
     if (isGroup) {
       const onlineCount = selectedChat.participants?.filter(p => 
         onlineUsers.has(p.user?._id || p.user)
@@ -449,6 +521,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       return `${onlineCount} online • ${selectedChat.participants?.length || 0} members`;
     }
     
+    // For private chats
     const friendId = selectedChat._id;
     const status = userStatus[friendId]?.status || 'offline';
     
@@ -461,15 +534,14 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // ✅ FIXED: Enhanced message rendering with VISIBILITY CHECK
+  // ✅ Enhanced message rendering
   const renderMessage = (msg, idx) => {
     const senderId = msg.sender?._id || msg.senderId;
     const isSent = senderId?.toString() === userId?.toString();
     const userColor = getUserColor(senderId);
     const isSystem = msg.type === 'system';
     const isOptimistic = msg.isOptimistic;
-
-    console.log('🎨 Rendering message:', msg._id, msg.content, 'isSent:', isSent);
+    const hasError = msg.error;
 
     if (isSystem) {
       return (
@@ -491,15 +563,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         key={msg._id || idx}
         initial={{ opacity: 0, y: 20 }}
         animate={{ 
-          opacity: 1, 
+          opacity: hasError ? 0.7 : 1, 
           y: 0,
+          scale: isOptimistic ? [0.95, 1] : 1
         }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ duration: 0.3 }}
-        className={`flex ${isSent ? "justify-end" : "justify-start"} mb-4 px-4`}
+        className={`flex ${isSent ? "justify-end" : "justify-start"} ${hasError ? 'opacity-70' : ''}`}
       >
         <div className={`flex items-end gap-3 max-w-[80%] ${isSent ? "flex-row-reverse" : ""}`}>
-          {/* Sender Avatar */}
+          {/* Sender Avatar (only for received messages in groups) */}
           {!isSent && isGroup && (
             <div className="relative group flex-shrink-0">
               <Avatar className="w-8 h-8 shadow-md border-2 border-white/30">
@@ -508,16 +581,22 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                   {msg.sender?.name?.[0]?.toUpperCase() || "?"}
                 </AvatarFallback>
               </Avatar>
+              {onlineUsers.has(senderId) && (
+                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-gray-900"></div>
+              )}
             </div>
           )}
           
           <div className="flex flex-col space-y-1">
-            {/* Sender Name */}
+            {/* Sender Name (only for received messages in groups) */}
             {isGroup && !isSent && (
               <div className="flex items-center space-x-2 mb-1 px-1">
                 <span className="text-xs font-semibold text-gray-300">
                   {msg.sender?.name}
                 </span>
+                {onlineUsers.has(senderId) && (
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                )}
               </div>
             )}
             
@@ -526,15 +605,25 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
               whileHover={{ scale: 1.01 }}
               className={`relative px-4 py-3 rounded-2xl shadow-lg backdrop-blur-sm border ${
                 isSent
-                  ? `bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md border-blue-400/30 ${isOptimistic ? 'opacity-80' : ''}`
+                  ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md border-blue-400/30"
                   : "bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-bl-md border-gray-600/30"
-              }`}
+              } ${hasError ? 'border-red-400/50' : ''}`}
             >
+              {/* Message Status Indicator */}
+              {isSent && (
+                <div className="absolute -top-1 -right-1">
+                  {isOptimistic ? (
+                    <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse" title="Sending..."></div>
+                  ) : hasError ? (
+                    <div className="w-3 h-3 bg-red-500 rounded-full" title="Failed to send"></div>
+                  ) : (
+                    <div className="w-3 h-3 bg-green-500 rounded-full" title="Sent"></div>
+                  )}
+                </div>
+              )}
+              
               <p className="leading-relaxed text-sm whitespace-pre-wrap break-words">
                 {msg.content}
-                {isOptimistic && (
-                  <span className="ml-2 text-xs opacity-70">🕒</span>
-                )}
               </p>
               
               {/* Message Timestamp */}
@@ -544,7 +633,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                     hour: '2-digit', 
                     minute: '2-digit' 
                   })}
-                  {isSent && !isOptimistic && (
+                  {isSent && !isOptimistic && !hasError && (
                     <span className="text-[10px]">✓</span>
                   )}
                 </p>
@@ -574,16 +663,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
   if (!selectedChat) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-purple-900">
+      <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-gray-900 dark:to-gray-800">
         <div className="text-center space-y-6">
           <div className="w-32 h-32 bg-gradient-to-r from-indigo-400 to-purple-500 rounded-full flex items-center justify-center shadow-2xl mx-auto">
             <div className="text-4xl">💬</div>
           </div>
           <div>
-            <h3 className="text-2xl font-bold text-white mb-2">
+            <h3 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
               Start a Conversation
             </h3>
-            <p className="text-gray-400">
+            <p className="text-gray-500 dark:text-gray-400">
               Select a chat from the sidebar to begin messaging
             </p>
           </div>
@@ -593,18 +682,26 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   }
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 relative">
+    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm relative">
       <ConnectionStatus />
 
       {/* Header */}
-      <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-gradient-to-r from-purple-600 to-blue-600 border-b border-purple-500/30 shadow-lg">
+      <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-xl border-b border-purple-500/30 shadow-lg z-10">
         <div className="flex items-center gap-4">
-          <Avatar className="w-14 h-14 shadow-lg border-2 border-white/30">
-            <AvatarImage src={selectedChat.profilePicture || selectedChat.avatar || "/default-avatar.png"} />
-            <AvatarFallback className={`bg-gradient-to-r ${getUserColor(selectedChat._id)} text-white font-semibold`}>
-              {selectedChat.name?.[0]?.toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative group">
+            <Avatar 
+              className="w-14 h-14 shadow-lg border-2 border-white/30 cursor-pointer hover:scale-105 transition-transform"
+              onClick={() => setShowAdminPanel(true)}
+            >
+              <AvatarImage src={selectedChat.profilePicture || selectedChat.avatar || "/default-avatar.png"} />
+              <AvatarFallback className={`bg-gradient-to-r ${getUserColor(selectedChat._id)} text-white font-semibold`}>
+                {selectedChat.name?.[0]?.toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            {!isGroup && onlineUsers.has(selectedChat._id) && (
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+            )}
+          </div>
           <div className="flex flex-col">
             <h3 className="text-lg font-bold text-white">
               {selectedChat.name}
@@ -615,33 +712,34 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           </div>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setShowAdminPanel(true)}
-          className="text-white hover:bg-white/20"
-        >
-          <Info className="w-5 h-5" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowAdminPanel(true)}
+            className="p-3 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 hover:bg-white/30 transition-all duration-200 shadow-sm"
+            title={isGroup ? "Group Info" : "User Info"}
+          >
+            <Info className="w-5 h-5 text-white" />
+          </motion.button>
+        </div>
       </div>
 
-      {/* Messages Area - FIXED: Removed background gradients that might cause issues */}
+      {/* Messages Area */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 bg-gray-900 min-h-0"
+        className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-gray-800/50 to-gray-900/50 min-h-0 custom-scrollbar"
       >
-        <div className="space-y-2">
-          <AnimatePresence>
-            {messages.map(renderMessage)}
-          </AnimatePresence>
-        </div>
+        <AnimatePresence>
+          {messages.map(renderMessage)}
+        </AnimatePresence>
         
-        {/* ✅ FIXED: Typing Indicator */}
+        {/* ✅ FIXED: Typing Indicator with Names */}
         {typingUsers.size > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex justify-start mb-4 px-4"
+            className="flex justify-start"
           >
             <div className="flex items-center gap-3 max-w-[80%]">
               {isGroup && (
@@ -651,7 +749,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                   </AvatarFallback>
                 </Avatar>
               )}
-              <div className="px-4 py-3 rounded-2xl bg-gray-800 text-white rounded-bl-md border border-gray-600">
+              <div className="px-4 py-3 rounded-2xl bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-bl-md border border-gray-600/30">
                 <div className="flex items-center gap-3">
                   <div className="flex space-x-1">
                     <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
@@ -671,17 +769,29 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       </div>
 
       {/* Input Area */}
-      <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gray-800 border-t border-purple-500/30">
+      <div className="h-20 flex-shrink-0 flex items-center gap-3 px-6 bg-gradient-to-r from-gray-800 to-gray-900 backdrop-blur-xl border-t border-purple-500/30 shadow-lg">
         <div className="flex gap-1">
-          <Button variant="ghost" size="icon" className="text-gray-400">
+          <motion.button 
+            whileHover={{ scale: 1.1 }} 
+            whileTap={{ scale: 0.9 }} 
+            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
+          >
             <Paperclip className="w-5 h-5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="text-gray-400">
+          </motion.button>
+          <motion.button 
+            whileHover={{ scale: 1.1 }} 
+            whileTap={{ scale: 0.9 }} 
+            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
+          >
             <Image className="w-5 h-5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="text-gray-400">
+          </motion.button>
+          <motion.button 
+            whileHover={{ scale: 1.1 }} 
+            whileTap={{ scale: 0.9 }} 
+            className="p-3 text-gray-400 hover:text-purple-400 transition-colors hover:bg-white/10 rounded-xl"
+          >
             <Smile className="w-5 h-5" />
-          </Button>
+          </motion.button>
         </div>
         
         <div className="flex-1 relative">
@@ -691,25 +801,30 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
             onKeyDown={handleKeyPress}
             disabled={isSending || !isConnected}
             placeholder={!isConnected ? "Connecting..." : isSending ? "Sending..." : "Type your message..."}
-            className="w-full pl-4 pr-12 py-3 bg-gray-700 border border-gray-600 text-white placeholder-gray-400 rounded-2xl focus:outline-none focus:border-purple-400"
+            className="w-full pl-4 pr-12 py-3 bg-gray-700/50 border-2 border-purple-500/30 text-white placeholder-gray-400 rounded-2xl focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 backdrop-blur-sm transition-all disabled:opacity-50"
           />
-          <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400">
+          <motion.button 
+            whileHover={{ scale: 1.05 }} 
+            whileTap={{ scale: 0.95 }}
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-purple-400 transition-colors"
+          >
             <Mic className="w-4 h-4" />
-          </Button>
+          </motion.button>
         </div>
         
-        <Button
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
           onClick={handleSendMessage}
           disabled={!newMessage.trim() || !isConnected || isSending}
-          className="bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
-          size="icon"
+          className="p-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg shadow-purple-500/25 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border-2 border-purple-400/30"
         >
           {isSending ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
           ) : (
             <Send className="w-5 h-5" />
           )}
-        </Button>
+        </motion.button>
       </div>
 
       {/* Admin Panel Modal */}
@@ -719,28 +834,28 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
             onClick={() => setShowAdminPanel(false)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-gray-900 w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl border border-purple-500/30 overflow-hidden"
+              className="bg-gradient-to-br from-gray-900 to-purple-900 w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl border border-purple-500/30 overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between p-6 border-b border-purple-500/30 bg-purple-600">
+              <div className="flex items-center justify-between p-6 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-sm">
                 <h3 className="text-xl font-bold text-white">
                   {isGroup ? 'Group Settings' : 'User Info'} - {selectedChat.name}
                 </h3>
-                <Button
-                  variant="ghost"
-                  size="icon"
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
                   onClick={() => setShowAdminPanel(false)}
-                  className="text-white hover:bg-white/20"
+                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
                 >
-                  <X className="w-5 h-5" />
-                </Button>
+                  <X className="w-5 h-5 text-white" />
+                </motion.button>
               </div>
               <div className="overflow-y-auto max-h-[60vh]">
                 {isGroup ? (
@@ -761,7 +876,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                       <div>
                         <h3 className="text-2xl font-bold text-white">{selectedChat.name}</h3>
                         <p className="text-gray-300">
-                          {onlineUsers.has(selectedChat._id) ? 'Online' : 'Offline'}
+                          {onlineUsers.has(selectedChat._id) ? (
+                            <span className="text-green-400 flex items-center gap-2">
+                              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                              Online
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">
+                              Offline
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -772,6 +896,32 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Custom Scrollbar Styles */}
+      <style jsx>{`
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(168, 85, 247, 0.5) transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+          border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(to bottom, #8b5cf6, #3b82f6);
+          border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(to bottom, #7c3aed, #2563eb);
+        }
+      `}</style>
     </div>
   );
 };
