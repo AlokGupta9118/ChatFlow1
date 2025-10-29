@@ -58,7 +58,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const chatContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const socketRef = useRef(null);
-  const messageProcessedRef = useRef(new Set()); // Track processed messages
+  const processedMessagesRef = useRef(new Set()); // Track processed messages
+  const lastMessageRef = useRef(null); // Track last message to prevent duplicates
 
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
@@ -134,7 +135,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       
       setMessages(sortedMessages);
       // Clear processed messages when fetching new chat
-      messageProcessedRef.current.clear();
+      processedMessagesRef.current.clear();
 
       // ✅ CRITICAL: Store chatRoomId for private chats
       if (!isGroup && res.data.chatRoomId) {
@@ -228,7 +229,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     };
   }, [socket, isConnected, selectedChat?._id, userId, isGroup, currentChatRoomId]);
 
-  // ✅ FIXED: REAL-TIME Message listener - PREVENT DUPLICATES
+  // ✅ FIXED: REAL-TIME Message listener - PROPER DUPLICATE HANDLING
   useEffect(() => {
     if (!socket || !isConnected) return;
 
@@ -237,28 +238,39 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     const handleReceiveMessage = (msg) => {
       console.log('📨 Received real-time message:', msg._id, msg.content);
       
-      // ✅ FIXED: Use message ID to prevent duplicates
-      if (messageProcessedRef.current.has(msg._id)) {
+      // ✅ FIXED: Better duplicate detection
+      const messageKey = `${msg._id}_${msg.createdAt}`;
+      
+      if (processedMessagesRef.current.has(messageKey)) {
         console.log('🔄 Skipping duplicate message:', msg._id);
         return;
       }
 
-      // ✅ FIXED: Strict room matching to prevent duplicates
+      // ✅ FIXED: More flexible room matching
       let isForCurrentChat = false;
       
       if (isGroup) {
         isForCurrentChat = msg.roomId === `group_${selectedChat?._id}`;
       } else {
-        isForCurrentChat = msg.roomId === `private_${currentChatRoomId}`;
+        // For private chats, check multiple possible room formats
+        const possibleRoomIds = [
+          `private_${currentChatRoomId}`,
+          `private_${selectedChat?._id}`,
+          `private_${msg.chatRoom}`
+        ];
+        isForCurrentChat = possibleRoomIds.includes(msg.roomId);
       }
       
       if (isForCurrentChat) {
         console.log('✅ Adding message to current chat:', msg._id);
-        messageProcessedRef.current.add(msg._id);
+        processedMessagesRef.current.add(messageKey);
         
         setMessages(prev => {
-          // ✅ FIXED: Check for duplicates by _id
-          const messageExists = prev.some(m => m._id === msg._id);
+          // ✅ FIXED: Check for duplicates by _id and content/timestamp
+          const messageExists = prev.some(m => 
+            m._id === msg._id || 
+            (m.content === msg.content && m.createdAt === msg.createdAt)
+          );
           
           if (messageExists) {
             console.log('🔄 Message already exists in state:', msg._id);
@@ -266,8 +278,18 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           }
           
           console.log('➕ Adding new message to state:', msg._id);
-          return [...prev, { ...msg, displayTimestamp: new Date().toISOString() }];
+          const updatedMessages = [...prev, { 
+            ...msg, 
+            displayTimestamp: new Date().toISOString() 
+          }];
+          
+          // Update last message reference
+          lastMessageRef.current = msg._id;
+          return updatedMessages;
         });
+      } else {
+        console.log('❌ Message not for current chat. Room:', msg.roomId, 'Expected:', 
+          isGroup ? `group_${selectedChat?._id}` : `private_${currentChatRoomId}`);
       }
     };
 
@@ -342,7 +364,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // ✅ FIXED: Send message with proper room ID handling
+  // ✅ FIXED: Send message with OPTIMISTIC UPDATE
   const handleSendMessage = async () => {
     const messageContent = newMessage.trim();
     if (!messageContent || !socket || !isConnected || isSending) return;
@@ -369,6 +391,27 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         chatRoomId: currentChatRoomId
       });
 
+      // ✅ FIXED: Create optimistic message
+      const tempMessageId = `temp_${Date.now()}`;
+      const optimisticMessage = {
+        _id: tempMessageId,
+        content: messageContent,
+        sender: {
+          _id: userId,
+          name: user.name || user.username,
+          profilePicture: user.profilePicture
+        },
+        senderId: userId,
+        createdAt: new Date().toISOString(),
+        type: "text",
+        isOptimistic: true,
+        status: 'sending'
+      };
+
+      // ✅ FIXED: Add optimistic message immediately
+      setMessages(prev => [...prev, optimisticMessage]);
+      setNewMessage("");
+
       // Prepare API data
       const msgData = isGroup
         ? { 
@@ -385,7 +428,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/sendGroupmessages`
         : `${import.meta.env.VITE_API_URL}/chatroom/messages/send`;
 
-      // Send to backend ONLY - NO optimistic updates to prevent duplicates
+      // Send to backend
       const res = await axios.post(endpoint, msgData, {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 10000
@@ -394,15 +437,27 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       const sentMessage = res.data.message;
       console.log('✅ Message saved to DB:', sentMessage._id);
 
-      // Mark this message as processed to prevent duplicates
-      messageProcessedRef.current.add(sentMessage._id);
+      // ✅ FIXED: Replace optimistic message with real one
+      setMessages(prev => {
+        const filtered = prev.filter(msg => msg._id !== tempMessageId);
+        
+        // Check if message already exists (from socket)
+        const exists = filtered.some(msg => msg._id === sentMessage._id);
+        if (!exists) {
+          return [...filtered, { ...sentMessage, status: 'delivered' }];
+        }
+        return filtered;
+      });
 
-      // The backend will emit the message via socket, which will be picked up by our listener
-      setNewMessage("");
+      // Mark this message as processed
+      processedMessagesRef.current.add(`${sentMessage._id}_${sentMessage.createdAt}`);
 
     } catch (err) {
       console.error("❌ Error sending message:", err);
       toast.error("Failed to send message");
+      
+      // ✅ FIXED: Remove optimistic message on error
+      setMessages(prev => prev.filter(msg => !msg.isOptimistic || msg.status !== 'sending'));
     } finally {
       setIsSending(false);
     }
@@ -411,15 +466,15 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   // ✅ FIXED: Enhanced typing indicator display with NAMES
   const getStatusText = () => {
     if (typingUsers.size > 0) {
-      const typingArray = Array.from(typingUsers.entries());
+      const typingArray = Array.from(typingUsers.values());
       console.log('🎯 Currently typing users with names:', typingArray);
       
       if (typingArray.length === 1) {
-        const [userId, userName] = typingArray[0];
-        return `${userName} is typing...`;
+        return `${typingArray[0]} is typing...`;
+      } else if (typingArray.length === 2) {
+        return `${typingArray[0]} and ${typingArray[1]} are typing...`;
       } else {
-        const names = typingArray.map(([_, userName]) => userName).join(', ');
-        return `${names} are typing...`;
+        return `${typingArray[0]} and ${typingArray.length - 1} others are typing...`;
       }
     }
     
@@ -444,12 +499,13 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   };
 
-  // ✅ Enhanced message rendering
+  // ✅ FIXED: Enhanced message rendering with better styling
   const renderMessage = (msg, idx) => {
     const senderId = msg.sender?._id || msg.senderId;
     const isSent = senderId?.toString() === userId?.toString();
     const userColor = getUserColor(senderId);
     const isSystem = msg.type === 'system';
+    const isOptimistic = msg.isOptimistic;
 
     if (isSystem) {
       return (
@@ -476,7 +532,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         }}
         exit={{ opacity: 0, y: -20 }}
         transition={{ duration: 0.3 }}
-        className={`flex ${isSent ? "justify-end" : "justify-start"}`}
+        className={`flex ${isSent ? "justify-end" : "justify-start"} mb-4`}
       >
         <div className={`flex items-end gap-3 max-w-[80%] ${isSent ? "flex-row-reverse" : ""}`}>
           {/* Sender Avatar (only for received messages in groups) */}
@@ -512,12 +568,15 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
               whileHover={{ scale: 1.01 }}
               className={`relative px-4 py-3 rounded-2xl shadow-lg backdrop-blur-sm border ${
                 isSent
-                  ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md border-blue-400/30"
+                  ? `bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md border-blue-400/30 ${isOptimistic ? 'opacity-80' : ''}`
                   : "bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-bl-md border-gray-600/30"
               }`}
             >
               <p className="leading-relaxed text-sm whitespace-pre-wrap break-words">
                 {msg.content}
+                {isOptimistic && (
+                  <span className="ml-2 text-xs opacity-70">🕒</span>
+                )}
               </p>
               
               {/* Message Timestamp */}
@@ -527,7 +586,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                     hour: '2-digit', 
                     minute: '2-digit' 
                   })}
-                  {isSent && (
+                  {isSent && !isOptimistic && (
                     <span className="text-[10px]">✓</span>
                   )}
                 </p>
@@ -633,7 +692,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex justify-start"
+            className="flex justify-start mb-4"
           >
             <div className="flex items-center gap-3 max-w-[80%]">
               {isGroup && (
@@ -643,7 +702,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                   </AvatarFallback>
                 </Avatar>
               )}
-              <div className="px-4 py-3 rounded-2xl bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-bl-md border border-gray-600/30">
+              <div className="px-4 py-3 rounded-2xl bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-bl-md border border-gray-600/30 shadow-lg">
                 <div className="flex items-center gap-3">
                   <div className="flex space-x-1">
                     <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
