@@ -1,6 +1,7 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
-import {getAllGroups,requestToJoinGroup,getMyPendingRequests,sendJoinRequest,getMyJoinRequests, getGroupMembers,getMyGroups,getMessages, sendMessage,getGroupMessages,createGroupChat,sendGroupMessage, addParticipant,
+import {getAllGroups,requestToJoinGroup,getMyPendingRequests,sendJoinRequest,getMyJoinRequests, getGroupMembers,getMyGroups,sendMessage,
+  getMessages,createGroupChat, addParticipant,
   removeParticipant,
   getPendingRequests,
   approveRequest,
@@ -8,14 +9,14 @@ import {getAllGroups,requestToJoinGroup,getMyPendingRequests,sendJoinRequest,get
 const router = express.Router();
 
 // GET messages with a friend
-router.get("/messages/:friendId", protect, getMessages);
+
 router.get("/mygroups", protect, getMyGroups);
 // POST send a message
 router.post("/messages/send", protect, sendMessage);
 router.get("/:id/members", protect,getGroupMembers );
 // Group routes
-router.get("/:roomId/getGroupmessages", protect, getGroupMessages);
-router.post("/:roomId/sendGroupmessages", protect, sendGroupMessage);
+
+
 router.get("/getallgroups", protect, getAllGroups);
 router.post("/groups/create", protect, createGroupChat);
 router.post("/groups/:groupId/remove", protect, removeParticipant);
@@ -28,15 +29,30 @@ router.get("/my-join-requests", protect, getMyPendingRequests);
 // Request join
 
 
-router.post("/:groupId/invite", addParticipant);
-router.post("/:groupId/remove-member", removeParticipant);
-router.get("/:groupId/pending-requests", getPendingRequests);
-router.post("/:groupId/join-request/approve", approveRequest);
-router.post("/:groupId/join-request/reject", rejectRequest);
+router.post("/:groupId/invite",protect, addParticipant);
+router.post("/:groupId/remove-member",protect, removeParticipant);
+router.get("/:groupId/pending-requests",protect, getPendingRequests);
+router.post("/:groupId/join-request/approve", protect,approveRequest);
+router.post("/:groupId/join-request/reject", protect,rejectRequest);
 
 
 // GET /chatroom/my-join-requests
 router.get("/my-join-requests", protect, getMyJoinRequests);
 
+
+
+
+
+
+
+
+// Messages
+router.post('/messages/send', sendMessage);
+router.get('/messages/:chatId', getMessages);
+
+// Groups
+router.get('/groups/my', getMyGroups);
+router.post('/groups/create', createGroup);
+router.get('/groups/:id/members', getGroupMembers);
 
 export default router;
