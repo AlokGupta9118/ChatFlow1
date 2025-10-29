@@ -7,11 +7,6 @@ import GroupJoinRequest from "../models/GroupJoinRequest.js";
 
 
 
-// controllers/chatController.js - UPDATED
-import ChatRoom from "../models/ChatRoom.js";
-import Message from "../models/Message.js";
-import User from "../models/User.js";
-
 // ✅ IMPROVED: Send message with immediate DB storage and real-time delivery
 export const sendMessage = async (req, res) => {
   try {
