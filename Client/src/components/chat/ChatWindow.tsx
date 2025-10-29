@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import axios from "axios";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import GroupChatAdminPanel from "@/components/chat/GroupChatAdminPanel";
 import { toast } from "sonner";
 
-const socket = io(import.meta.env.VITE_API_URL);
+// ✅ Create socket instance with better configuration
+const createSocket = () => {
+  return io(import.meta.env.VITE_API_URL, {
+    transports: ['websocket', 'polling'],
+    upgrade: true,
+    forceNew: true,
+    timeout: 10000,
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+  });
+};
 
 // Color system for user avatars and names
 const userColors = [
@@ -41,16 +52,149 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
   const [groupMembers, setGroupMembers] = useState([]);
   const [showMenu, setShowMenu] = useState(false);
   const [pendingRequests, setPendingRequests] = useState([]);
-  const [friendStatus, setFriendStatus] = useState('offline'); // ✅ Track friend status
-  const [friendLastSeen, setFriendLastSeen] = useState(null); // ✅ Track last seen
+  const [friendStatus, setFriendStatus] = useState('offline');
+  const [friendLastSeen, setFriendLastSeen] = useState(null);
+  const [socket, setSocket] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
+  
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const menuRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   const user = currentUser || JSON.parse(localStorage.getItem("user")) || {};
   const userId = user?._id;
 
-  // ✅ Fetch friend status for private chats
+  // ✅ Initialize Socket.IO connection
+  useEffect(() => {
+    const newSocket = createSocket();
+    setSocket(newSocket);
+
+    newSocket.on('connect', () => {
+      console.log('✅ Socket.IO connected:', newSocket.id);
+      setIsConnected(true);
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('❌ Socket.IO disconnected');
+      setIsConnected(false);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('❌ Socket.IO connection error:', error);
+      setIsConnected(false);
+    });
+
+    return () => {
+      console.log('🧹 Cleaning up socket connection');
+      newSocket.disconnect();
+      newSocket.removeAllListeners();
+    };
+  }, []);
+
+  // ✅ Join user room when socket is connected and userId is available
+  useEffect(() => {
+    if (socket && isConnected && userId) {
+      console.log('👤 Joining user room:', userId);
+      socket.emit('join_user', userId);
+    }
+  }, [socket, isConnected, userId]);
+
+  // ✅ Join chat room when selectedChat changes
+  useEffect(() => {
+    if (!socket || !isConnected || !selectedChat?._id) return;
+
+    const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
+    console.log('🚪 Joining chat room:', roomId);
+    
+    socket.emit('join_chat', roomId);
+
+    return () => {
+      console.log('🚪 Leaving chat room:', roomId);
+      socket.emit('leave_chat', roomId);
+    };
+  }, [socket, isConnected, selectedChat?._id, isGroup]);
+
+  // ✅ Set up real-time message listeners
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    console.log('👂 Setting up message listeners');
+
+    // Handle incoming messages
+    const handleReceiveMessage = (msg) => {
+      console.log('📨 Received message:', msg);
+      
+      setMessages(prev => {
+        // Check if message already exists to prevent duplicates
+        const messageExists = prev.some(m => m._id === msg._id);
+        if (messageExists) return prev;
+        
+        return [...prev, msg];
+      });
+    };
+
+    // Handle typing indicators
+    const handleTypingStart = (data) => {
+      if (data.chatId === selectedChat?._id && data.userId !== userId) {
+        setIsTyping(true);
+      }
+    };
+
+    const handleTypingStop = (data) => {
+      if (data.chatId === selectedChat?._id && data.userId !== userId) {
+        setIsTyping(false);
+      }
+    };
+
+    // Listen for events
+    socket.on('receive_message', handleReceiveMessage);
+    socket.on('typing_start', handleTypingStart);
+    socket.on('typing_stop', handleTypingStop);
+    socket.on('message_sent', handleReceiveMessage); // Alternative event name
+
+    // Clean up listeners
+    return () => {
+      console.log('🧹 Cleaning up message listeners');
+      socket.off('receive_message', handleReceiveMessage);
+      socket.off('typing_start', handleTypingStart);
+      socket.off('typing_stop', handleTypingStop);
+      socket.off('message_sent', handleReceiveMessage);
+    };
+  }, [socket, isConnected, selectedChat?._id, userId]);
+
+  // ✅ Fetch messages when selected chat changes
+  const fetchMessages = useCallback(async () => {
+    if (!selectedChat?._id) return;
+
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      console.log('📋 Fetching messages for chat:', selectedChat._id);
+      
+      const endpoint = isGroup
+        ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/getGroupmessages`
+        : `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}`;
+
+      const res = await axios.get(endpoint, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      console.log('✅ Messages fetched:', res.data.messages?.length);
+      setMessages(res.data.messages || []);
+    } catch (err) {
+      console.error("❌ Error fetching messages:", err);
+      setMessages([]);
+    }
+  }, [selectedChat?._id, isGroup]);
+
+  // ✅ Initial messages load
+  useEffect(() => {
+    fetchMessages();
+  }, [fetchMessages]);
+
+  // ✅ Friend status functions
   const fetchFriendStatus = async () => {
     if (!selectedChat?._id || isGroup) return;
     
@@ -76,10 +220,9 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
   // ✅ Listen for real-time status changes
   useEffect(() => {
-    if (!selectedChat) return;
+    if (!selectedChat || !socket) return;
 
     if (!isGroup) {
-      // For private chats, fetch initial status and listen for changes
       fetchFriendStatus();
       
       socket.on("user-status-change", ({ userId, status, lastSeen }) => {
@@ -89,7 +232,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         }
       });
     } else {
-      // For group chats, listen for member status changes
       socket.on("user-status-change", ({ userId, status, lastSeen }) => {
         setGroupMembers(prev => 
           prev.map(member => {
@@ -113,7 +255,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     return () => {
       socket.off("user-status-change");
     };
-  }, [selectedChat?._id, isGroup]);
+  }, [socket, selectedChat?._id, isGroup]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -146,7 +288,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
 
       const members = res.data.members || [];
       
-      // ✅ Fetch statuses for all group members
       const memberIds = members.map(m => m.user?._id || m.user).filter(id => id);
       if (memberIds.length > 0) {
         const statusRes = await axios.post(
@@ -157,7 +298,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         
         const statuses = statusRes.data.statuses || {};
         
-        // Merge status data with members
         const membersWithStatus = members.map(member => ({
           ...member,
           user: {
@@ -172,7 +312,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         setGroupMembers(members);
       }
 
-      // Find current user role
       let currentUserMember = members.find(m => {
         if (m.user && typeof m.user === 'object' && m.user._id) {
           return String(m.user._id) === String(userId);
@@ -284,58 +423,37 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     }
   }, [selectedChat?._id, isGroup, userId]);
 
-  useEffect(() => {
-    if (!selectedChat?._id) return;
-
-    const fetchMessages = async () => {
-      const token = getToken();
-      if (!token) return;
-
-      try {
-        const endpoint = isGroup
-          ? `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/getGroupmessages`
-          : `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}`;
-
-        const res = await axios.get(endpoint, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        setMessages(res.data.messages || []);
-      } catch (err) {
-        console.error("Error fetching messages:", err);
-        setMessages([]);
-      }
-    };
-
-    fetchMessages();
-
-    socket.off("receive_message");
-    socket.on("receive_message", (msg) => {
-      if (isGroup) {
-        if (msg.chatRoom?._id === selectedChat._id) setMessages((prev) => [...prev, msg]);
-      } else {
-        const senderId = msg.sender?._id || msg.senderId;
-        if (senderId === selectedChat._id || senderId === userId) setMessages((prev) => [...prev, msg]);
-      }
-    });
-
-    socket.on("typing_start", () => setIsTyping(true));
-    socket.on("typing_stop", () => setIsTyping(false));
-  }, [selectedChat?._id, isGroup, userId]);
-
-  useEffect(() => {
-    if (userId) socket.emit("join", userId);
-  }, [userId]);
-
   useEffect(scrollToBottom, [messages]);
 
-  const handleTyping = () => {
-    socket.emit("typing_start", selectedChat._id);
-    setTimeout(() => socket.emit("typing_stop", selectedChat._id), 1000);
-  };
+  // ✅ Improved typing handler with debouncing
+  const handleTyping = useCallback(() => {
+    if (!socket || !isConnected || !selectedChat?._id) return;
 
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Emit typing start
+    socket.emit("typing_start", {
+      chatId: selectedChat._id,
+      userId: userId,
+      isGroup: isGroup
+    });
+
+    // Set timeout to stop typing
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("typing_stop", {
+        chatId: selectedChat._id,
+        userId: userId,
+        isGroup: isGroup
+      });
+    }, 1000);
+  }, [socket, isConnected, selectedChat?._id, userId, isGroup]);
+
+  // ✅ Improved send message function
   const handleSendMessage = async () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !socket || !isConnected) return;
 
     const token = getToken();
     if (!token) return;
@@ -354,12 +472,33 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
       });
 
       const sentMessage = res.data.message;
-      setMessages((prev) => [...prev, sentMessage]);
+      console.log('📤 Message sent:', sentMessage);
+
+      // ✅ Optimistically update UI immediately
+      setMessages(prev => [...prev, sentMessage]);
       setNewMessage("");
-      socket.emit("send_message", sentMessage);
-      socket.emit("typing_stop", selectedChat._id);
+
+      // ✅ Emit socket event for real-time delivery
+      const roomId = isGroup ? `group_${selectedChat._id}` : `private_${selectedChat._id}`;
+      socket.emit("send_message", {
+        ...sentMessage,
+        roomId: roomId
+      });
+
+      // Stop typing
+      socket.emit("typing_stop", {
+        chatId: selectedChat._id,
+        userId: userId,
+        isGroup: isGroup
+      });
+
+      // Clear typing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
     } catch (err) {
-      console.error("Error sending message:", err);
+      console.error("❌ Error sending message:", err);
       if (err.response?.status !== 403) {
         toast.error("Failed to send message");
       }
@@ -386,6 +525,16 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     return lastSeenDate.toLocaleDateString();
   };
 
+  // ✅ Connection status indicator (optional, for debugging)
+  const ConnectionStatus = () => (
+    <div className={`absolute top-2 right-2 flex items-center gap-2 px-2 py-1 rounded-full text-xs ${
+      isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+    }`}>
+      <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+      {isConnected ? 'Connected' : 'Disconnected'}
+    </div>
+  );
+
   if (!selectedChat)
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-gray-900 dark:to-gray-800">
@@ -406,9 +555,13 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
     );
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm">
+    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm relative">
+      {/* Connection Status Indicator */}
+      <ConnectionStatus />
+
       {/* Header - Fixed height */}
       <div className="h-20 flex-shrink-0 flex items-center justify-between px-6 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-xl border-b border-purple-500/30 shadow-lg z-10">
+        {/* ... (rest of your JSX remains the same) */}
         <div className="flex items-center gap-4">
           <div className="relative group">
             <Avatar 
@@ -420,7 +573,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                 {selectedChat.name?.[0]?.toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            {/* ✅ Dynamic status indicator */}
             <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
               isGroup ? 'bg-indigo-500' : getStatusColor(friendStatus)
             }`}></div>
@@ -456,7 +608,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                   )}
                 </div>
               ) : (
-                // ✅ Show actual friend status with last seen
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${getStatusColor(friendStatus)}`}></span>
                   <span className="capitalize">
@@ -476,7 +627,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
         {/* Header Actions */}
         <div className="flex items-center gap-2">
           {!isGroup ? (
-            // Private Chat - Show User Profile Icon
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -487,10 +637,8 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
               <User className="w-5 h-5 text-white" />
             </motion.button>
           ) : (
-            // Group Chat - Different icons based on user role
             <div className="relative" ref={menuRef}>
               {isUserAdmin() ? (
-                // ADMIN/OWNER: Show Settings icon with dropdown menu
                 <>
                   <motion.button
                     whileHover={{ scale: 1.05 }}
@@ -502,7 +650,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                     <Settings className="w-5 h-5 text-white" />
                   </motion.button>
                   
-                  {/* Admin Dropdown Menu */}
                   <AnimatePresence>
                     {showMenu && (
                       <motion.div
@@ -511,7 +658,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                         exit={{ opacity: 0, scale: 0.95, y: -10 }}
                         className="absolute right-0 top-full mt-2 w-56 bg-gray-800/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-purple-500/30 py-2 z-50"
                       >
-                        {/* Group Info */}
                         <button
                           onClick={() => {
                             setShowAdminPanel(true);
@@ -523,12 +669,10 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                           Group Info & Members
                         </button>
                         
-                        {/* Admin Actions Section */}
                         <div className="px-3 py-2 text-xs font-semibold text-purple-300 uppercase tracking-wide border-b border-purple-500/20">
                           Admin Actions
                         </div>
                         
-                        {/* Manage Members */}
                         <button
                           onClick={() => {
                             setShowAdminPanel(true);
@@ -540,7 +684,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                           Manage Members
                         </button>
                         
-                        {/* Pending Requests */}
                         {pendingRequests.length > 0 && (
                           <button
                             onClick={() => {
@@ -557,7 +700,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                           </button>
                         )}
                         
-                        {/* User Role Badge */}
                         <div className="border-t border-purple-500/20 mt-2 pt-2 px-4">
                           <div className="text-xs text-purple-300 flex items-center justify-between">
                             <span>Your role:</span>
@@ -572,7 +714,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                   </AnimatePresence>
                 </>
               ) : (
-                // REGULAR MEMBER: Show simple Group Info icon
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -608,7 +749,6 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                 className={`flex ${isSent ? "justify-end" : "justify-start"}`}
               >
                 <div className={`flex items-end gap-3 max-w-[80%] ${isSent ? "flex-row-reverse" : ""}`}>
-                  {/* Avatar for received messages */}
                   {!isSent && isGroup && (
                     <div className="relative group flex-shrink-0">
                       <Avatar 
@@ -622,9 +762,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
                     </div>
                   )}
                   
-                  {/* Message Bubble */}
                   <div className="flex flex-col space-y-1">
-                    {/* Sender name for group chats */}
                     {isGroup && !isSent && (
                       <div className="flex items-center space-x-2 mb-1 px-1">
                         <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${userColor}`}></div>
@@ -726,7 +864,7 @@ const ChatWindow = ({ selectedChat, isGroup = false, currentUser, onToggleGroupI
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={handleSendMessage}
-          disabled={!newMessage.trim()}
+          disabled={!newMessage.trim() || !isConnected}
           className="p-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg shadow-purple-500/25 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border-2 border-purple-400/30"
         >
           <Send className="w-5 h-5" />

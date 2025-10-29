@@ -1,5 +1,6 @@
+
 // socket/gameSocket.js
-import UserModel from "../models/User";
+import User from "../models/User";
 
 export default function gameSocket(io) {
   const rooms = {}; // { roomId: { roomId, players: [], status, currentPlayer, currentPrompt, currentChoice, answers: {}, proofs: {}, scores: {}, playerStats: {}, roundNumber: 1 } }
@@ -19,12 +20,14 @@ export default function gameSocket(io) {
       playerLevels: room.playerLevels,
       playerStreaks: room.playerStreaks,
       roundNumber: room.roundNumber,
-      proofs: room.proofs
+      proofs: room.proofs,
+      gameType: room.gameType,
+      status: room.status,
+      gameStarted: room.gameStarted
     };
 
     io.to(room.roomId).emit("game-state-sync", gameState);
   }
-
 
   // ✅ Helper function to get random scenario - NEW
   function getRandomScenario(room) {
@@ -111,7 +114,14 @@ export default function gameSocket(io) {
 
     const updateRoomPlayers = (roomId) => {
       const room = rooms[roomId];
-      if (room) io.to(roomId).emit("update-players", room.players);
+      if (room) {
+        // Emit appropriate update based on game type
+        if (room.gameType === "most-likely") {
+          io.to(roomId).emit("mostlikely-update-players", room.players);
+        } else {
+          io.to(roomId).emit("update-players", room.players);
+        }
+      }
     };
 
     // 🔥 NEW: Send chat history to joining player
@@ -119,6 +129,8 @@ export default function gameSocket(io) {
       const messages = chatMessages.get(roomId) || [];
       socket.emit("chat-history", messages);
     };
+
+    // ✅ FIXED: User online status
     socket.on("user-online", async (userId) => {
       if (!userId) return;
       try {
@@ -129,7 +141,18 @@ export default function gameSocket(io) {
       }
     });
 
-    // 🔥 NEW: Chat message handler
+    // ✅ FIXED: User logout handler
+    socket.on("user-logout", async (userId) => {
+      if (!userId) return;
+      try {
+        await User.findByIdAndUpdate(userId, { status: "offline", lastSeen: new Date() });
+        console.log(`👋 ${userId} logged out`);
+      } catch (err) {
+        console.error("Error setting user offline on logout:", err.message);
+      }
+    });
+
+    // 🔥 NEW: Chat message handler - ENHANCED
     socket.on("send-chat-message", ({ roomId, message }) => {
       try {
         if (!chatMessages.has(roomId)) {
@@ -138,11 +161,12 @@ export default function gameSocket(io) {
 
         const roomChat = chatMessages.get(roomId);
         const chatMessage = {
-          id: Date.now(),
+          id: Date.now() + Math.random(),
           sender: message.sender,
           content: message.content,
           timestamp: new Date().toISOString(),
-          type: "text"
+          type: message.type || "text",
+          senderId: socket.id
         };
         
         roomChat.push(chatMessage);
@@ -157,10 +181,11 @@ export default function gameSocket(io) {
         console.log(`💬 ${message.sender} sent message in ${roomId}: ${message.content}`);
       } catch (error) {
         console.error('Error sending chat message:', error);
+        socket.emit("chat-error", "Failed to send message");
       }
     });
 
-    // 🔥 NEW: Typing indicators
+    // 🔥 NEW: Typing indicators - ENHANCED
     socket.on("typing", ({ roomId, isTyping }) => {
       const room = rooms[roomId];
       if (!room) return;
@@ -169,23 +194,22 @@ export default function gameSocket(io) {
       if (player) {
         socket.to(roomId).emit("user-typing", { 
           userName: player.name, 
-          isTyping 
+          isTyping,
+          userId: socket.id
         });
       }
     });
 
-    // ✅ FIXED: New socket event to start spinner for all players
+    // ✅ FIXED: Start spinner for all players
     socket.on("start-spinner", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
 
       console.log(`🎡 Starting spinner broadcast in room ${roomId}`);
-      
-      // Broadcast spinner start to ALL players in the room
       io.to(roomId).emit("spinner-started");
     });
 
-    // ✅ FIXED: New socket events for next round synchronization
+    // ✅ FIXED: Next round synchronization
     socket.on("next-round-starting", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -202,10 +226,36 @@ export default function gameSocket(io) {
       io.to(roomId).emit("next-round-started");
     });
 
-    // ✅ NEW: Game state synchronization for rejoining players
+    // ✅ NEW: Request current room state
+    socket.on("request-room-state", ({ roomId }) => {
+      const room = rooms[roomId];
+      if (!room) {
+        socket.emit("room-not-found");
+        return;
+      }
+
+      const roomState = {
+        roomId: room.roomId,
+        players: room.players,
+        status: room.status,
+        gameType: room.gameType,
+        gameStarted: room.gameStarted,
+        currentPlayer: room.currentPlayer,
+        currentPrompt: room.currentPrompt,
+        scores: room.scores,
+        playerStats: room.playerStats
+      };
+
+      socket.emit("room-state", roomState);
+    });
+
+    // ✅ NEW: Game state synchronization for rejoining players - ENHANCED
     socket.on("request-game-state", ({ roomId }) => {
       const room = rooms[roomId];
-      if (!room) return;
+      if (!room) {
+        socket.emit("game-state-error", "Room not found");
+        return;
+      }
 
       const gameState = {
         currentPlayer: room.currentPlayer,
@@ -218,14 +268,28 @@ export default function gameSocket(io) {
         playerStreaks: room.playerStreaks,
         roundNumber: room.roundNumber,
         proofs: room.proofs,
-        gameType: room.gameType
+        gameType: room.gameType,
+        status: room.status,
+        gameStarted: room.gameStarted
       };
+
+      // Add game-specific state
+      if (room.gameType === "compatibility") {
+        gameState.playerProgress = room.playerProgress;
+        gameState.currentQuestion = room.currentQuestion;
+        gameState.answers = room.answers;
+      } else if (room.gameType === "most-likely") {
+        gameState.currentScenario = room.currentScenario;
+        gameState.currentRound = room.currentRound;
+        gameState.totalRounds = room.totalRounds;
+        gameState.votes = room.votes;
+      }
 
       socket.emit("game-state-sync", gameState);
       console.log(`🔄 Sent game state sync to ${socket.id} for room ${roomId}`);
     });
 
-    // ✅ NEW: Choose option/prompt handler
+    // ✅ NEW: Choose option/prompt handler - ENHANCED
     socket.on("choose-option", ({ roomId, choice, type }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -234,6 +298,8 @@ export default function gameSocket(io) {
       if (!player || player.name !== room.currentPlayer?.name) return;
 
       console.log(`✅ ${player.name} chose option: ${choice} (${type}) in ${roomId}`);
+      
+      room.currentChoice = type;
       
       // Update player stats based on prompt type completion
       if (room.playerStats[player.name]) {
@@ -402,14 +468,15 @@ export default function gameSocket(io) {
         playerLevels: room.playerLevels,
         playerStreaks: room.playerStreaks,
         roundNumber: room.roundNumber,
-        gameType: room.gameType
+        gameType: room.gameType,
+        status: room.status,
+        gameStarted: room.gameStarted
       };
       
       // Add compatibility-specific state
       if (room.gameType === "compatibility") {
         gameState.playerProgress = room.playerProgress;
         gameState.currentQuestion = room.currentQuestion;
-        gameState.gameStarted = room.gameStarted;
       }
       
       socket.emit("game-state-update", gameState);
@@ -438,15 +505,22 @@ export default function gameSocket(io) {
           playerStreaks: room.playerStreaks,
           roundNumber: room.roundNumber,
           proofs: room.proofs,
-          gameType: room.gameType
+          gameType: room.gameType,
+          status: room.status,
+          gameStarted: room.gameStarted,
+          currentPlayer: room.currentPlayer,
+          currentPrompt: room.currentPrompt
         };
         
         // Add compatibility-specific state
         if (room.gameType === "compatibility") {
           gameState.playerProgress = room.playerProgress;
           gameState.currentQuestion = room.currentQuestion;
-          gameState.gameStarted = room.gameStarted;
           gameState.answers = room.answers;
+        } else if (room.gameType === "most-likely") {
+          gameState.currentScenario = room.currentScenario;
+          gameState.currentRound = room.currentRound;
+          gameState.votes = room.votes;
         }
         
         socket.emit("game-state-update", gameState);
@@ -553,7 +627,8 @@ export default function gameSocket(io) {
       if (player) {
         io.to(roomId).emit("player-reaction", {
           player: player.name,
-          reaction
+          reaction,
+          playerId: socket.id
         });
         console.log(`😊 ${player.name} reacted with ${reaction}`);
       }
@@ -872,13 +947,19 @@ export default function gameSocket(io) {
         } else if (room.gameType === "compatibility") {
           delete room.playerProgress[playerName];
           delete room.answers[playerName];
+        } else if (room.gameType === "most-likely") {
+          delete room.scores[playerName];
+          delete room.playerStats[playerName];
+          delete room.votes[playerName];
         }
         
         io.to(roomId).emit("player-kicked", { playerName, kickedBy });
-        io.to(roomId).emit("update-players", room.players);
+        updateRoomPlayers(roomId);
         
         if (room.gameType === "truth-or-dare") {
           io.to(roomId).emit("scores-update", room.scores);
+        } else if (room.gameType === "most-likely") {
+          io.to(roomId).emit("mostlikely-scores-update", room.scores);
         }
         
         console.log(`👢 ${playerName} kicked from ${roomId} by ${kickedBy}`);
@@ -904,6 +985,10 @@ export default function gameSocket(io) {
         } else if (room.gameType === "compatibility") {
           delete room.playerProgress[leavingPlayer.name];
           delete room.answers[leavingPlayer.name];
+        } else if (room.gameType === "most-likely") {
+          delete room.scores[leavingPlayer.name];
+          delete room.playerStats[leavingPlayer.name];
+          delete room.votes[leavingPlayer.name];
         }
         
         if (leavingPlayer.isHost && room.players.length > 0) {
@@ -921,6 +1006,8 @@ export default function gameSocket(io) {
         updateRoomPlayers(roomId);
         if (room.gameType === "truth-or-dare") {
           io.to(roomId).emit("scores-update", room.scores);
+        } else if (room.gameType === "most-likely") {
+          io.to(roomId).emit("mostlikely-scores-update", room.scores);
         }
       }
     });
@@ -1129,24 +1216,40 @@ export default function gameSocket(io) {
       }
     });
 
-    socket.on("user-logout", async (userId) => {
-      if (!userId) return;
-      try {
-        await User.findByIdAndUpdate(userId, { status: "offline", lastSeen: new Date() });
-        console.log(`👋 ${userId} logged out`);
-      } catch (err) {
-        console.error("Error setting user offline on logout:", err.message);
-      }
-    });
-  });
+    // ✅ NEW: End game early
+    socket.on("end-game", ({ roomId }) => {
+      const room = rooms[roomId];
+      if (!room) return;
 
-    // ✅ Disconnect cleanup - ENHANCED with chat cleanup
+      const host = room.players.find(p => p.isHost);
+      if (!host || host.socketId !== socket.id) {
+        socket.emit("error", "Only host can end the game");
+        return;
+      }
+
+      room.status = "finished";
+      room.gameStarted = false;
+
+      io.to(roomId).emit("game-ended", {
+        finalScores: room.scores,
+        playerStats: room.playerStats
+      });
+
+      console.log(`🛑 Game ended in ${roomId} by host`);
+    });
+
+    // ✅ NEW: Ping/pong for connection health
+    socket.on("ping", () => {
+      socket.emit("pong", { timestamp: Date.now() });
+    });
+
+    // ✅ FIXED: Disconnect cleanup - MOVED INSIDE connection handler
     socket.on("disconnect", async () => {
+      console.log("❌ Game socket disconnected:", socket.id);
+      
       for (const roomId in rooms) {
         const room = rooms[roomId];
         const disconnectedPlayer = room.players.find(p => p.socketId === socket.id);
-      
-      
         
         if (disconnectedPlayer) {
           room.players = room.players.filter((p) => p.socketId !== socket.id);
@@ -1174,30 +1277,31 @@ export default function gameSocket(io) {
           
           if (room.players.length === 0) {
             delete rooms[roomId];
-            // 🔥 NEW: Clean up chat messages when room is empty
+            // Clean up chat messages when room is empty
             chatMessages.delete(roomId);
           } else {
             updateRoomPlayers(roomId);
             if (room.gameType === "truth-or-dare") {
               io.to(roomId).emit("scores-update", room.scores);
             } else if (room.gameType === "most-likely") {
-              io.to(roomId).emit("mostlikely-update-players", room.players);
+              io.to(roomId).emit("mostlikely-scores-update", room.scores);
             }
           }
         }
       }
 
-      if (socket.userId) {
       // Update user status to offline
-      User.update({ status: 'offline' }, { where: { id: socket.userId } });
-      
-      // Broadcast to others that user is offline
-      socket.broadcast.emit('user_status_change', {
-        userId: socket.userId,
-        status: 'offline'
-      });
-    }
-      console.log("❌ Disconnected:", socket.id);
-      
+      if (socket.userId) {
+        try {
+          await User.findByIdAndUpdate(socket.userId, { 
+            status: "offline", 
+            lastSeen: new Date() 
+          });
+          console.log(`👋 User ${socket.userId} set to offline`);
+        } catch (err) {
+          console.error("Error setting user offline:", err.message);
+        }
+      }
     });
-  };
+  });
+}
