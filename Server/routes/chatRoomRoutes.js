@@ -14,7 +14,6 @@ router.get("/mygroups", protect, getMyGroups);
 // POST send a message
 router.post("/messages/send", protect, sendMessage);
 router.get("/:id/members", protect,getGroupMembers );
-// Group routes
 
 
 router.get("/getallgroups", protect, getAllGroups);
@@ -52,7 +51,7 @@ router.get('/messages/:chatId', getMessages);
 
 // Groups
 router.get('/groups/my', getMyGroups);
-router.post('/groups/create', createGroup);
+router.post('/groups/create', createGroupChat);
 router.get('/groups/:id/members', getGroupMembers);
 
 export default router;
