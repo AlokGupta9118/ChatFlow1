@@ -1,6 +1,6 @@
 // Server/socket/messageSocket.js
-import ChatRoom from "../../models/ChatRoom.js";
-import Message from "../../models/Message.js";
+import Message from "../models/Message.js";
+import ChatRoom from "../models/ChatRoom.js";
 
 export const setupChatSockets = (io) => {
   io.on('connection', (socket) => {
@@ -12,6 +12,7 @@ export const setupChatSockets = (io) => {
     socket.on('join_user', (userId) => {
       if (userId) {
         socket.userId = userId;
+        
         const userRoom = `user_${userId}`;
         
         // Leave previous user room
