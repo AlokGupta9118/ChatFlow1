@@ -11,21 +11,21 @@ import {
   bulkUpdateStatuses,
   autoSetOfflineForInactive
 } from "../controllers/statusController.js";
-import { Protect } from "../middleware/authMiddleware.js";
+import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 // Protected routes
-router.put("/status", Protect, updateUserStatus);
-router.get("/status/me", Protect, getMyStatus);
-router.post("/statuses", Protect, getUsersStatuses);
-router.get("/friends/online", Protect, getOnlineFriends);
-router.put("/status/away", Protect, setUserAway);
-router.put("/status/busy", Protect, setUserBusy);
-router.get("/status/:userId", Protect, getUserStatus);
+router.put("/status", protect, updateUserStatus);
+router.get("/status/me", protect, getMyStatus);
+router.post("/statuses", protect, getUsersStatuses);
+router.get("/friends/online", protect, getOnlineFriends);
+router.put("/status/away", protect, setUserAway);
+router.put("/status/busy", protect, setUserBusy);
+router.get("/status/:userId", protect, getUserStatus);
 
 // Admin routes
-router.post("/status/bulk-update", Protect, bulkUpdateStatuses);
-router.post("/status/auto-offline", Protect, autoSetOfflineForInactive);
+router.post("/status/bulk-update", protect, bulkUpdateStatuses);
+router.post("/status/auto-offline", protect, autoSetOfflineForInactive);
 
 export default router;
