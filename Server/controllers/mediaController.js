@@ -5,22 +5,43 @@ import { uploadToCloudinary } from "../utils/Cloudinary.js";
 
 export const uploadMedia = async (req, res) => {
   try {
-    const { chatRoomId, type } = req.body;
+    const { chatRoomId, type = "file" } = req.body;
     const userId = req.user.id;
     const file = req.file;
 
-    if (!file || !chatRoomId) {
+    console.log("📤 Media upload request:", { 
+      userId, 
+      chatRoomId, 
+      type, 
+      fileName: file?.originalname 
+    });
+
+    // Validate required fields
+    if (!file) {
       return res.status(400).json({
         success: false,
-        message: "File and chat room ID are required"
+        message: "No file provided"
+      });
+    }
+
+    if (!chatRoomId) {
+      return res.status(400).json({
+        success: false,
+        message: "Chat room ID is required"
       });
     }
 
     // Verify user has access to this chat room
     const chatRoom = await ChatRoom.findOne({
       _id: chatRoomId,
-      "participants.user": userId,
-      isActive: true
+      "participants.user": userId
+    
+    }).populate("participants.user", "name profilePicture status");
+
+    console.log("🔍 Chat room check:", { 
+      chatRoomId, 
+      userId, 
+      chatRoomExists: !!chatRoom 
     });
 
     if (!chatRoom) {
@@ -30,7 +51,15 @@ export const uploadMedia = async (req, res) => {
       });
     }
 
-    // Upload to Cloudinary or your preferred storage
+    // Check if user is blocked in this chat
+    if (chatRoom.blockedUsers && chatRoom.blockedUsers.includes(userId)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are blocked from sending messages in this chat"
+      });
+    }
+
+    // Upload to Cloudinary
     const uploadResult = await uploadToCloudinary(file, type);
     
     if (!uploadResult.success) {
@@ -55,7 +84,7 @@ export const uploadMedia = async (req, res) => {
 
     await message.save();
 
-    // Populate message
+    // Populate message for response
     const populatedMessage = await Message.findById(message._id)
       .populate("sender", "name profilePicture status")
       .populate({
@@ -88,6 +117,8 @@ export const uploadMedia = async (req, res) => {
           });
         }
       });
+
+      console.log(`✅ Media message emitted to room ${chatRoomId}`);
     }
 
     res.status(201).json({
@@ -99,7 +130,8 @@ export const uploadMedia = async (req, res) => {
     console.error("❌ Error uploading media:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to upload media"
+      message: "Failed to upload media",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
