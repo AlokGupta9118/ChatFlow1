@@ -128,35 +128,48 @@ export const getMessages = async (req, res) => {
   try {
     const { chatRoomId } = req.params;
     const userId = req.user.id;
-    const page = parseInt(req.query.page) || 3;
-    const limit = parseInt(req.query.limit) || 100;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
 
-    // Verify user has access to chat room
+    console.log(`📨 Fetching messages for chat: ${chatRoomId}, user: ${userId}`);
+
+    // Verify user has access to this chat room
     const chatRoom = await ChatRoom.findOne({
       _id: chatRoomId,
       "participants.user": userId,
       isActive: true
-    });
+    }).populate("participants.user", "name profilePicture status");
 
     if (!chatRoom) {
-      return res.status(404).json({
+      return res.status(403).json({
         success: false,
-        message: "Chat room not found"
+        message: "Access denied or chat room not found"
       });
     }
 
+    // Get messages with pagination
     const messages = await Message.find({
       chatRoom: chatRoomId,
       deleted: false
     })
     .populate("sender", "name profilePicture status")
-    .populate("replyTo")
-    .sort({ createdAt: -1 })
+    .populate({
+      path: "replyTo",
+      populate: {
+        path: "sender",
+        select: "name profilePicture"
+      }
+    })
+    .populate("reactions.user", "name profilePicture")
+    .sort({ createdAt: -1 }) // Get latest messages first
     .limit(limit)
     .skip((page - 1) * limit);
 
-    // Mark messages as delivered
-    await Message.updateMany(
+    // Reverse to show oldest first in UI
+    const sortedMessages = messages.reverse();
+
+    // Mark messages as delivered (not read yet)
+    const unreadMessages = await Message.updateMany(
       {
         chatRoom: chatRoomId,
         sender: { $ne: userId },
@@ -164,22 +177,27 @@ export const getMessages = async (req, res) => {
         deleted: false
       },
       {
-        $push: {
-          readBy: {
-            user: userId,
-            readAt: new Date()
-          }
-        }
+        $set: { status: "delivered" }
       }
     );
 
+    console.log(`✅ Found ${sortedMessages.length} messages for chat ${chatRoomId}`);
+
     res.json({
       success: true,
-      messages: messages.reverse(),
-      hasMore: messages.length === limit
+      messages: sortedMessages,
+      hasMore: messages.length === limit,
+      chatRoom: {
+        _id: chatRoom._id,
+        name: chatRoom.name,
+        type: chatRoom.type,
+        participants: chatRoom.participants,
+        settings: chatRoom.settings
+      }
     });
+
   } catch (error) {
-    console.error("Error fetching messages:", error);
+    console.error("❌ Error fetching messages:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch messages"
