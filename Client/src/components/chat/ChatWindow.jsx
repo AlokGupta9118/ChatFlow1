@@ -177,7 +177,7 @@ const ChatWindow = ({
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/chat/messages/${chatId}`,
+        `${import.meta.env.VITE_API_URL}/chatroom/messages/${chatId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
