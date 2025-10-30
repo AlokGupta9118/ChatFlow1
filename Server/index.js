@@ -61,7 +61,6 @@ app.use("/chatroom", chatRoomRoutes);
 app.use("/api/user", settingRoutes);
 app.get("/api/user/profile", protect, getProfile);
 app.use("/api/status", statusRoutes);
-app.use("/api/chat", chatRoutes);
 
 // HTTP server + SINGLE Socket.IO instance
 const server = http.createServer(app);
