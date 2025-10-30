@@ -130,7 +130,7 @@ const ChatWindow = ({
     try {
      
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/chat/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
+        `${import.meta.env.VITE_API_URL}/api/chat/messages/${token}?page=${pageNum}&limit=50`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
