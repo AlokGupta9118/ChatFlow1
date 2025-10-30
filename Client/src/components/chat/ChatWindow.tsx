@@ -28,6 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+
 import { toast } from "sonner";
 import { getToken } from "@/utils/getToken";
 
@@ -53,7 +54,6 @@ const ChatWindow = ({
   const chatContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-
   const isGroup = selectedChat?.type === "group";
    const token = getToken();
   // Socket event handlers
@@ -129,7 +129,7 @@ const ChatWindow = ({
     try {
      
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/chat/messages/${token}?page=${pageNum}&limit=50`,
+        `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
