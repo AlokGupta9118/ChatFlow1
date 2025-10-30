@@ -31,6 +31,11 @@ class SocketService {
         console.log(`📨 User left chat: ${chatRoomId}`);
       });
 
+      // ✅ ADDED: Handle sending messages via socket
+      socket.on("send_message", async (data) => {
+        await this.handleSendMessage(socket, data);
+      });
+
       // Typing indicators
       socket.on("typing_start", (chatRoomId) => {
         socket.to(chatRoomId).emit("user_typing", {
@@ -55,6 +60,75 @@ class SocketService {
         this.handleDisconnect(socket);
       });
     });
+  }
+
+  // ✅ ADDED: Handle sending messages via socket
+  async handleSendMessage(socket, data) {
+    try {
+      const { chatRoomId, content, replyTo, type = "text", mediaUrl, userId } = data;
+      
+      console.log("📨 Socket received send_message:", { chatRoomId, content, userId });
+
+      if (!content?.trim() || !chatRoomId || !userId) {
+        socket.emit("error", { message: "Missing required fields" });
+        return;
+      }
+
+      // Verify user has access to chat room
+      const chatRoom = await ChatRoom.findOne({
+        _id: chatRoomId,
+        "participants.user": userId,
+        isActive: true
+      }).populate("participants.user", "name profilePicture status");
+
+      if (!chatRoom) {
+        socket.emit("error", { message: "Access denied or chat room not found" });
+        return;
+      }
+
+      // Create message
+      const message = new Message({
+        chatRoom: chatRoomId,
+        sender: userId,
+        content: content.trim(),
+        type,
+        mediaUrl,
+        replyTo,
+        status: "sent"
+      });
+
+      await message.save();
+
+      // Populate message
+      await message.populate([
+        { 
+          path: "sender", 
+          select: "name profilePicture status" 
+        },
+        { 
+          path: "replyTo",
+          populate: {
+            path: "sender",
+            select: "name profilePicture"
+          }
+        }
+      ]);
+
+      // Update chat room
+      await ChatRoom.findByIdAndUpdate(chatRoomId, {
+        lastMessage: message._id,
+        updatedAt: new Date()
+      });
+
+      // Emit to all participants in the chat room
+      this.io.to(chatRoomId).emit("new_message", message);
+
+      console.log(`✅ Socket: Message sent to room ${chatRoomId}`);
+
+    } catch (error) {
+      console.error("❌ Error in socket send_message:", error);
+      socket.emit("error", { message: "Failed to send message" });
+    }
   }
 
   async handleUserConnected(socket, userId) {

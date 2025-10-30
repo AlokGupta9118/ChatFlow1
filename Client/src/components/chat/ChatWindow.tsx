@@ -312,26 +312,55 @@ const ChatWindow = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || !userId) return;
+  // components/chat/ChatWindow.jsx - Updated handleSendMessage function
+const handleSendMessage = async () => {
+  if (!newMessage.trim() || !selectedChat || !userId) return;
 
-    const messageData = {
-      chatRoomId: selectedChat._id,
-      content: newMessage,
-      replyTo: replyingTo?._id,
-      userId: userId
-    };
-
-    try {
-      socket.emit("send_message", messageData);
-      setNewMessage("");
-      setReplyingTo(null);
-      socket.emit("typing_stop", selectedChat._id);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast.error("Failed to send message");
-    }
+  const messageData = {
+    chatRoomId: selectedChat._id,
+    content: newMessage,
+    replyTo: replyingTo?._id,
+    userId: userId
   };
+
+  console.log("📤 Sending message via socket:", messageData);
+
+  try {
+    // Method 1: Send via Socket (for real-time)
+    socket.emit("send_message", messageData);
+    
+    // Method 2: Also send via REST API as backup
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/chatroom/message/send`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(messageData)
+        }
+      );
+      
+      if (!response.ok) {
+        console.warn("REST API send failed, but socket might work");
+      }
+    } catch (apiError) {
+      console.warn("REST API error:", apiError);
+      // Continue with socket method
+    }
+    
+    setNewMessage("");
+    setReplyingTo(null);
+    socket.emit("typing_stop", selectedChat._id);
+    
+  } catch (error) {
+    console.error("Error sending message:", error);
+    toast.error("Failed to send message");
+  }
+};
+
 
   const handleTyping = () => {
     if (!selectedChat) return;
