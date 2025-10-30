@@ -238,7 +238,7 @@ const ChatWindow = ({
     try {
       const [messagesRes, membersRes] = await Promise.all([
         fetch(
-          `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
+          `${import.meta.env.VITE_API_URL}/${token}/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,
