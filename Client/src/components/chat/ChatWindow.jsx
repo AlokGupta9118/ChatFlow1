@@ -496,57 +496,64 @@ const ChatWindow = ({
 
   // Upload media file
   const uploadMediaFile = async (file) => {
-    if (!selectedChat || !userId) return;
+  if (!selectedChat || !userId) {
+    toast.error("Please select a chat first");
+    return;
+  }
 
-    setUploadingMedia(true);
+  setUploadingMedia(true);
 
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('chatRoomId', selectedChat._id);
-      formData.append('type', file.type.startsWith('image/') ? 'image' : 
-                      file.type.startsWith('video/') ? 'video' : 
-                      file.type.startsWith('audio/') ? 'audio' : 'file');
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('chatRoomId', selectedChat._id); // Make sure this is included
+    formData.append('type', file.type.startsWith('image/') ? 'image' : 
+                    file.type.startsWith('video/') ? 'video' : 'file');
 
-      console.log("📤 Uploading media file:", file.name);
+    console.log("📤 Uploading media file:", { 
+      fileName: file.name, 
+      chatRoomId: selectedChat._id,
+      type: file.type 
+    });
 
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/chatroom/messages/upload`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-          body: formData
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to upload file');
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/chatroom/messages/upload`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          // Don't set Content-Type for FormData - let browser set it
+        },
+        body: formData
       }
+    );
 
-      const result = await response.json();
-      
-      if (result.success) {
-        console.log("✅ Media uploaded successfully");
-        setMediaPreview(null);
-        // The socket will handle the new message with media
-      } else {
-        throw new Error(result.message);
-      }
-      
-    } catch (error) {
-      console.error("❌ Error uploading media:", error);
-      toast.error(error.message || "Failed to upload file");
-    } finally {
-      setUploadingMedia(false);
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to upload file');
     }
-  };
+
+    const result = await response.json();
+    
+    if (result.success) {
+      console.log("✅ Media uploaded successfully");
+      setMediaPreview(null);
+      // The socket will handle the new message with media
+    } else {
+      throw new Error(result.message);
+    }
+    
+  } catch (error) {
+    console.error("❌ Error uploading media:", error);
+    toast.error(error.message || "Failed to upload file");
+  } finally {
+    setUploadingMedia(false);
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+};
 
   // Cancel media preview
   const cancelMediaPreview = () => {
