@@ -529,8 +529,8 @@ export const getMessages = async (req, res) => {
   try {
     const { chatRoomId } = req.params;
     const userId = req.user.id;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
+    const page = parseInt(req.query.page) || 3;
+    const limit = parseInt(req.query.limit) || 100;
 
     // Verify user has access to chat room
     const chatRoom = await ChatRoom.findOne({

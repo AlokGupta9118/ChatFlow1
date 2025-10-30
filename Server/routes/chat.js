@@ -12,18 +12,18 @@ import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.use(protect);
+
 
 // Chat rooms
-router.get("/rooms", getChatRooms);
-router.post("/direct", getOrCreateDirectChat);
-router.post("/group", createGroupChat);
-router.get("/:chatRoomId", getChatRoomDetails);
+router.get("/rooms", protect,getChatRooms);
+router.post("/direct", protect,getOrCreateDirectChat);
+router.post("/group",protect, createGroupChat);
+router.get("/:chatRoomId",protect, getChatRoomDetails);
 
 // Messages
-router.get("/messages/:chatRoomId", getMessages);
-router.post("/messages/send", sendMessage);
-router.delete("/messages/:messageId", deleteMessage);
-router.post("/messages/read", markAsRead);
+router.get("/messages/:chatRoomId", protect,getMessages);
+router.post("/messages/send", protect,sendMessage);
+router.delete("/messages/:messageId",protect, deleteMessage);
+router.post("/messages/read",protect, markAsRead);
 
 export default router;
