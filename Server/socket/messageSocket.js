@@ -22,29 +22,32 @@ class SocketService {
       // Join specific chat room
       socket.on("join_chat", (chatRoomId) => {
         socket.join(chatRoomId);
-        console.log(`📨 User joined chat: ${chatRoomId}`);
+        console.log(`📨 User ${socket.userId} joined chat: ${chatRoomId}`);
       });
 
       // Leave chat room
       socket.on("leave_chat", (chatRoomId) => {
         socket.leave(chatRoomId);
-        console.log(`📨 User left chat: ${chatRoomId}`);
+        console.log(`📨 User ${socket.userId} left chat: ${chatRoomId}`);
       });
 
-      // ✅ ADDED: Handle sending messages via socket
+      // Handle sending messages via socket (for real-time backup)
       socket.on("send_message", async (data) => {
         await this.handleSendMessage(socket, data);
       });
 
       // Typing indicators
       socket.on("typing_start", (chatRoomId) => {
+        console.log(`⌨️ User ${socket.userId} typing in ${chatRoomId}`);
         socket.to(chatRoomId).emit("user_typing", {
           userId: socket.userId,
+          userName: socket.userName, // You need to set this
           chatRoomId
         });
       });
 
       socket.on("typing_stop", (chatRoomId) => {
+        console.log(`💤 User ${socket.userId} stopped typing in ${chatRoomId}`);
         socket.to(chatRoomId).emit("user_stop_typing", {
           userId: socket.userId,
           chatRoomId
@@ -62,12 +65,17 @@ class SocketService {
     });
   }
 
-  // ✅ ADDED: Handle sending messages via socket
+  // Handle sending messages via socket
   async handleSendMessage(socket, data) {
     try {
-      const { chatRoomId, content, replyTo, type = "text", mediaUrl, userId } = data;
+      const { chatRoomId, content, replyTo, type = "text", mediaUrl } = data;
+      const userId = socket.userId; // Get from socket, not from data
       
-      console.log("📨 Socket received send_message:", { chatRoomId, content, userId });
+      console.log("📨 Socket received send_message:", { 
+        chatRoomId, 
+        content: content?.substring(0, 50) + '...', 
+        userId 
+      });
 
       if (!content?.trim() || !chatRoomId || !userId) {
         socket.emit("error", { message: "Missing required fields" });
@@ -99,20 +107,16 @@ class SocketService {
 
       await message.save();
 
-      // Populate message
-      await message.populate([
-        { 
-          path: "sender", 
-          select: "name profilePicture status" 
-        },
-        { 
+      // Populate message for response
+      const populatedMessage = await Message.findById(message._id)
+        .populate("sender", "name profilePicture status")
+        .populate({
           path: "replyTo",
           populate: {
             path: "sender",
             select: "name profilePicture"
           }
-        }
-      ]);
+        });
 
       // Update chat room
       await ChatRoom.findByIdAndUpdate(chatRoomId, {
@@ -121,7 +125,7 @@ class SocketService {
       });
 
       // Emit to all participants in the chat room
-      this.io.to(chatRoomId).emit("new_message", message);
+      this.io.to(chatRoomId).emit("new_message", populatedMessage);
 
       console.log(`✅ Socket: Message sent to room ${chatRoomId}`);
 
@@ -135,8 +139,16 @@ class SocketService {
     try {
       console.log(`👤 User ${userId} connected`);
       
+      // Get user details
+      const user = await User.findById(userId).select("name profilePicture status");
+      if (!user) {
+        console.error(`❌ User ${userId} not found`);
+        return;
+      }
+
       this.connectedUsers.set(userId, socket.id);
       socket.userId = userId;
+      socket.userName = user.name; // Store userName for typing indicators
 
       // Update user status
       await User.findByIdAndUpdate(userId, {
@@ -154,13 +166,21 @@ class SocketService {
 
       chatRooms.forEach(room => {
         socket.join(room._id.toString());
+        console.log(`🔗 User ${userId} auto-joined room: ${room._id}`);
       });
 
-      // Notify friends
-      socket.broadcast.emit("user_online", { userId });
+      // Notify all connected clients about user online status
+      this.io.emit("user_status_changed", {
+        userId: userId,
+        status: "online",
+        isActive: true,
+        lastActive: new Date()
+      });
+
+      console.log(`✅ User ${userId} fully connected to socket`);
 
     } catch (error) {
-      console.error("Error handling user connection:", error);
+      console.error("❌ Error handling user connection:", error);
     }
   }
 
@@ -169,9 +189,18 @@ class SocketService {
       const { messageId, chatRoomId } = data;
       const userId = socket.userId;
 
-      const message = await Message.findById(messageId);
-      if (!message) return;
+      if (!messageId || !chatRoomId || !userId) {
+        console.error("❌ Missing data for message read");
+        return;
+      }
 
+      const message = await Message.findById(messageId);
+      if (!message) {
+        console.error(`❌ Message ${messageId} not found`);
+        return;
+      }
+
+      // Check if user has already read this message
       const alreadyRead = message.readBy.some(read => 
         read.user.toString() === userId
       );
@@ -181,18 +210,34 @@ class SocketService {
           user: userId,
           readAt: new Date()
         });
-        message.status = "read";
+        
+        // Update status to "read" only if all participants have read it
+        const chatRoom = await ChatRoom.findById(chatRoomId);
+        if (chatRoom) {
+          const participantCount = chatRoom.participants.length;
+          if (message.readBy.length >= participantCount - 1) { // -1 to exclude sender
+            message.status = "read";
+          } else {
+            message.status = "delivered";
+          }
+        }
+        
         await message.save();
 
-        // Notify sender
-        this.io.to(message.sender.toString()).emit("message_read", {
-          messageId,
-          readBy: userId,
-          readAt: new Date()
-        });
+        // Notify the message sender that their message was read
+        if (message.sender.toString() !== userId) {
+          this.io.to(message.sender.toString()).emit("message_read", {
+            messageId,
+            readBy: userId,
+            readAt: new Date(),
+            chatRoomId
+          });
+        }
+
+        console.log(`📖 Message ${messageId} read by user ${userId}`);
       }
     } catch (error) {
-      console.error("Error handling message read:", error);
+      console.error("❌ Error handling message read:", error);
     }
   }
 
@@ -202,16 +247,38 @@ class SocketService {
     if (userId) {
       this.connectedUsers.delete(userId);
       
-      await User.findByIdAndUpdate(userId, {
-        status: "offline",
-        isActive: false,
-        lastSeen: new Date()
-      });
+      try {
+        await User.findByIdAndUpdate(userId, {
+          status: "offline",
+          isActive: false,
+          lastSeen: new Date()
+        });
 
-      // Notify friends
-      socket.broadcast.emit("user_offline", { userId });
-      
-      console.log(`❌ User ${userId} disconnected`);
+        // Notify all connected clients about user offline status
+        this.io.emit("user_status_changed", {
+          userId: userId,
+          status: "offline",
+          isActive: false,
+          lastSeen: new Date()
+        });
+
+        console.log(`❌ User ${userId} disconnected`);
+      } catch (error) {
+        console.error("❌ Error updating user status on disconnect:", error);
+      }
+    }
+  }
+
+  // Utility method to get socket by user ID
+  getSocketByUserId(userId) {
+    return this.connectedUsers.get(userId);
+  }
+
+  // Utility method to send message to specific user
+  sendToUser(userId, event, data) {
+    const socketId = this.connectedUsers.get(userId);
+    if (socketId) {
+      this.io.to(socketId).emit(event, data);
     }
   }
 }

@@ -155,86 +155,6 @@ export const createGroupChat = async (req, res) => {
   }
 };
 
-export const getMessages = async (req, res) => {
-  try {
-    const { chatRoomId } = req.params;
-    const userId = req.user.id;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-
-    console.log(`📨 Fetching messages for chat: ${chatRoomId}, user: ${userId}`);
-
-    // Verify user has access to this chat room
-    const chatRoom = await ChatRoom.findOne({
-      _id: chatRoomId,
-      "participants.user": userId
-    
-    }).populate("participants.user", "name profilePicture status");
-
-    if (!chatRoom) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied or chat room not found"
-      });
-    }
-
-    // Get messages with pagination
-    const messages = await Message.find({
-      chatRoom: chatRoomId,
-      deleted: false
-    })
-    .populate("sender", "name profilePicture status")
-    .populate({
-      path: "replyTo",
-      populate: {
-        path: "sender",
-        select: "name profilePicture"
-      }
-    })
-    .populate("reactions.user", "name profilePicture")
-    .sort({ createdAt: -1 }) // Get latest messages first
-    .limit(limit)
-    .skip((page - 1) * limit);
-
-    // Reverse to show oldest first in UI
-    const sortedMessages = messages.reverse();
-
-    // Mark messages as delivered (not read yet)
-    const unreadMessages = await Message.updateMany(
-      {
-        chatRoom: chatRoomId,
-        sender: { $ne: userId },
-        "readBy.user": { $ne: userId },
-        deleted: false
-      },
-      {
-        $set: { status: "delivered" }
-      }
-    );
-
-    console.log(`✅ Found ${sortedMessages.length} messages for chat ${chatRoomId}`);
-
-    res.json({
-      success: true,
-      messages: sortedMessages,
-      hasMore: messages.length === limit,
-      chatRoom: {
-        _id: chatRoom._id,
-        name: chatRoom.name,
-        type: chatRoom.type,
-        participants: chatRoom.participants,
-        settings: chatRoom.settings
-      }
-    });
-
-  } catch (error) {
-    console.error("❌ Error fetching messages:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch messages"
-    });
-  }
-};
 
 export const getChatRoomDetails = async (req, res) => {
   try {
@@ -670,118 +590,6 @@ export const rejectRequest = async (req, res) => {
 };
 
 
-export const sendMessage = async (req, res) => {
-  try {
-    const { chatRoomId, content, replyTo, type = "text", mediaUrl, mediaType } = req.body;
-    const userId = req.user.id;
-
-    console.log("📤 Sending message:", { chatRoomId, content, type, userId });
-
-    // Validate required fields
-    if (!content?.trim() && !mediaUrl) {
-      return res.status(400).json({
-        success: false,
-        message: "Message content or media is required"
-      });
-    }
-
-    // Verify user has access to this chat room
-    const chatRoom = await ChatRoom.findOne({
-      _id: chatRoomId,
-      "participants.user": userId
-    }).populate("participants.user", "name profilePicture status socketId");
-
-    if (!chatRoom) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied or chat room not found"
-      });
-    }
-
-    // Check if user is blocked in this chat
-    if (chatRoom.blockedUsers.includes(userId)) {
-      return res.status(403).json({
-        success: false,
-        message: "You are blocked from sending messages in this chat"
-      });
-    }
-
-    // Create new message
-    const message = new Message({
-      chatRoom: chatRoomId,
-      sender: userId,
-      content: content?.trim(),
-      type,
-      mediaUrl,
-      mediaType,
-      replyTo,
-      status: "sent"
-    });
-
-    await message.save();
-
-    // Populate message for response
-    await message.populate([
-      { 
-        path: "sender", 
-        select: "name profilePicture status" 
-      },
-      { 
-        path: "replyTo",
-        populate: {
-          path: "sender",
-          select: "name profilePicture"
-        }
-      }
-    ]);
-
-    // Update chat room's last message and timestamp
-    await ChatRoom.findByIdAndUpdate(chatRoomId, {
-      lastMessage: message._id,
-      updatedAt: new Date()
-    });
-
-    // Get populated message for real-time emission
-    const populatedMessage = await Message.findById(message._id)
-      .populate("sender", "name profilePicture status")
-      .populate({
-        path: "replyTo",
-        populate: {
-          path: "sender",
-          select: "name profilePicture"
-        }
-      });
-
-    // Emit real-time event to all participants
-    const io = req.app.get('io');
-    if (io) {
-      io.to(chatRoomId).emit("new_message", populatedMessage);
-      
-      // Also emit to update chat lists
-      chatRoom.participants.forEach(participant => {
-        io.to(participant.user._id.toString()).emit("chat_updated", {
-          chatRoomId,
-          lastMessage: populatedMessage,
-          updatedAt: new Date()
-        });
-      });
-
-      console.log(`✅ Message emitted to room ${chatRoomId}`);
-    }
-
-    res.status(201).json({
-      success: true,
-      message: populatedMessage
-    });
-
-  } catch (error) {
-    console.error("❌ Error sending message:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to send message"
-    });
-  }
-};
 
 export const deleteMessage = async (req, res) => {
   try {
@@ -1026,6 +834,259 @@ export const getPrivateChatRoom = async (req, res) => {
       success: false,
       message: "Internal server error",
       error: error.message
+    });
+  }
+};
+
+export const sendMessage = async (req, res) => {
+  try {
+    const { chatRoomId, content, replyTo, type = "text", mediaUrl, mediaType } = req.body;
+    const userId = req.user.id;
+
+    console.log("📤 Sending message:", { 
+      chatRoomId, 
+      content: content ? content.substring(0, 100) + (content.length > 100 ? '...' : '') : '[media]', 
+      type, 
+      userId 
+    });
+
+    // Validate required fields
+    if ((!content?.trim() && !mediaUrl) || !chatRoomId) {
+      return res.status(400).json({
+        success: false,
+        message: "Message content or media and chat room ID are required"
+      });
+    }
+
+    // Verify user has access to this chat room
+    const chatRoom = await ChatRoom.findOne({
+      _id: chatRoomId,
+      "participants.user": userId
+      
+    }).populate("participants.user", "name profilePicture status socketId");
+
+    if (!chatRoom) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied or chat room not found"
+      });
+    }
+
+    // Check if user is blocked in this chat
+    if (chatRoom.blockedUsers && chatRoom.blockedUsers.includes(userId)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are blocked from sending messages in this chat"
+      });
+    }
+
+    // Validate replyTo message exists and belongs to same chat room
+    if (replyTo) {
+      const repliedMessage = await Message.findOne({
+        _id: replyTo,
+        chatRoom: chatRoomId,
+        deleted: false
+      });
+      
+      if (!repliedMessage) {
+        return res.status(400).json({
+          success: false,
+          message: "Replied message not found"
+        });
+      }
+    }
+
+    // Create new message
+    const message = new Message({
+      chatRoom: chatRoomId,
+      sender: userId,
+      content: content?.trim(),
+      type,
+      mediaUrl,
+      mediaType,
+      replyTo,
+      status: "sent"
+    });
+
+    await message.save();
+
+    // Get fully populated message for response and real-time
+    const populatedMessage = await Message.findById(message._id)
+      .populate("sender", "name profilePicture status")
+      .populate({
+        path: "replyTo",
+        populate: {
+          path: "sender",
+          select: "name profilePicture"
+        }
+      })
+      .populate("reactions.user", "name profilePicture");
+
+    // Update chat room's last message and timestamp
+    await ChatRoom.findByIdAndUpdate(chatRoomId, {
+      lastMessage: message._id,
+      updatedAt: new Date()
+    });
+
+    // Emit real-time event to all participants
+    const io = req.app.get('io');
+    if (io) {
+      // Emit to the specific chat room
+      io.to(chatRoomId).emit("new_message", populatedMessage);
+      
+      // Also emit chat_updated to all participants for sidebar updates
+      chatRoom.participants.forEach(participant => {
+        const participantId = participant.user._id?.toString() || participant.user?.toString();
+        if (participantId) {
+          io.to(participantId).emit("chat_updated", {
+            chatRoomId,
+            lastMessage: populatedMessage,
+            updatedAt: new Date()
+          });
+        }
+      });
+
+      console.log(`✅ Message emitted to room ${chatRoomId} and ${chatRoom.participants.length} participants`);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: populatedMessage
+    });
+
+  } catch (error) {
+    console.error("❌ Error sending message:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to send message",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+export const getMessages = async (req, res) => {
+  try {
+    const { chatRoomId } = req.params;
+    const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    console.log(`📨 Fetching messages for chat: ${chatRoomId}, user: ${userId}, page: ${page}`);
+
+    // Verify user has access to this chat room
+    const chatRoom = await ChatRoom.findOne({
+      _id: chatRoomId,
+      "participants.user": userId
+      
+    }).populate("participants.user", "name profilePicture status");
+
+    if (!chatRoom) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied or chat room not found"
+      });
+    }
+
+    // Get total count for pagination
+    const totalMessages = await Message.countDocuments({
+      chatRoom: chatRoomId,
+      deleted: false
+    });
+
+    // Get messages with pagination (oldest first for UI)
+    const messages = await Message.find({
+      chatRoom: chatRoomId,
+      deleted: false
+    })
+    .populate("sender", "name profilePicture status")
+    .populate({
+      path: "replyTo",
+      populate: {
+        path: "sender",
+        select: "name profilePicture"
+      }
+    })
+    .populate("reactions.user", "name profilePicture")
+    .sort({ createdAt: 1 }) // Get oldest messages first for proper UI display
+    .skip(skip)
+    .limit(limit);
+
+    // Mark messages as delivered (not read yet) - only for messages not sent by current user
+    if (messages.length > 0) {
+      const unreadMessageIds = messages
+        .filter(msg => 
+          msg.sender._id.toString() !== userId && 
+          !msg.readBy.some(read => read.user.toString() === userId)
+        )
+        .map(msg => msg._id);
+
+      if (unreadMessageIds.length > 0) {
+        await Message.updateMany(
+          {
+            _id: { $in: unreadMessageIds },
+            chatRoom: chatRoomId
+          },
+          {
+            $addToSet: { 
+              readBy: { 
+                user: userId, 
+                readAt: new Date() 
+              } 
+            },
+            $set: { status: "delivered" }
+          }
+        );
+
+        // Emit read receipts for these messages
+        const io = req.app.get('io');
+        if (io) {
+          unreadMessageIds.forEach(messageId => {
+            messages
+              .filter(msg => msg._id.toString() === messageId.toString())
+              .forEach(msg => {
+                if (msg.sender._id.toString() !== userId) {
+                  io.to(msg.sender._id.toString()).emit("message_read", {
+                    messageId: msg._id,
+                    readBy: userId,
+                    readAt: new Date(),
+                    chatRoomId
+                  });
+                }
+              });
+          });
+        }
+      }
+    }
+
+    console.log(`✅ Found ${messages.length} messages for chat ${chatRoomId} (total: ${totalMessages})`);
+
+    res.json({
+      success: true,
+      messages: messages,
+      pagination: {
+        page,
+        limit,
+        totalMessages,
+        totalPages: Math.ceil(totalMessages / limit),
+        hasMore: skip + messages.length < totalMessages
+      },
+      chatRoom: {
+        _id: chatRoom._id,
+        name: chatRoom.name,
+        type: chatRoom.type,
+        participants: chatRoom.participants,
+        settings: chatRoom.settings,
+        lastMessage: chatRoom.lastMessage
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching messages:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch messages",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
