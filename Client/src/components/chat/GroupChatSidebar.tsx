@@ -71,27 +71,48 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
     }
   };
 
-  const handleCreateGroup = async (e) => {
-    e.preventDefault();
-    if (!newGroup.name.trim()) {
-      toast.error("Group name is required");
-      return;
-    }
-    try {
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/chatroom/groups/create`,
-        newGroup,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Group created successfully!");
-      setShowCreateModal(false);
-      setNewGroup({ name: "", avatar: "", description: "" });
-      fetchGroups();
-    } catch (err) {
-      console.error("❌ handleCreateGroup:", err);
-      toast.error(err.response?.data?.message || "Failed to create group");
-    }
-  };
+const handleCreateGroup = async (e) => {
+  e.preventDefault();
+  if (!newGroup.name.trim()) {
+    toast.error("Group name is required");
+    return;
+  }
+  
+  try {
+    // Add required fields that backend expects
+    const groupData = {
+      name: newGroup.name,
+      description: newGroup.description,
+      avatar: newGroup.avatar,
+      participantIds: [], // Empty array for now, you can add user selection later
+      settings: {
+        isPrivate: true,
+        allowReactions: true,
+        allowMedia: true,
+        allowLinks: true,
+        allowVoice: true,
+        allowGIFs: true,
+        allowMessageEdit: true,
+        allowMessageDelete: true,
+        allowInvites: true
+      }
+    };
+
+    await axios.post(
+      `${import.meta.env.VITE_API_URL}/chatroom/groups/create`,
+      groupData,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    toast.success("Group created successfully!");
+    setShowCreateModal(false);
+    setNewGroup({ name: "", avatar: "", description: "" });
+    fetchGroups();
+  } catch (err) {
+    console.error("❌ handleCreateGroup:", err);
+    toast.error(err.response?.data?.message || "Failed to create group");
+  }
+};
 
   const handleRequestJoin = async (groupId) => {
     if (!groupId) return toast.error("Invalid group");

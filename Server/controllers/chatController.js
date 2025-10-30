@@ -82,41 +82,72 @@ export const getOrCreateDirectChat = async (req, res) => {
     });
   }
 };
-
 export const createGroupChat = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { name, description, participantIds, settings } = req.body;
+    const { name, description, avatar, participantIds = [], settings = {} } = req.body;
 
+    // Validate required fields
+    if (!name?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Group name is required"
+      });
+    }
+
+    // Create participants array - creator is owner, others are members
     const participants = [
       { user: userId, role: "owner" },
       ...participantIds.map(id => ({ user: id, role: "member" }))
     ];
 
     const chatRoom = new ChatRoom({
-      name,
-      description,
+      name: name.trim(),
+      description: description?.trim() || "",
+      avatar: avatar || "",
       type: "group",
       participants,
       createdBy: userId,
       settings: {
-        ...settings,
-        isPrivate: true
+        isPrivate: settings.isPrivate !== undefined ? settings.isPrivate : true,
+        allowReactions: settings.allowReactions !== undefined ? settings.allowReactions : true,
+        allowMedia: settings.allowMedia !== undefined ? settings.allowMedia : true,
+        allowLinks: settings.allowLinks !== undefined ? settings.allowLinks : true,
+        allowVoice: settings.allowVoice !== undefined ? settings.allowVoice : true,
+        allowGIFs: settings.allowGIFs !== undefined ? settings.allowGIFs : true,
+        allowMessageEdit: settings.allowMessageEdit !== undefined ? settings.allowMessageEdit : true,
+        allowMessageDelete: settings.allowMessageDelete !== undefined ? settings.allowMessageDelete : true,
+        allowInvites: settings.allowInvites !== undefined ? settings.allowInvites : true,
       }
     });
 
     await chatRoom.save();
+    
+    // Populate the response
     await chatRoom.populate([
       { path: "participants.user", select: "name profilePicture status" },
       { path: "createdBy", select: "name profilePicture" }
     ]);
 
+    console.log(`✅ Group created: ${chatRoom.name} by user ${userId}`);
+
     res.status(201).json({
       success: true,
+      message: "Group created successfully",
       chatRoom
     });
+    
   } catch (error) {
-    console.error("Error creating group chat:", error);
+    console.error("❌ Error creating group chat:", error);
+    
+    // Handle duplicate name error
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Group name already exists"
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: "Failed to create group chat"
