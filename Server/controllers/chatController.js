@@ -167,8 +167,8 @@ export const getMessages = async (req, res) => {
     // Verify user has access to this chat room
     const chatRoom = await ChatRoom.findOne({
       _id: chatRoomId,
-      "participants.user": userId,
-      isActive: true
+      "participants.user": userId
+    
     }).populate("participants.user", "name profilePicture status");
 
     if (!chatRoom) {
