@@ -495,7 +495,7 @@ const ChatWindow = ({
   };
 
   // Upload media file
-  const uploadMediaFile = async (file) => {
+const uploadMediaFile = async (file) => {
   if (!selectedChat || !userId) {
     toast.error("Please select a chat first");
     return;
@@ -506,14 +506,15 @@ const ChatWindow = ({
   try {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('chatRoomId', selectedChat._id); // Make sure this is included
+    formData.append('chatRoomId', selectedChat._id);
     formData.append('type', file.type.startsWith('image/') ? 'image' : 
                     file.type.startsWith('video/') ? 'video' : 'file');
 
-    console.log("📤 Uploading media file:", { 
-      fileName: file.name, 
-      chatRoomId: selectedChat._id,
-      type: file.type 
+    console.log("📤 Uploading media:", {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      chatRoomId: selectedChat._id
     });
 
     const response = await fetch(
@@ -522,25 +523,23 @@ const ChatWindow = ({
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          // Don't set Content-Type for FormData - let browser set it
         },
         body: formData
       }
     );
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to upload file');
-    }
-
     const result = await response.json();
     
+    if (!response.ok) {
+      console.error("❌ Upload failed:", result);
+      throw new Error(result.message || `Upload failed with status ${response.status}`);
+    }
+
     if (result.success) {
-      console.log("✅ Media uploaded successfully");
+      console.log("✅ Media uploaded successfully:", result);
       setMediaPreview(null);
-      // The socket will handle the new message with media
     } else {
-      throw new Error(result.message);
+      throw new Error(result.message || "Upload failed");
     }
     
   } catch (error) {
@@ -548,13 +547,11 @@ const ChatWindow = ({
     toast.error(error.message || "Failed to upload file");
   } finally {
     setUploadingMedia(false);
-    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   }
 };
-
   // Cancel media preview
   const cancelMediaPreview = () => {
     if (mediaPreview?.url) {

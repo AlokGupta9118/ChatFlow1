@@ -5,19 +5,25 @@ import { uploadToCloudinary } from "../utils/Cloudinary.js";
 
 export const uploadMedia = async (req, res) => {
   try {
+    console.log("📤 Media upload started...");
+    console.log("🔍 Request body:", req.body);
+    console.log("🔍 Request file:", req.file ? {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    } : "No file");
+    console.log("🔍 User:", req.user ? {
+      id: req.user.id,
+      name: req.user.name
+    } : "No user");
+
     const { chatRoomId, type = "file" } = req.body;
     const userId = req.user.id;
     const file = req.file;
 
-    console.log("📤 Media upload request:", { 
-      userId, 
-      chatRoomId, 
-      type, 
-      fileName: file?.originalname 
-    });
-
     // Validate required fields
     if (!file) {
+      console.log("❌ No file provided");
       return res.status(400).json({
         success: false,
         message: "No file provided"
@@ -25,50 +31,49 @@ export const uploadMedia = async (req, res) => {
     }
 
     if (!chatRoomId) {
+      console.log("❌ No chatRoomId provided");
       return res.status(400).json({
         success: false,
         message: "Chat room ID is required"
       });
     }
 
+    console.log("🔍 Validating chat room access...");
+    
     // Verify user has access to this chat room
     const chatRoom = await ChatRoom.findOne({
       _id: chatRoomId,
-      "participants.user": userId
-    
+      "participants.user": userId,
+      isActive: true
     }).populate("participants.user", "name profilePicture status");
 
-    console.log("🔍 Chat room check:", { 
-      chatRoomId, 
-      userId, 
-      chatRoomExists: !!chatRoom 
-    });
-
+    console.log("🔍 Chat room found:", !!chatRoom);
+    
     if (!chatRoom) {
+      console.log("❌ Chat room not found or access denied");
       return res.status(403).json({
         success: false,
         message: "Access denied or chat room not found"
       });
     }
 
-    // Check if user is blocked in this chat
-    if (chatRoom.blockedUsers && chatRoom.blockedUsers.includes(userId)) {
-      return res.status(403).json({
-        success: false,
-        message: "You are blocked from sending messages in this chat"
-      });
-    }
-
+    console.log("📤 Uploading to Cloudinary...");
+    
     // Upload to Cloudinary
     const uploadResult = await uploadToCloudinary(file, type);
     
+    console.log("🔍 Cloudinary result:", uploadResult);
+    
     if (!uploadResult.success) {
+      console.log("❌ Cloudinary upload failed:", uploadResult.error);
       return res.status(500).json({
         success: false,
-        message: "Failed to upload file to storage"
+        message: "Failed to upload file to storage: " + (uploadResult.error || "Unknown error")
       });
     }
 
+    console.log("💾 Creating message in database...");
+    
     // Create message with media
     const message = new Message({
       chatRoom: chatRoomId,
@@ -117,17 +122,19 @@ export const uploadMedia = async (req, res) => {
           });
         }
       });
-
-      console.log(`✅ Media message emitted to room ${chatRoomId}`);
     }
 
+    console.log("✅ Media upload completed successfully");
+    
     res.status(201).json({
       success: true,
       message: populatedMessage
     });
 
   } catch (error) {
-    console.error("❌ Error uploading media:", error);
+    console.error("❌ Error in uploadMedia:", error);
+    console.error("❌ Error stack:", error.stack);
+    
     res.status(500).json({
       success: false,
       message: "Failed to upload media",

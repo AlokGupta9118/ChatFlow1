@@ -3,6 +3,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Check if Cloudinary is configured
+console.log("🔍 Cloudinary Config Check:", {
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME ? "✅ Set" : "❌ Missing",
+  api_key: process.env.CLOUDINARY_API_KEY ? "✅ Set" : "❌ Missing", 
+  api_secret: process.env.CLOUDINARY_API_SECRET ? "✅ Set" : "❌ Missing"
+});
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -11,11 +18,17 @@ cloudinary.config({
 
 export const uploadToCloudinary = async (file, resourceType = 'image') => {
   try {
+    console.log("📤 Cloudinary upload starting...", {
+      resourceType,
+      fileSize: file.size,
+      mimetype: file.mimetype
+    });
+
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           resource_type: resourceType,
-          folder: 'stories',
+          folder: 'chatflow',
           transformation: resourceType === 'video' ? [
             { quality: 'auto' },
             { format: 'mp4' }
@@ -26,8 +39,13 @@ export const uploadToCloudinary = async (file, resourceType = 'image') => {
         },
         (error, result) => {
           if (error) {
+            console.error("❌ Cloudinary upload error:", error);
             reject(error);
           } else {
+            console.log("✅ Cloudinary upload success:", {
+              url: result.secure_url,
+              publicId: result.public_id
+            });
             resolve({
               success: true,
               url: result.secure_url,
@@ -40,22 +58,10 @@ export const uploadToCloudinary = async (file, resourceType = 'image') => {
       uploadStream.end(file.buffer);
     });
   } catch (error) {
-    console.error('Cloudinary upload error:', error);
+    console.error('❌ Cloudinary upload exception:', error);
     return {
       success: false,
       error: error.message
     };
-  }
-};
-
-export const deleteFromCloudinary = async (publicId, resourceType = 'image') => {
-  try {
-    const result = await cloudinary.uploader.destroy(publicId, {
-      resource_type: resourceType
-    });
-    return { success: result.result === 'ok' };
-  } catch (error) {
-    console.error('Cloudinary delete error:', error);
-    return { success: false, error: error.message };
   }
 };
