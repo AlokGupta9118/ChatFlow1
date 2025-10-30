@@ -41,8 +41,5 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-userSchema.index({ email: 1 });
-userSchema.index({ status: 1 });
-userSchema.index({ isActive: 1 });
 
 export default mongoose.model("User", userSchema);
