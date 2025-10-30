@@ -18,13 +18,14 @@ import { protect } from "./middleware/authMiddleware.js";
 import gameSocket from "./socket/gameSocket.js";
 import statusRoutes from "./routes/statusRoutes.js";
 import chatRoutes from "./routes/chat.js";
-import SocketService from "./socket/messageSocket.js";
+import SocketService from "./socket/messageSocket.js"; // Your updated SocketService
+
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Simple CORS configuration
+// CORS configuration
 app.use(cors({
   origin: true,
   credentials: true
@@ -60,8 +61,9 @@ app.use("/chatroom", chatRoomRoutes);
 app.use("/api/user", settingRoutes);
 app.get("/api/user/profile", protect, getProfile);
 app.use("/api/status", statusRoutes);
-app.use("/api/chat",chatRoutes);
-// HTTP server + Socket.IO
+app.use("/api/chat", chatRoutes);
+
+// HTTP server + SINGLE Socket.IO instance
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -71,10 +73,15 @@ const io = new Server(server, {
   },
 });
 
-new SocketService(server);
+// Initialize all socket handlers with the SAME io instance
 app.set('io', io);
-// Register socket handlers
+
+// Initialize SocketService with existing io instance
+new SocketService(io);
+
+// Initialize game socket with existing io instance
 gameSocket(io);
+
 // Error handling
 app.use((err, req, res, next) => {
   console.error(err.stack);

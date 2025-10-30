@@ -1,20 +1,12 @@
 // services/socketService.js
-import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import ChatRoom from "../models/ChatRoom.js";
 import Message from "../models/Message.js";
 
 class SocketService {
-  constructor(server) {
-    this.io = new Server(server, {
-      cors: {
-        origin: process.env.CLIENT_URL || "http://localhost:3000",
-        methods: ["GET", "POST"],
-        credentials: true,
-      },
-    });
-
+  constructor(io) {  // Accept io instance instead of server
+    this.io = io;
     this.connectedUsers = new Map();
     this.setupSocketEvents();
   }
@@ -56,6 +48,7 @@ class SocketService {
     });
   }
 
+  // ... rest of your methods remain the same
   async authenticateSocket(socket, next) {
     try {
       const token = socket.handshake.auth.token;
