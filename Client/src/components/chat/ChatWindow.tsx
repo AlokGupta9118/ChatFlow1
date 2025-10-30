@@ -31,7 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import EmojiPicker from "emoji-picker-react";
 import { toast } from "sonner";
 import { getToken } from "@/utils/getToken";
- const token = getToken();
+
 const ChatWindow = ({ 
   selectedChat, 
   currentUser, 
@@ -49,13 +49,14 @@ const ChatWindow = ({
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
 
+
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
   const isGroup = selectedChat?.type === "group";
-
+   const token = getToken();
   // Socket event handlers
   useEffect(() => {
     if (!socket || !selectedChat) return;
