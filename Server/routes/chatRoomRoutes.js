@@ -19,7 +19,7 @@ const upload = multer({
   }
 });
 
-router.post('/messages/upload', upload.single('file'), uploadMedia);
+router.post('/messages/upload',protect, upload.single('file'), uploadMedia);
 // GET messages with a friend
 
 router.get("/mygroups", protect, getMyGroups);
