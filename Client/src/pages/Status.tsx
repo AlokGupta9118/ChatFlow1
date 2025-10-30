@@ -24,47 +24,76 @@ import {
   Smile,
   MapPin,
   GripVertical,
-  ArrowLeft // Added ArrowLeft icon
+  ArrowLeft,
+  Trash2,
+  Settings,
+  Users,
+  Shield,
+  Download
 } from "lucide-react";
 import { motion, AnimatePresence, PanInfo } from "framer-motion";
-import { useNavigate } from "react-router-dom"; // Added useNavigate hook
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
-const API_URL = import.meta.env.VITE_API_URL || "${import.meta.env.VITE_API_URL}";
+const API_URL = import.meta.env.VITE_API_URL;
 
 interface Story {
-  _id: string;
-  mediaUrl: string;
-  caption: string;
-  createdAt: string;
-  viewers: string[];
-  type: 'image' | 'video';
-  duration?: number;
-  location?: string;
-  likes: string[];
-  comments: Comment[];
-}
-
-interface Comment {
   _id: string;
   user: {
     _id: string;
     name: string;
     profilePicture?: string;
+    status?: string;
   };
-  text: string;
+  mediaUrl: string;
+  caption: string;
   createdAt: string;
+  viewers: Array<{
+    user: {
+      _id: string;
+      name: string;
+      profilePicture?: string;
+    };
+    viewedAt: string;
+  }>;
+  type: 'image' | 'video';
+  duration?: number;
+  location?: string;
+  likes: Array<{
+    user: {
+      _id: string;
+      name: string;
+      profilePicture?: string;
+    };
+    likedAt: string;
+  }>;
+  comments: Array<{
+    _id: string;
+    user: {
+      _id: string;
+      name: string;
+      profilePicture?: string;
+    };
+    text: string;
+    createdAt: string;
+  }>;
+  privacy?: string;
+  hideFrom?: string[];
 }
 
 interface FriendStories {
-  friendId: string;
-  name: string;
-  profilePicture?: string;
+  user: {
+    _id: string;
+    name: string;
+    profilePicture?: string;
+    status?: string;
+  };
   stories: Story[];
   isViewed: boolean;
 }
 
 const Status = () => {
-  const navigate = useNavigate(); // Initialize navigate hook
+  const navigate = useNavigate();
   const [myStories, setMyStories] = useState<Story[]>([]);
   const [friendsStories, setFriendsStories] = useState<FriendStories[]>([]);
   const [file, setFile] = useState<File | null>(null);
@@ -80,145 +109,225 @@ const Status = () => {
   const [showCaptionInput, setShowCaptionInput] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   const [commentText, setCommentText] = useState("");
-  const [isLiked, setIsLiked] = useState(false);
   const [viewersModal, setViewersModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'my' | 'friends'>('friends');
+  const [privacy, setPrivacy] = useState<'public' | 'friends' | 'private'>('friends');
+  const [showPrivacySettings, setShowPrivacySettings] = useState(false);
+  const [selectedStoryForSettings, setSelectedStoryForSettings] = useState<Story | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout>();
   const token = getToken();
 
-  // Handle back button click
-  const handleBackClick = () => {
-    navigate(-1); // Go back to previous page
-  };
-
-  // Fetch all stories
+  // Enhanced fetch stories with proper error handling
   const fetchStories = async () => {
-    if (!token) return;
+    if (!token) {
+      toast.error("Please login to view stories");
+      return;
+    }
+    
     try {
-      const res = await axios.get(`${API_URL}/stories/${"me"}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setMyStories(res.data.myStories || []);
-      
-      // Enhance friends stories with additional data
-      const enhancedFriendsStories = (res.data.friendsStatuses || []).map((friend: FriendStories) => ({
-        ...friend,
-        isViewed: friend.stories.every(story => story.viewers.includes("me"))
-      }));
-      
-      setFriendsStories(enhancedFriendsStories);
-    } catch (err) {
+      const [myStoriesRes, friendsStoriesRes] = await Promise.all([
+        axios.get(`${API_URL}/stories/my`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        axios.get(`${API_URL}/stories/friends`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      ]);
+
+      if (myStoriesRes.data.success) {
+        setMyStories(myStoriesRes.data.stories || []);
+      }
+
+      if (friendsStoriesRes.data.success) {
+        setFriendsStories(friendsStoriesRes.data.friendsStories || []);
+      }
+    } catch (err: any) {
       console.error("Error fetching stories:", err);
+      if (err.response?.status === 401) {
+        toast.error("Session expired. Please login again.");
+      } else {
+        toast.error("Failed to load stories");
+      }
     }
   };
 
   useEffect(() => {
     fetchStories();
-    const interval = setInterval(fetchStories, 30000); // Refresh every 30 seconds
+    const interval = setInterval(fetchStories, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Upload new story
+  // Enhanced upload with progress and error handling
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return alert("Select a file first");
-    if (!token) return alert("You must be logged in");
+    if (!file) {
+      toast.error("Please select a file");
+      return;
+    }
+    if (!token) {
+      toast.error("Please login to upload stories");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);
     formData.append("caption", caption);
     formData.append("location", location);
-    formData.append("type", file.type.startsWith('video/') ? 'video' : 'image');
+    formData.append("privacy", privacy);
 
     setLoading(true);
     try {
-      await axios.post(`${API_URL}/stories/upload`, formData, {
+      const response = await axios.post(`${API_URL}/stories/upload`, formData, {
         headers: { 
-          Authorization: `Bearer ${token}`, 
-          "Content-Type": "multipart/form-data" 
+          Authorization: `Bearer ${token}`,
+        },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            console.log(`Upload progress: ${percent}%`);
+          }
         },
       });
-      setCaption("");
-      setLocation("");
-      setFile(null);
-      setShowCaptionInput(false);
-      fetchStories();
-    } catch (err) {
+
+      if (response.data.success) {
+        toast.success("Story uploaded successfully!");
+        setCaption("");
+        setLocation("");
+        setFile(null);
+        setShowCaptionInput(false);
+        setPrivacy('friends');
+        fetchStories();
+      } else {
+        throw new Error(response.data.message || "Upload failed");
+      }
+    } catch (err: any) {
       console.error("Error uploading story:", err);
+      const errorMessage = err.response?.data?.message || "Failed to upload story";
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // Mark story as viewed
+  // Enhanced mark as viewed
   const markViewed = async (storyId: string) => {
     if (!token) return;
     try {
       await axios.post(
-        `${API_URL}/status/viewed`,
+        `${API_URL}/stories/viewed`,
         { storyId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      fetchStories(); // Refresh to update viewed status
+      // Optimistically update the viewed status
+      setFriendsStories(prev => prev.map(friend => ({
+        ...friend,
+        stories: friend.stories.map(story => 
+          story._id === storyId 
+            ? { ...story, viewers: [...story.viewers, { user: { _id: "current-user" }, viewedAt: new Date().toISOString() }] }
+            : story
+        )
+      })));
     } catch (err) {
       console.error("Error marking story viewed:", err);
     }
   };
 
-  // Like/unlike story
+  // Enhanced like functionality
   const handleLike = async (storyId: string) => {
     if (!token) return;
     try {
-      await axios.post(
+      const response = await axios.post(
         `${API_URL}/stories/${storyId}/like`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setIsLiked(!isLiked);
-      fetchStories();
-    } catch (err) {
+      
+      if (response.data.success) {
+        // Optimistically update likes
+        const updatedLikes = response.data.likes;
+        setFriendsStories(prev => prev.map(friend => ({
+          ...friend,
+          stories: friend.stories.map(story => 
+            story._id === storyId ? { ...story, likes: updatedLikes } : story
+          )
+        })));
+        
+        if (viewingStory?._id === storyId) {
+          setViewingStory(prev => prev ? { ...prev, likes: updatedLikes } : null);
+        }
+      }
+    } catch (err: any) {
       console.error("Error liking story:", err);
+      toast.error(err.response?.data?.message || "Failed to like story");
     }
   };
 
-  // Add comment to story
+  // Enhanced comment functionality
   const handleComment = async (storyId: string) => {
     if (!commentText.trim() || !token) return;
     try {
-      await axios.post(
+      const response = await axios.post(
         `${API_URL}/stories/${storyId}/comment`,
         { text: commentText },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setCommentText("");
-      fetchStories();
-    } catch (err) {
+      
+      if (response.data.success) {
+        const newComment = response.data.comment;
+        // Optimistically update comments
+        setFriendsStories(prev => prev.map(friend => ({
+          ...friend,
+          stories: friend.stories.map(story => 
+            story._id === storyId 
+              ? { ...story, comments: [...story.comments, newComment] } 
+              : story
+          )
+        })));
+        
+        if (viewingStory?._id === storyId) {
+          setViewingStory(prev => prev ? { ...prev, comments: [...prev.comments, newComment] } : null);
+        }
+        
+        setCommentText("");
+        toast.success("Comment added!");
+      }
+    } catch (err: any) {
       console.error("Error commenting on story:", err);
+      toast.error(err.response?.data?.message || "Failed to add comment");
     }
   };
 
-  // Progress bar animation
+  // Enhanced progress bar with better timing
   const startProgress = useCallback((duration: number = 5000) => {
     setProgress(0);
     clearInterval(progressIntervalRef.current);
     
+    const startTime = Date.now();
+    const totalDuration = duration;
+    
     progressIntervalRef.current = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(progressIntervalRef.current);
-          handleNextStory();
-          return 0;
-        }
-        return prev + (100 / (duration / 100));
-      });
-    }, 100);
+      const elapsed = Date.now() - startTime;
+      const newProgress = (elapsed / totalDuration) * 100;
+      
+      if (newProgress >= 100) {
+        clearInterval(progressIntervalRef.current);
+        handleNextStory();
+      } else {
+        setProgress(newProgress);
+      }
+    }, 50); // More frequent updates for smoother progress
   }, []);
 
-  // Handle next story
+  // Enhanced story navigation
   const handleNextStory = () => {
     const currentFriend = friendsStories[currentFriendIndex];
+    if (!currentFriend) {
+      closeStoryViewer();
+      return;
+    }
+
     if (currentStoryIndex < currentFriend.stories.length - 1) {
       setCurrentStoryIndex(prev => prev + 1);
     } else if (currentFriendIndex < friendsStories.length - 1) {
@@ -229,29 +338,40 @@ const Status = () => {
     }
   };
 
-  // Handle previous story
   const handlePreviousStory = () => {
     if (currentStoryIndex > 0) {
       setCurrentStoryIndex(prev => prev - 1);
     } else if (currentFriendIndex > 0) {
       setCurrentFriendIndex(prev => prev - 1);
-      const prevFriendStories = friendsStories[prev].stories;
+      const prevFriendStories = friendsStories[prev - 1].stories;
       setCurrentStoryIndex(prevFriendStories.length - 1);
     }
   };
 
-  // Open story viewer
+  // Enhanced open story with better state management
   const openStory = (friendIndex: number, storyIndex: number = 0) => {
+    if (friendIndex >= friendsStories.length || !friendsStories[friendIndex]?.stories[storyIndex]) {
+      toast.error("Story not available");
+      return;
+    }
+
     setCurrentFriendIndex(friendIndex);
     setCurrentStoryIndex(storyIndex);
     const story = friendsStories[friendIndex].stories[storyIndex];
     setViewingStory(story);
-    markViewed(story._id);
-    startProgress(story.type === 'video' ? (story.duration || 10000) : 5000);
+    
+    // Mark as viewed if not already
+    const hasViewed = story.viewers.some(viewer => viewer.user._id === "current-user");
+    if (!hasViewed) {
+      markViewed(story._id);
+    }
+    
+    const duration = story.type === 'video' ? (story.duration || 15000) : 5000;
+    startProgress(duration);
     setIsPlaying(true);
   };
 
-  // Close story viewer
+  // Enhanced close story viewer
   const closeStoryViewer = () => {
     setViewingStory(null);
     setCurrentStoryIndex(0);
@@ -260,18 +380,24 @@ const Status = () => {
     clearInterval(progressIntervalRef.current);
     setIsPlaying(true);
     setShowReactions(false);
-  };
-
-  // Handle drag for story navigation
-  const handleDrag = (event: any, info: PanInfo) => {
-    if (info.offset.x < -50) {
-      handleNextStory();
-    } else if (info.offset.x > 50) {
-      handlePreviousStory();
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
     }
   };
 
-  // Toggle play/pause for videos
+  // Enhanced drag handling
+  const handleDrag = (event: any, info: PanInfo) => {
+    if (Math.abs(info.offset.x) > 50) {
+      if (info.offset.x < -50) {
+        handleNextStory();
+      } else if (info.offset.x > 50) {
+        handlePreviousStory();
+      }
+    }
+  };
+
+  // Enhanced video controls
   const togglePlayPause = () => {
     if (videoRef.current) {
       if (isPlaying) {
@@ -279,26 +405,118 @@ const Status = () => {
         clearInterval(progressIntervalRef.current);
       } else {
         videoRef.current.play();
-        startProgress(viewingStory?.duration || 5000);
+        const duration = viewingStory?.type === 'video' ? (viewingStory.duration || 15000) : 5000;
+        startProgress(duration);
       }
       setIsPlaying(!isPlaying);
     }
   };
 
-  // Handle file selection with preview
+  // Enhanced file selection
   const handleFileSelect = (selectedFile: File) => {
+    // Validate file size (50MB max)
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      toast.error("File size too large. Maximum size is 50MB.");
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/quicktime', 'video/webm'];
+    if (!allowedTypes.includes(selectedFile.type)) {
+      toast.error("File type not supported. Please use images or videos.");
+      return;
+    }
+
     setFile(selectedFile);
     setShowCaptionInput(true);
+  };
+
+  // Delete story functionality
+  const deleteStory = async (storyId: string) => {
+    if (!token) return;
+    try {
+      await axios.delete(`${API_URL}/stories/${storyId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success("Story deleted successfully");
+      fetchStories();
+      setSelectedStoryForSettings(null);
+    } catch (err: any) {
+      console.error("Error deleting story:", err);
+      toast.error(err.response?.data?.message || "Failed to delete story");
+    }
+  };
+
+  // Update privacy settings
+  const updatePrivacy = async (storyId: string, newPrivacy: string) => {
+    if (!token) return;
+    try {
+      await axios.put(
+        `${API_URL}/stories/${storyId}/privacy`,
+        { privacy: newPrivacy },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success("Privacy settings updated");
+      fetchStories();
+      setSelectedStoryForSettings(null);
+    } catch (err: any) {
+      console.error("Error updating privacy:", err);
+      toast.error(err.response?.data?.message || "Failed to update privacy");
+    }
+  };
+
+  // Check if current user has liked a story
+  const hasLiked = (story: Story) => {
+    if (!token) return false;
+    // In a real app, you'd get current user ID from token or context
+    return story.likes.some(like => like.user._id === "current-user");
+  };
+
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (!viewingStory) return;
+      
+      switch (e.key) {
+        case 'ArrowRight':
+          handleNextStory();
+          break;
+        case 'ArrowLeft':
+          handlePreviousStory();
+          break;
+        case 'Escape':
+          closeStoryViewer();
+          break;
+        case ' ':
+          if (viewingStory.type === 'video') {
+            togglePlayPause();
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [viewingStory]);
+
+  // Auto-play video when story opens
+  useEffect(() => {
+    if (viewingStory?.type === 'video' && videoRef.current && isPlaying) {
+      videoRef.current.play().catch(console.error);
+    }
+  }, [viewingStory, isPlaying]);
+
+  const handleBackClick = () => {
+    navigate(-1);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-purple-900/20">
       {/* Header */}
       <div className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50">
-        <div className="max-w-5xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              {/* Back Button */}
               <button
                 onClick={handleBackClick}
                 className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200"
@@ -345,7 +563,7 @@ const Status = () => {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto p-4">
+      <div className="max-w-7xl mx-auto p-4">
         {/* Create Story Modal */}
         <AnimatePresence>
           {showCaptionInput && (
@@ -415,6 +633,23 @@ const Status = () => {
                     </div>
                   )}
 
+                  {/* Privacy Settings */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <Shield className="w-4 h-4 inline mr-2" />
+                      Privacy
+                    </label>
+                    <select
+                      value={privacy}
+                      onChange={(e) => setPrivacy(e.target.value as any)}
+                      className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-transparent focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value="public">Public</option>
+                      <option value="friends">Friends Only</option>
+                      <option value="private">Private</option>
+                    </select>
+                  </div>
+
                   {/* Caption Input */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -448,7 +683,12 @@ const Status = () => {
                   <div className="flex gap-3 pt-4">
                     <button
                       type="button"
-                      onClick={() => setShowCaptionInput(false)}
+                      onClick={() => {
+                        setShowCaptionInput(false);
+                        setFile(null);
+                        setCaption("");
+                        setLocation("");
+                      }}
                       className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     >
                       Cancel
@@ -488,8 +728,9 @@ const Status = () => {
               {myStories.length > 0 && (
                 <button
                   onClick={() => setViewersModal(true)}
-                  className="text-sm text-purple-600 dark:text-purple-400 hover:underline"
+                  className="text-sm text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-2"
                 >
+                  <Eye className="w-4 h-4" />
                   View Analytics
                 </button>
               )}
@@ -514,7 +755,7 @@ const Status = () => {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
                 {myStories.map((story, index) => (
                   <motion.div
                     key={story._id}
@@ -522,14 +763,24 @@ const Status = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: index * 0.1 }}
                     className="relative group cursor-pointer"
-                    onClick={() => openStory(0, index)}
                   >
-                    <div className="aspect-[9/16] rounded-2xl overflow-hidden bg-gradient-to-br from-purple-500/20 to-pink-500/20 p-1">
+                    <div 
+                      className="aspect-[9/16] rounded-2xl overflow-hidden bg-gradient-to-br from-purple-500/20 to-pink-500/20 p-1"
+                      onClick={() => {
+                        // Find this story in friends stories to open properly
+                        const friendIndex = friendsStories.findIndex(f => f.user._id === story.user._id);
+                        if (friendIndex !== -1) {
+                          const storyIndex = friendsStories[friendIndex].stories.findIndex(s => s._id === story._id);
+                          openStory(friendIndex, storyIndex);
+                        }
+                      }}
+                    >
                       <div className="w-full h-full rounded-xl overflow-hidden relative">
                         {story.type === 'video' ? (
                           <video
                             src={story.mediaUrl}
                             className="w-full h-full object-cover"
+                            muted
                           />
                         ) : (
                           <img
@@ -541,6 +792,17 @@ const Status = () => {
                         
                         {/* Overlay */}
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300" />
+                        
+                        {/* Settings Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedStoryForSettings(story);
+                          }}
+                          className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
                         
                         {/* Story Info */}
                         <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
@@ -585,10 +847,10 @@ const Status = () => {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6">
                 {friendsStories.map((friend, friendIndex) => (
                   <motion.div
-                    key={friend.friendId}
+                    key={friend.user._id}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: friendIndex * 0.1 }}
@@ -601,20 +863,22 @@ const Status = () => {
                         ? 'bg-gradient-to-r from-gray-300 to-gray-400' 
                         : 'bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 animate-pulse'
                     }`}>
-                      <div className="w-20 h-20 rounded-full overflow-hidden bg-white dark:bg-gray-800 p-1">
+                      <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden bg-white dark:bg-gray-800 p-1">
                         <img
-                          src={friend.profilePicture || "/default-avatar.png"}
-                          alt={friend.name}
+                          src={friend.user.profilePicture || "/default-avatar.png"}
+                          alt={friend.user.name}
                           className="w-full h-full object-cover rounded-full"
                         />
                       </div>
                       
                       {/* Online Indicator */}
-                      <div className="absolute bottom-1 right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800" />
+                      {friend.user.status === 'online' && (
+                        <div className="absolute bottom-1 right-1 w-3 h-3 md:w-4 md:h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800" />
+                      )}
                     </div>
                     
                     <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm">
-                      {friend.name}
+                      {friend.user.name}
                     </h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {friend.stories.length} {friend.stories.length === 1 ? 'story' : 'stories'}
@@ -660,13 +924,13 @@ const Status = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <img
-                      src={friendsStories[currentFriendIndex]?.profilePicture || "/default-avatar.png"}
-                      alt={friendsStories[currentFriendIndex]?.name}
+                      src={friendsStories[currentFriendIndex]?.user.profilePicture || "/default-avatar.png"}
+                      alt={friendsStories[currentFriendIndex]?.user.name}
                       className="w-8 h-8 rounded-full border-2 border-white"
                     />
                     <div>
                       <h3 className="text-white font-semibold">
-                        {friendsStories[currentFriendIndex]?.name}
+                        {friendsStories[currentFriendIndex]?.user.name}
                       </h3>
                       <p className="text-white/80 text-sm">
                         {formatDistanceToNow(new Date(viewingStory.createdAt))} ago
@@ -710,7 +974,7 @@ const Status = () => {
                 drag="x"
                 dragConstraints={{ left: 0, right: 0 }}
                 onDragEnd={handleDrag}
-                className="relative max-w-md w-full mx-4 aspect-[9/16] rounded-2xl overflow-hidden cursor-grab active:cursor-grabbing"
+                className="relative w-full max-w-sm sm:max-w-md mx-4 aspect-[9/16] rounded-2xl overflow-hidden cursor-grab active:cursor-grabbing"
               >
                 {viewingStory.type === 'video' ? (
                   <video
@@ -722,6 +986,7 @@ const Status = () => {
                     onEnded={handleNextStory}
                     onPlay={() => setIsPlaying(true)}
                     onPause={() => setIsPlaying(false)}
+                    playsInline
                   />
                 ) : (
                   <img
@@ -752,12 +1017,12 @@ const Status = () => {
                     <button
                       onClick={() => handleLike(viewingStory._id)}
                       className={`p-3 rounded-full backdrop-blur-sm transition-all ${
-                        isLiked 
+                        hasLiked(viewingStory)
                           ? 'bg-red-500/20 text-red-400' 
                           : 'bg-white/20 text-white hover:bg-white/30'
                       }`}
                     >
-                      <Heart className={`w-6 h-6 ${isLiked ? 'fill-current' : ''}`} />
+                      <Heart className={`w-6 h-6 ${hasLiked(viewingStory) ? 'fill-current' : ''}`} />
                     </button>
                     
                     <button
@@ -792,16 +1057,21 @@ const Status = () => {
                             <img
                               src={comment.user.profilePicture || "/default-avatar.png"}
                               alt={comment.user.name}
-                              className="w-6 h-6 rounded-full"
+                              className="w-6 h-6 rounded-full flex-shrink-0"
                             />
-                            <div>
-                              <p className="text-white text-sm font-semibold">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm font-semibold truncate">
                                 {comment.user.name}
                               </p>
-                              <p className="text-white/80 text-sm">{comment.text}</p>
+                              <p className="text-white/80 text-sm break-words">{comment.text}</p>
                             </div>
                           </div>
                         ))}
+                        {viewingStory.comments?.length === 0 && (
+                          <p className="text-white/60 text-sm text-center py-2">
+                            No comments yet
+                          </p>
+                        )}
                       </div>
                       
                       <div className="flex gap-2">
@@ -810,12 +1080,13 @@ const Status = () => {
                           value={commentText}
                           onChange={(e) => setCommentText(e.target.value)}
                           placeholder="Add a comment..."
-                          className="flex-1 bg-white/20 rounded-full px-4 py-2 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
+                          className="flex-1 bg-white/20 rounded-full px-4 py-2 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 text-sm"
                           onKeyPress={(e) => e.key === 'Enter' && handleComment(viewingStory._id)}
                         />
                         <button
                           onClick={() => handleComment(viewingStory._id)}
-                          className="bg-white text-black px-4 py-2 rounded-full hover:bg-white/90 transition-colors"
+                          disabled={!commentText.trim()}
+                          className="bg-white text-black px-4 py-2 rounded-full hover:bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
                         >
                           Send
                         </button>
@@ -827,17 +1098,86 @@ const Status = () => {
                 {/* Navigation Arrows */}
                 <button
                   onClick={handlePreviousStory}
-                  className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white p-2 hover:bg-white/20 rounded-full transition-colors"
+                  className="absolute left-2 sm:left-4 top-1/2 transform -translate-y-1/2 text-white p-2 hover:bg-white/20 rounded-full transition-colors"
                 >
-                  <ChevronLeft className="w-6 h-6" />
+                  <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
                 
                 <button
                   onClick={handleNextStory}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white p-2 hover:bg-white/20 rounded-full transition-colors"
+                  className="absolute right-2 sm:right-4 top-1/2 transform -translate-y-1/2 text-white p-2 hover:bg-white/20 rounded-full transition-colors"
                 >
-                  <ChevronRight className="w-6 h-6" />
+                  <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Story Settings Modal */}
+        <AnimatePresence>
+          {selectedStoryForSettings && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              onClick={() => setSelectedStoryForSettings(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between p-4 border-b border-gray-200/50 dark:border-gray-700/50">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                    Story Settings
+                  </h3>
+                  <button
+                    onClick={() => setSelectedStoryForSettings(null)}
+                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="p-4 space-y-3">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Privacy
+                    </label>
+                    <select
+                      value={selectedStoryForSettings.privacy || 'friends'}
+                      onChange={(e) => updatePrivacy(selectedStoryForSettings._id, e.target.value)}
+                      className="w-full p-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-transparent focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    >
+                      <option value="public">Public</option>
+                      <option value="friends">Friends Only</option>
+                      <option value="private">Private</option>
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (confirm("Are you sure you want to delete this story?")) {
+                        deleteStory(selectedStoryForSettings._id);
+                      }
+                    }}
+                    className="w-full flex items-center gap-2 p-3 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete Story
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedStoryForSettings(null)}
+                    className="w-full p-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </motion.div>
             </motion.div>
           )}
@@ -898,14 +1238,21 @@ const Status = () => {
                     Recent Viewers
                   </h4>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {myStories.flatMap(story => story.viewers).slice(0, 10).map((viewer, index) => (
+                    {myStories.flatMap(story => story.viewers)
+                      .slice(0, 10)
+                      .map((viewer, index) => (
                       <div key={index} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
                         <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                          {viewer.charAt(0).toUpperCase()}
+                          {viewer.user.name.charAt(0).toUpperCase()}
                         </div>
-                        <span className="text-gray-700 dark:text-gray-300">{viewer}</span>
+                        <span className="text-gray-700 dark:text-gray-300">{viewer.user.name}</span>
                       </div>
                     ))}
+                    {myStories.flatMap(story => story.viewers).length === 0 && (
+                      <p className="text-gray-500 dark:text-gray-400 text-center py-4">
+                        No viewers yet
+                      </p>
+                    )}
                   </div>
                 </div>
               </motion.div>
