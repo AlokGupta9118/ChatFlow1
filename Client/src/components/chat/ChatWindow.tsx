@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import EmojiPicker from "emoji-picker-react";
 import { toast } from "sonner";
+import { getToken } from "@/utils/getToken";
 
 const ChatWindow = ({ 
   selectedChat, 
@@ -126,7 +127,7 @@ const ChatWindow = ({
     
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = getToken;
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/chat/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
         {
