@@ -4,7 +4,7 @@ import {getAllGroups,getMessages,sendMessage,requestToJoinGroup,getMyPendingRequ
   removeParticipant,
   getPendingRequests,
   approveRequest,
-  rejectRequest,  getOrCreatePrivateChat, 
+  rejectRequest,deleteMessage,  getOrCreatePrivateChat, 
   getPrivateChatRoom } from "../controllers/chatController.js";
   import { uploadMedia } from '../controllers/mediaController.js';
 import multer from 'multer';
@@ -51,7 +51,8 @@ router.post("/:groupId/join-request/reject", protect,rejectRequest);
 router.get("/my-join-requests", protect, getMyJoinRequests);
 
 
-
+// Add this route after your existing message routes
+router.delete("/messages/:messageId", protect, deleteMessage);
 
 // Groups
 router.get('/groups/my', getMyGroups);

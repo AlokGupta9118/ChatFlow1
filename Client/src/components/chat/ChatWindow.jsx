@@ -69,11 +69,13 @@ const ChatWindow = ({
   const [currentUserRole, setCurrentUserRole] = useState("");
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [mediaPreview, setMediaPreview] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
 
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const optimisticIdRef = useRef(0);
   
   const getUserData = () => {
     try {
@@ -88,6 +90,11 @@ const ChatWindow = ({
   const { user, userId } = getUserData();
   const token = getToken();
   const isGroupChat = isGroup || selectedChat?.type === "group";
+
+  // Generate unique optimistic ID
+  const generateOptimisticId = () => {
+    return `optimistic-${Date.now()}-${++optimisticIdRef.current}`;
+  };
 
   // Real-time updates for messages and group members
   useEffect(() => {
@@ -106,12 +113,19 @@ const ChatWindow = ({
       console.log('📨 New message received:', message);
       if (message.chatRoom === selectedChat._id) {
         setMessages(prev => {
-          // Remove optimistic message if exists and add the real one
+          // Remove any optimistic messages with the same content from current user
           const filtered = prev.filter(msg => 
             !msg.isOptimistic || 
-            (msg.isOptimistic && msg.content !== message.content)
+            (msg.isOptimistic && (
+              msg.content !== message.content || 
+              msg.sender?._id !== userId
+            ))
           );
-          return [...filtered, message];
+          
+          // Check if this exact message already exists
+          const messageExists = filtered.some(msg => msg._id === message._id);
+          
+          return messageExists ? filtered : [...filtered, message];
         });
         
         // Mark as read if it's not our own message
@@ -135,9 +149,16 @@ const ChatWindow = ({
       if (data.chatRoomId === selectedChat._id) {
         setMessages(prev => prev.map(msg => 
           msg._id === data.messageId 
-            ? { ...msg, deleted: true, content: "This message was deleted" }
+            ? { 
+                ...msg, 
+                deleted: true, 
+                content: "This message was deleted",
+                deletedAt: data.deletedAt,
+                deletedBy: data.deletedBy
+              }
             : msg
         ));
+        toast.success("Message deleted");
       }
     };
 
@@ -186,8 +207,8 @@ const ChatWindow = ({
       console.log('⌨️ User typing:', data);
       if (data.chatRoomId === selectedChat._id && data.userId !== userId) {
         setTypingUsers(prev => {
-          const newTypingUsers = prev.filter(user => user.userId !== data.userId);
-          return [...newTypingUsers, { userId: data.userId, userName: data.userName }];
+          const filtered = prev.filter(user => user.userId !== data.userId);
+          return [...filtered, { userId: data.userId, userName: data.userName }];
         });
         setIsTyping(true);
       }
@@ -197,7 +218,7 @@ const ChatWindow = ({
       console.log('💤 User stopped typing:', data);
       if (data.chatRoomId === selectedChat._id) {
         setTypingUsers(prev => prev.filter(user => user.userId !== data.userId));
-        if (typingUsers.length <= 1) {
+        if (prev.length <= 1) {
           setIsTyping(false);
         }
       }
@@ -254,6 +275,31 @@ const ChatWindow = ({
       }
     };
   }, [socket, selectedChat, isConnected, userId]);
+
+  // Real-time status updates for private chats
+  useEffect(() => {
+    if (!socket || !isConnected || !selectedChat || isGroupChat) return;
+
+    const handleUserStatusChange = (data) => {
+      console.log('🔵 User status changed:', data);
+      
+      setOnlineUsers(prev => {
+        const newSet = new Set(prev);
+        if (data.isActive && data.status === "online") {
+          newSet.add(data.userId);
+        } else {
+          newSet.delete(data.userId);
+        }
+        return newSet;
+      });
+    };
+
+    socket.on("user_status_changed", handleUserStatusChange);
+
+    return () => {
+      socket.off("user_status_changed", handleUserStatusChange);
+    };
+  }, [socket, isConnected, selectedChat, isGroupChat]);
 
   // Load messages and group data
   const loadMessages = useCallback(async (pageNum = 1) => {
@@ -325,6 +371,8 @@ const ChatWindow = ({
       console.log('📥 Loading messages for chat:', selectedChat._id);
       setMessages([]);
       setPage(1);
+      setTypingUsers([]);
+      setIsTyping(false);
       loadMessages(1);
     }
   }, [selectedChat, loadMessages]);
@@ -352,9 +400,10 @@ const ChatWindow = ({
       return;
     }
 
-    // Create optimistic message for instant UI update
+    // Create unique optimistic message for instant UI update
+    const optimisticId = generateOptimisticId();
     const optimisticMessage = {
-      _id: `optimistic-${Date.now()}`,
+      _id: optimisticId,
       chatRoom: selectedChat._id,
       sender: {
         _id: userId,
@@ -362,18 +411,20 @@ const ChatWindow = ({
         profilePicture: user?.profilePicture,
         status: 'online'
       },
-      content: newMessage,
+      content: newMessage.trim(),
       type: "text",
       replyTo: replyingTo,
       status: "sent",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       readBy: [],
-      isOptimistic: true // Flag to identify optimistic messages
+      isOptimistic: true,
+      optimisticId: optimisticId // Additional identifier
     };
 
     // Immediately add to UI
     setMessages(prev => [...prev, optimisticMessage]);
+    const messageContent = newMessage;
     setNewMessage("");
     setReplyingTo(null);
     
@@ -384,7 +435,7 @@ const ChatWindow = ({
 
     const messageData = {
       chatRoomId: selectedChat._id,
-      content: newMessage,
+      content: messageContent,
       replyTo: replyingTo?._id,
       type: "text"
     };
@@ -421,11 +472,11 @@ const ChatWindow = ({
     } catch (error) {
       console.error("❌ Error sending message:", error);
       
-      // Remove optimistic message on error
-      setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
+      // Remove specific optimistic message on error
+      setMessages(prev => prev.filter(msg => msg.optimisticId !== optimisticId));
       
       // Show error but keep the message for retry
-      setNewMessage(messageData.content);
+      setNewMessage(messageContent);
       if (replyingTo) setReplyingTo(replyingTo);
       
       toast.error(error.message || "Failed to send message");
@@ -459,11 +510,7 @@ const ChatWindow = ({
     }
 
     // Create preview
-    let previewUrl = '';
-    let previewType = 'file';
-
     if (file.type.startsWith('image/')) {
-      previewType = 'image';
       const reader = new FileReader();
       reader.onload = (e) => {
         setMediaPreview({
@@ -474,87 +521,83 @@ const ChatWindow = ({
         });
       };
       reader.readAsDataURL(file);
-      return;
-    } else if (file.type.startsWith('video/')) {
-      previewType = 'video';
-      previewUrl = URL.createObjectURL(file);
-    } else if (file.type.startsWith('audio/')) {
-      previewType = 'audio';
-      previewUrl = URL.createObjectURL(file);
     } else {
-      previewType = 'file';
-      previewUrl = URL.createObjectURL(file);
+      let previewType = 'file';
+      if (file.type.startsWith('video/')) previewType = 'video';
+      if (file.type.startsWith('audio/')) previewType = 'audio';
+      
+      setMediaPreview({
+        url: URL.createObjectURL(file),
+        type: previewType,
+        name: file.name,
+        file: file
+      });
     }
-
-    setMediaPreview({
-      url: previewUrl,
-      type: previewType,
-      name: file.name,
-      file: file
-    });
   };
 
   // Upload media file
-const uploadMediaFile = async (file) => {
-  if (!selectedChat || !userId) {
-    toast.error("Please select a chat first");
-    return;
-  }
+  const uploadMediaFile = async (file) => {
+    if (!selectedChat || !userId) {
+      toast.error("Please select a chat first");
+      return;
+    }
 
-  setUploadingMedia(true);
+    setUploadingMedia(true);
 
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('chatRoomId', selectedChat._id);
-    formData.append('type', file.type.startsWith('image/') ? 'image' : 
-                    file.type.startsWith('video/') ? 'video' : 'file');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('chatRoomId', selectedChat._id);
+      formData.append('type', file.type.startsWith('image/') ? 'image' : 
+                      file.type.startsWith('video/') ? 'video' : 'file');
 
-    console.log("📤 Uploading media:", {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type,
-      chatRoomId: selectedChat._id
-    });
+      console.log("📤 Uploading media:", {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        chatRoomId: selectedChat._id
+      });
 
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/chatroom/messages/upload`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/chatroom/messages/upload`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          body: formData
+        }
+      );
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error("❌ Upload failed:", result);
+        throw new Error(result.message || `Upload failed with status ${response.status}`);
       }
-    );
 
-    const result = await response.json();
-    
-    if (!response.ok) {
-      console.error("❌ Upload failed:", result);
-      throw new Error(result.message || `Upload failed with status ${response.status}`);
+      if (result.success) {
+        console.log("✅ Media uploaded successfully:", result);
+        setMediaPreview(null);
+        toast.success("File sent successfully");
+      } else {
+        throw new Error(result.message || "Upload failed");
+      }
+      
+    } catch (error) {
+      console.error("❌ Error uploading media:", error);
+      toast.error(error.message || "Failed to upload file");
+    } finally {
+      setUploadingMedia(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
+  };
 
-    if (result.success) {
-      console.log("✅ Media uploaded successfully:", result);
-      setMediaPreview(null);
-    } else {
-      throw new Error(result.message || "Upload failed");
-    }
-    
-  } catch (error) {
-    console.error("❌ Error uploading media:", error);
-    toast.error(error.message || "Failed to upload file");
-  } finally {
-    setUploadingMedia(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  }
-};
   // Cancel media preview
   const cancelMediaPreview = () => {
-    if (mediaPreview?.url) {
+    if (mediaPreview?.url && !mediaPreview.url.startsWith('data:')) {
       URL.revokeObjectURL(mediaPreview.url);
     }
     setMediaPreview(null);
@@ -562,6 +605,69 @@ const uploadMediaFile = async (file) => {
       fileInputRef.current.value = '';
     }
   };
+
+  // Delete message functionality
+  const handleDeleteMessage = async (messageId) => {
+    if (!messageId || !token) {
+      toast.error("Cannot delete message");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/chatroom/messages/${messageId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Message will be updated via socket event
+        console.log("✅ Message deletion initiated");
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error("❌ Error deleting message:", error);
+      toast.error(error.message || "Failed to delete message");
+    }
+  };
+
+  // Message context menu
+  const handleMessageRightClick = (e, message) => {
+    e.preventDefault();
+    
+    // Don't show context menu for optimistic or deleted messages
+    if (message.isOptimistic || message.deleted) return;
+    
+    // Only allow delete for user's own messages or admin in groups
+    const canDelete = message.sender?._id === userId || (isGroupChat && isAdmin);
+    
+    if (canDelete) {
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        message: message
+      });
+    }
+  };
+
+  // Close context menu
+  const closeContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClickOutside = () => setContextMenu(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const handleTyping = () => {
     if (!selectedChat || !socket || !isConnected) return;
@@ -590,7 +696,7 @@ const uploadMediaFile = async (file) => {
   };
 
   const getMessageStatus = (message) => {
-    if (!message.sender || message.sender._id !== userId) return null;
+    if (!message.sender || message.sender._id !== userId || message.deleted) return null;
     
     const readByCount = message.readBy?.length || 0;
     const participantCount = (selectedChat.participants?.length || 1) - 1;
@@ -822,6 +928,7 @@ const uploadMediaFile = async (file) => {
       <div 
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800"
+        onClick={closeContextMenu}
       >
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full space-y-4">
@@ -833,7 +940,7 @@ const uploadMediaFile = async (file) => {
             <AnimatePresence>
               {messages.map((message) => (
                 <motion.div
-                  key={message._id}
+                  key={message._id || message.optimisticId}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
@@ -861,9 +968,12 @@ const uploadMediaFile = async (file) => {
                           message.sender?._id === userId
                             ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-br-2xl"
                             : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-2xl border border-gray-100 dark:border-gray-700"
-                        } ${message.isOptimistic ? 'opacity-80' : ''}`}
+                        } ${message.isOptimistic ? 'opacity-80' : ''} ${
+                          message.deleted ? 'opacity-60 italic bg-gray-100 dark:bg-gray-800' : ''
+                        }`}
+                        onContextMenu={(e) => handleMessageRightClick(e, message)}
                       >
-                        {message.replyTo && (
+                        {message.replyTo && !message.replyTo.deleted && (
                           <div className={`text-xs border-l-2 pl-2 mb-2 ${
                             message.sender?._id === userId 
                               ? "border-indigo-300 text-indigo-100" 
@@ -874,7 +984,11 @@ const uploadMediaFile = async (file) => {
                         )}
                         
                         <div className="text-sm lg:text-base leading-relaxed">
-                          {renderMediaMessage(message)}
+                          {message.deleted ? (
+                            <p className="italic text-gray-500 dark:text-gray-400">This message was deleted</p>
+                          ) : (
+                            renderMediaMessage(message)
+                          )}
                         </div>
                         
                         <div className={`flex items-center space-x-2 mt-2 ${
@@ -887,8 +1001,9 @@ const uploadMediaFile = async (file) => {
                           }`}>
                             {formatTime(message.createdAt)}
                             {message.isOptimistic && ' • Sending...'}
+                            {message.deleted && ' • Deleted'}
                           </span>
-                          {getMessageStatus(message)}
+                          {!message.deleted && getMessageStatus(message)}
                         </div>
                       </div>
                     </div>
@@ -920,6 +1035,43 @@ const uploadMediaFile = async (file) => {
           </div>
         )}
       </div>
+
+      {/* Context Menu */}
+      <AnimatePresence>
+        {contextMenu && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-32"
+            style={{
+              left: Math.min(contextMenu.x, window.innerWidth - 150),
+              top: Math.min(contextMenu.y, window.innerHeight - 100)
+            }}
+          >
+            <button
+              onClick={() => {
+                setReplyingTo(contextMenu.message);
+                closeContextMenu();
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+            >
+              <Reply className="h-4 w-4" />
+              Reply
+            </button>
+            <button
+              onClick={() => {
+                handleDeleteMessage(contextMenu.message._id);
+                closeContextMenu();
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Media Preview */}
       {mediaPreview && (

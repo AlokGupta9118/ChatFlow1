@@ -590,12 +590,14 @@ export const rejectRequest = async (req, res) => {
 };
 
 
-
 export const deleteMessage = async (req, res) => {
   try {
     const { messageId } = req.params;
     const userId = req.user.id;
 
+    console.log(`🗑️ Deleting message ${messageId} by user ${userId}`);
+
+    // Find the message
     const message = await Message.findById(messageId);
     if (!message) {
       return res.status(404).json({
@@ -604,46 +606,76 @@ export const deleteMessage = async (req, res) => {
       });
     }
 
-    // Check if user is the sender or has admin rights
+    // Find the chat room to check permissions
     const chatRoom = await ChatRoom.findOne({
       _id: message.chatRoom,
-      "participants.user": userId,
-      isActive: true
+      "participants.user": userId
     });
 
     if (!chatRoom) {
       return res.status(403).json({
         success: false,
-        message: "Access denied"
+        message: "Access denied to this chat room"
       });
     }
 
+    // Check if user can delete the message
     const userParticipant = chatRoom.participants.find(
       p => p.user.toString() === userId
     );
 
-    if (message.sender.toString() !== userId && 
-        !["admin", "owner"].includes(userParticipant.role)) {
+    const canDelete = message.sender.toString() === userId || 
+                     ["admin", "owner"].includes(userParticipant?.role);
+
+    if (!canDelete) {
       return res.status(403).json({
         success: false,
-        message: "Cannot delete this message"
+        message: "You don't have permission to delete this message"
       });
     }
 
+    // Soft delete the message
     message.deleted = true;
     message.deletedAt = new Date();
-    message.content = "This message was deleted";
+    message.deletedBy = userId;
+    
+    // Keep media info but clear content
+    if (message.type === "text") {
+      message.content = "This message was deleted";
+    }
+    
     await message.save();
+
+    // Get populated message for real-time update
+    const populatedMessage = await Message.findById(messageId)
+      .populate("sender", "name profilePicture status")
+      .populate("deletedBy", "name");
+
+    // Emit real-time event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(message.chatRoom.toString()).emit("message_deleted", {
+        messageId: message._id,
+        chatRoomId: message.chatRoom,
+        deletedBy: userId,
+        deletedAt: new Date()
+      });
+    }
+
+    console.log(`✅ Message ${messageId} deleted successfully`);
 
     res.json({
       success: true,
-      message: "Message deleted successfully"
+      message: "Message deleted successfully",
+      deletedMessage: populatedMessage
     });
+
   } catch (error) {
-    console.error("Error deleting message:", error);
+    console.error("❌ Error deleting message:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to delete message"
+      message: "Failed to delete message",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
