@@ -28,7 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
+import EmojiPicker from "emoji-picker-react";
 import { toast } from "sonner";
 import { getToken } from "@/utils/getToken";
 
