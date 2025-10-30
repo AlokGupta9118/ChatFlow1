@@ -1,4 +1,4 @@
-\// services/socketService.js
+// services/socketService.js
 import Message from "../models/Message.js";
 import ChatRoom from "../models/ChatRoom.js";
 import User from "../models/User.js";
