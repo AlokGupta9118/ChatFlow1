@@ -20,14 +20,25 @@ import {
   Reply,
   Trash2,
   Edit,
-  Pin
+  Pin,
+  Menu,
+  ArrowLeft,
+  Info,
+  Zap,
+  Star,
+  Heart,
+  ThumbsUp,
+  Eye,
+  MessageCircle,
+  Settings,
+  UserPlus
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
+import EmojiPicker from "emoji-picker-react";
 import { toast } from "sonner";
 import { getToken } from "@/utils/getToken";
 
@@ -37,7 +48,8 @@ const ChatWindow = ({
   onBack,
   socket,
   isGroup = false,
-  onToggleGroupInfo 
+  onToggleGroupInfo,
+  showGroupInfo = false
 }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
@@ -49,51 +61,107 @@ const ChatWindow = ({
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
+  const [reactionPicker, setReactionPicker] = useState(null);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [currentUserRole, setCurrentUserRole] = useState("");
 
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   
-  // ✅ FIXED: Safe user data handling
   const getUserData = () => {
     try {
-      // Use prop first, then fallback to localStorage
       const user = currentUser || JSON.parse(localStorage.getItem("user") || "{}");
       const userId = user?._id || user?.id;
-      
-      if (!userId) {
-        console.error('❌ No user ID available in ChatWindow');
-        return { user: null, userId: null };
-      }
-      
       return { user, userId };
     } catch (error) {
-      console.error('❌ Error getting user data in ChatWindow:', error);
       return { user: null, userId: null };
     }
   };
 
   const { user, userId } = getUserData();
   const token = getToken();
-  
-  // Determine if it's a group chat
   const isGroupChat = isGroup || selectedChat?.type === "group";
 
-  // Socket event handlers
+  // Real-time updates for messages and group members
   useEffect(() => {
     if (!socket || !selectedChat) return;
 
-    console.log("🔌 Setting up socket events for chat:", selectedChat._id);
-
+    // Message events
     const handleNewMessage = (message) => {
-      console.log("📨 New message received:", message);
       if (message.chatRoom === selectedChat._id) {
         setMessages(prev => [...prev, message]);
         markMessageAsRead(message._id);
       }
     };
 
+    const handleMessageUpdated = (updatedMessage) => {
+      if (updatedMessage.chatRoom === selectedChat._id) {
+        setMessages(prev => prev.map(msg => 
+          msg._id === updatedMessage._id ? updatedMessage : msg
+        ));
+      }
+    };
+
+    const handleMessageDeleted = (data) => {
+      if (data.chatRoomId === selectedChat._id) {
+        setMessages(prev => prev.map(msg => 
+          msg._id === data.messageId 
+            ? { ...msg, deleted: true, content: "This message was deleted" }
+            : msg
+        ));
+      }
+    };
+
+    // Group member events
+    const handleMemberAdded = (data) => {
+      if (data.groupId === selectedChat._id) {
+        setGroupMembers(prev => {
+          const exists = prev.some(m => m.user._id === data.newMember.user._id);
+          if (!exists) {
+            return [...prev, data.newMember];
+          }
+          return prev;
+        });
+        
+        // Update selectedChat participants for immediate UI update
+        if (selectedChat.participants) {
+          const updatedChat = {
+            ...selectedChat,
+            participants: [...selectedChat.participants, data.newMember]
+          };
+          // You might want to pass this up to parent component
+        }
+        
+        toast.success(`🎉 ${data.newMember.user.name} joined the group!`);
+      }
+    };
+
+    const handleMemberRemoved = (data) => {
+      if (data.groupId === selectedChat._id) {
+        setGroupMembers(prev => prev.filter(m => m.user._id !== data.userId));
+        toast.info(`👋 A member left the group`);
+      }
+    };
+
+    const handleRoleUpdated = (data) => {
+      if (data.groupId === selectedChat._id) {
+        setGroupMembers(prev => prev.map(member =>
+          member.user._id === data.userId 
+            ? { ...member, role: data.newRole }
+            : member
+        ));
+        
+        if (data.userId === userId) {
+          setCurrentUserRole(data.newRole);
+        }
+        
+        toast.success(`🛡️ Role updated for a member`);
+      }
+    };
+
+    // Typing events
     const handleUserTyping = (data) => {
       if (data.chatRoomId === selectedChat._id) {
         setTypingUsers(prev => {
@@ -136,7 +204,13 @@ const ChatWindow = ({
     // Join the chat room
     socket.emit("join_chat", selectedChat._id);
 
+    // Register all event listeners
     socket.on("new_message", handleNewMessage);
+    socket.on("message_updated", handleMessageUpdated);
+    socket.on("message_deleted", handleMessageDeleted);
+    socket.on("member_added", handleMemberAdded);
+    socket.on("member_removed", handleMemberRemoved);
+    socket.on("role_updated", handleRoleUpdated);
     socket.on("user_typing", handleUserTyping);
     socket.on("user_stop_typing", handleUserStopTyping);
     socket.on("message_read", handleMessageRead);
@@ -144,69 +218,85 @@ const ChatWindow = ({
 
     return () => {
       socket.off("new_message", handleNewMessage);
+      socket.off("message_updated", handleMessageUpdated);
+      socket.off("message_deleted", handleMessageDeleted);
+      socket.off("member_added", handleMemberAdded);
+      socket.off("member_removed", handleMemberRemoved);
+      socket.off("role_updated", handleRoleUpdated);
       socket.off("user_typing", handleUserTyping);
       socket.off("user_stop_typing", handleUserStopTyping);
       socket.off("message_read", handleMessageRead);
       socket.off("user_status_changed", handleUserStatusChange);
     };
-  }, [socket, selectedChat, typingUsers.length]);
+  }, [socket, selectedChat, typingUsers.length, userId]);
 
-  // Load messages
+  // Load messages and group data
   const loadMessages = useCallback(async (pageNum = 1) => {
-    if (!selectedChat || !token) {
-      console.log('❌ Missing selectedChat or token');
-      return;
-    }
+    if (!selectedChat || !token) return;
     
     setLoading(true);
     try {
-      console.log('📡 Loading messages for chat:', selectedChat._id);
-      
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/chat/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const [messagesRes, membersRes] = await Promise.all([
+        fetch(
+          `${import.meta.env.VITE_API_URL}/api/chat/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        ),
+        isGroupChat ? 
+          fetch(
+            `${import.meta.env.VITE_API_URL}/chatroom/${selectedChat._id}/members`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            }
+          ) : Promise.resolve(null)
+      ]);
 
-      console.log('📨 API Response status:', response.status);
+      if (!messagesRes.ok) throw new Error('Failed to fetch messages');
+      const messagesData = await messagesRes.json();
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-      }
-
-      const data = await response.json();
-      console.log('📦 Messages data:', data);
-
-      if (data.success) {
+      if (messagesData.success) {
         if (pageNum === 1) {
-          setMessages(data.messages || []);
+          setMessages(messagesData.messages || []);
         } else {
-          setMessages(prev => [...(data.messages || []), ...prev]);
+          setMessages(prev => [...(messagesData.messages || []), ...prev]);
         }
-        setHasMoreMessages(data.hasMore || false);
+        setHasMoreMessages(messagesData.hasMore || false);
         setPage(pageNum);
-        
-        console.log(`✅ Loaded ${data.messages?.length || 0} messages`);
-      } else {
-        toast.error(data.message || 'Failed to load messages');
       }
+
+      // Load group members if it's a group chat
+      if (isGroupChat && membersRes) {
+        if (membersRes.ok) {
+          const membersData = await membersRes.json();
+          setGroupMembers(membersData.members || []);
+          
+          // Set current user role
+          const currentMember = membersData.members?.find(m => 
+            String(m.user._id) === String(userId)
+          );
+          if (currentMember) {
+            setCurrentUserRole(currentMember.role);
+          }
+        }
+      }
+
     } catch (error) {
-      console.error("❌ Error loading messages:", error);
-      toast.error("Failed to load messages: " + error.message);
+      console.error("Error loading data:", error);
+      toast.error("Failed to load data");
     } finally {
       setLoading(false);
     }
-  }, [selectedChat, token]);
+  }, [selectedChat, token, isGroupChat, userId]);
 
-  // Initial load and when chat changes
+  // Initial load
   useEffect(() => {
     if (selectedChat) {
-      console.log("🔄 Chat changed, loading messages for:", selectedChat._id);
       setMessages([]);
       setPage(1);
       loadMessages(1);
@@ -223,23 +313,14 @@ const ChatWindow = ({
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || !userId) {
-      console.error('❌ Cannot send message: missing data', { 
-        hasMessage: !!newMessage.trim(), 
-        hasChat: !!selectedChat, 
-        hasUserId: !!userId 
-      });
-      return;
-    }
+    if (!newMessage.trim() || !selectedChat || !userId) return;
 
     const messageData = {
       chatRoomId: selectedChat._id,
       content: newMessage,
       replyTo: replyingTo?._id,
-      userId: userId // ✅ FIXED: Include userId in message data
+      userId: userId
     };
-
-    console.log("📤 Sending message:", messageData);
 
     try {
       socket.emit("send_message", messageData);
@@ -278,8 +359,6 @@ const ChatWindow = ({
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
-    console.log("File selected:", file);
     // Handle file upload logic here
   };
 
@@ -290,11 +369,11 @@ const ChatWindow = ({
     const participantCount = (selectedChat.participants?.length || 1) - 1;
 
     if (readByCount >= participantCount) {
-      return <CheckCheck className="w-4 h-4 text-blue-500" />;
+      return <CheckCheck className="w-3 h-3 lg:w-4 lg:h-4 text-blue-500" />;
     } else if (readByCount > 0) {
-      return <CheckCheck className="w-4 h-4 text-gray-400" />;
+      return <CheckCheck className="w-3 h-3 lg:w-4 lg:h-4 text-gray-400" />;
     } else {
-      return <Check className="w-4 h-4 text-gray-400" />;
+      return <Check className="w-3 h-3 lg:w-4 lg:h-4 text-gray-400" />;
     }
   };
 
@@ -310,15 +389,13 @@ const ChatWindow = ({
     return onlineUsers.has(user._id) ? "online" : "offline";
   };
 
-  // ✅ FIXED: Get other participant for private chats
   const getOtherParticipant = () => {
     if (!selectedChat?.participants || !userId) return null;
     
     if (isGroupChat) {
-      return null; // Groups don't have a single "other" participant
+      return null;
     }
     
-    // For private chats, find the participant who isn't the current user
     const otherParticipant = selectedChat.participants.find(
       p => String(p.user?._id || p.user) !== String(userId)
     );
@@ -326,19 +403,20 @@ const ChatWindow = ({
     return otherParticipant?.user || null;
   };
 
+  const isAdmin = currentUserRole === "admin" || currentUserRole === "owner";
   const otherParticipant = getOtherParticipant();
 
   if (!selectedChat) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
-        <div className="text-center space-y-4">
-          <div className="w-24 h-24 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full flex items-center justify-center mx-auto shadow-lg">
-            <div className="text-3xl">💬</div>
+        <div className="text-center space-y-6 p-8 max-w-sm">
+          <div className="w-20 h-20 lg:w-24 lg:h-24 bg-gradient-to-r from-blue-400 to-purple-500 rounded-3xl flex items-center justify-center mx-auto shadow-2xl">
+            <MessageCircle className="w-10 h-10 lg:w-12 lg:h-12 text-white" />
           </div>
-          <h3 className="text-2xl font-bold text-gray-800 dark:text-white">
+          <h3 className="text-2xl lg:text-3xl font-bold text-gray-800 dark:text-white">
             Welcome to Chat
           </h3>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-gray-600 dark:text-gray-400 text-lg">
             Select a conversation to start messaging
           </p>
         </div>
@@ -347,22 +425,27 @@ const ChatWindow = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden">
-            ←
+    <div className="flex-1 flex flex-col h-full bg-white dark:bg-gray-900">
+      {/* Enhanced Header */}
+      <div className="flex items-center justify-between p-4 lg:p-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+        <div className="flex items-center space-x-3 lg:space-x-4 flex-1 min-w-0">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={onBack} 
+            className="flex-shrink-0 md:hidden h-10 w-10 rounded-2xl"
+          >
+            <ArrowLeft className="h-5 w-5" />
           </Button>
           
-          <div className="flex items-center space-x-3">
-            <Avatar className="h-10 w-10">
+          <div className="flex items-center space-x-3 lg:space-x-4 flex-1 min-w-0">
+            <Avatar className="h-12 w-12 lg:h-14 lg:w-14 border-2 border-white dark:border-gray-700 shadow-lg">
               <AvatarImage src={
                 isGroupChat 
                   ? selectedChat.avatar 
                   : otherParticipant?.profilePicture
               } />
-              <AvatarFallback>
+              <AvatarFallback className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-bold text-lg">
                 {isGroupChat 
                   ? selectedChat.name?.[0] 
                   : otherParticipant?.name?.[0]
@@ -370,8 +453,8 @@ const ChatWindow = ({
               </AvatarFallback>
             </Avatar>
             
-            <div>
-              <h2 className="font-semibold text-gray-900 dark:text-white">
+            <div className="flex-1 min-w-0">
+              <h2 className="font-bold text-gray-900 dark:text-white text-lg lg:text-xl truncate">
                 {isGroupChat 
                   ? selectedChat.name 
                   : otherParticipant?.name || "Unknown User"
@@ -379,19 +462,27 @@ const ChatWindow = ({
               </h2>
               <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
                 {isGroupChat ? (
-                  <span>{selectedChat.participants?.length || 0} members</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="flex items-center space-x-1">
+                      <Users className="h-4 w-4" />
+                      <span>{groupMembers.length || selectedChat.participants?.length || 0} members</span>
+                    </span>
+                    {isAdmin && (
+                      <Badge variant="secondary" className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 text-xs">
+                        <Shield className="h-3 w-3 mr-1" />
+                        Admin
+                      </Badge>
+                    )}
+                  </div>
                 ) : (
-                  <div className="flex items-center space-x-1">
+                  <div className="flex items-center space-x-2">
                     <div className={`w-2 h-2 rounded-full ${
                       getOnlineStatus(otherParticipant) === "online" 
-                        ? "bg-green-500" 
+                        ? "bg-green-500 animate-pulse" 
                         : "bg-gray-400"
                     }`} />
-                    <span>
-                      {getOnlineStatus(otherParticipant) === "online" 
-                        ? "Online" 
-                        : "Offline"
-                      }
+                    <span className="capitalize">
+                      {getOnlineStatus(otherParticipant)}
                     </span>
                   </div>
                 )}
@@ -400,150 +491,143 @@ const ChatWindow = ({
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="icon">
+        <div className="flex items-center space-x-1 lg:space-x-2 flex-shrink-0">
+          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl">
             <Phone className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl">
             <VideoIcon className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon">
+          {isGroupChat && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={onToggleGroupInfo}
+              className={`h-10 w-10 rounded-2xl ${
+                showGroupInfo ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-400' : ''
+              }`}
+            >
+              <Users className="h-5 w-5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-2xl">
             <Search className="h-5 w-5" />
           </Button>
-          {isGroupChat && (
-            <>
-              <Button variant="ghost" size="icon" onClick={onToggleGroupInfo}>
-                <Users className="h-5 w-5" />
-              </Button>
-              {/* Admin badge for group admins/owners */}
-              {selectedChat.participants?.some(p => 
-                String(p.user?._id || p.user) === String(userId) && 
-                ["admin", "owner"].includes(p.role)
-              ) && (
-                <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                  <Shield className="w-3 h-3 mr-1" />
-                  Admin
-                </Badge>
-              )}
-            </>
-          )}
         </div>
       </div>
 
-      {/* Messages Area */}
+      {/* Enhanced Messages Area */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900"
+        className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800"
       >
-        {loading && (
-          <div className="flex justify-center items-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-            <span className="ml-2 text-gray-500">Loading messages...</span>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center h-full space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+            <p className="text-gray-500 dark:text-gray-400">Loading messages...</p>
           </div>
-        )}
-        
-        <AnimatePresence>
-          {messages.map((message) => (
-            <motion.div
-              key={message._id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className={`flex ${message.sender?._id === userId ? "justify-end" : "justify-start"}`}
-            >
-              <div className={`flex space-x-2 max-w-[70%] ${message.sender?._id === userId ? "flex-row-reverse space-x-reverse" : ""}`}>
-                {isGroupChat && message.sender?._id !== userId && (
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={message.sender?.profilePicture} />
-                    <AvatarFallback>{message.sender?.name?.[0] || "U"}</AvatarFallback>
-                  </Avatar>
-                )}
-                
-                <div className={`flex flex-col space-y-1 ${message.sender?._id === userId ? "items-end" : "items-start"}`}>
-                  {isGroupChat && message.sender?._id !== userId && (
-                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      {message.sender?.name || "Unknown User"}
-                    </span>
-                  )}
-                  
-                  {replyingTo?._id === message._id && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2 border border-blue-200 dark:border-blue-800">
-                      <div className="text-xs text-blue-600 dark:text-blue-400">
-                        Replying to {message.sender?._id === userId ? "yourself" : message.sender?.name}
-                      </div>
-                      <div className="text-sm truncate">{message.content}</div>
-                    </div>
-                  )}
-
-                  <div
-                    className={`rounded-2xl px-4 py-2 ${
-                      message.sender?._id === userId
-                        ? "bg-blue-500 text-white rounded-br-md"
-                        : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-md border border-gray-200 dark:border-gray-700"
-                    }`}
-                  >
-                    {message.replyTo && (
-                      <div className={`text-xs border-l-2 pl-2 mb-1 ${
-                        message.sender?._id === userId 
-                          ? "border-blue-300 text-blue-100" 
-                          : "border-gray-300 text-gray-500"
-                      }`}>
-                        Replying to: {message.replyTo.content}
-                      </div>
+        ) : (
+          <div className="p-4 lg:p-6 space-y-4 min-h-full">
+            <AnimatePresence>
+              {messages.map((message) => (
+                <motion.div
+                  key={message._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className={`flex ${message.sender?._id === userId ? "justify-end" : "justify-start"}`}
+                >
+                  <div className={`flex space-x-3 max-w-[85%] lg:max-w-[70%] ${message.sender?._id === userId ? "flex-row-reverse space-x-reverse" : ""}`}>
+                    {isGroupChat && message.sender?._id !== userId && (
+                      <Avatar className="h-8 w-8 lg:h-10 lg:w-10 flex-shrink-0 border-2 border-white dark:border-gray-700 shadow-sm">
+                        <AvatarImage src={message.sender?.profilePicture} />
+                        <AvatarFallback className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm">
+                          {message.sender?.name?.[0] || "U"}
+                        </AvatarFallback>
+                      </Avatar>
                     )}
                     
-                    <p className="text-sm">{message.content}</p>
-                    
-                    <div className={`flex items-center space-x-1 mt-1 ${
-                      message.sender?._id === userId ? "justify-end" : "justify-start"
-                    }`}>
-                      <span className={`text-xs ${
-                        message.sender?._id === userId 
-                          ? "text-blue-200" 
-                          : "text-gray-500"
-                      }`}>
-                        {formatTime(message.createdAt)}
-                      </span>
-                      {getMessageStatus(message)}
+                    <div className={`flex flex-col space-y-2 ${message.sender?._id === userId ? "items-end" : "items-start"}`}>
+                      {isGroupChat && message.sender?._id !== userId && (
+                        <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 px-2">
+                          {message.sender?.name || "Unknown User"}
+                        </span>
+                      )}
+                      
+                      <div
+                        className={`rounded-3xl px-4 lg:px-6 py-3 shadow-lg ${
+                          message.sender?._id === userId
+                            ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-br-2xl"
+                            : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-2xl border border-gray-100 dark:border-gray-700"
+                        }`}
+                      >
+                        {message.replyTo && (
+                          <div className={`text-xs border-l-2 pl-2 mb-2 ${
+                            message.sender?._id === userId 
+                              ? "border-indigo-300 text-indigo-100" 
+                              : "border-gray-300 text-gray-500"
+                          }`}>
+                            Replying to: {message.replyTo.content}
+                          </div>
+                        )}
+                        
+                        <p className="text-sm lg:text-base leading-relaxed">
+                          {message.content}
+                        </p>
+                        
+                        <div className={`flex items-center space-x-2 mt-2 ${
+                          message.sender?._id === userId ? "justify-end" : "justify-start"
+                        }`}>
+                          <span className={`text-xs ${
+                            message.sender?._id === userId 
+                              ? "text-indigo-200" 
+                              : "text-gray-500"
+                          }`}>
+                            {formatTime(message.createdAt)}
+                          </span>
+                          {getMessageStatus(message)}
+                        </div>
+                      </div>
                     </div>
                   </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {/* Enhanced Typing Indicator */}
+            {isTyping && typingUsers.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-center space-x-3 bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-lg border border-gray-100 dark:border-gray-700 max-w-max ml-4"
+              >
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" />
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
                 </div>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+                <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                  {typingUsers.map(user => user.userName).join(", ")} 
+                  {typingUsers.length === 1 ? " is" : " are"} typing...
+                </span>
+              </motion.div>
+            )}
 
-        {/* Typing Indicator */}
-        {isTyping && typingUsers.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400"
-          >
-            <div className="flex space-x-1">
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
-            </div>
-            <span>
-              {typingUsers.map(user => user.userName).join(", ")} 
-              {typingUsers.length === 1 ? " is" : " are"} typing...
-            </span>
-          </motion.div>
+            <div ref={messagesEndRef} />
+          </div>
         )}
-
-        <div ref={messagesEndRef} />
       </div>
 
-      {/* Reply Preview */}
+      {/* Enhanced Reply Preview */}
       {replyingTo && (
-        <div className="px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border-t border-blue-200 dark:border-blue-800">
+        <div className="px-4 lg:px-6 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-t border-blue-200 dark:border-blue-800">
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
+              <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                <Reply className="h-3 w-3" />
                 Replying to {replyingTo.sender?._id === userId ? "yourself" : replyingTo.sender?.name}
               </div>
-              <div className="text-sm text-blue-800 dark:text-blue-200 truncate">
+              <div className="text-sm text-blue-800 dark:text-blue-200 truncate mt-1">
                 {replyingTo.content}
               </div>
             </div>
@@ -551,32 +635,36 @@ const ChatWindow = ({
               variant="ghost"
               size="icon"
               onClick={() => setReplyingTo(null)}
-              className="h-8 w-8 text-blue-600 dark:text-blue-400"
+              className="h-8 w-8 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-xl"
             >
-              ×
+              <X className="h-4 w-4" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* Input Area */}
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Paperclip className="h-5 w-5" />
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          >
-            <Smile className="h-5 w-5" />
-          </Button>
+      {/* Enhanced Input Area */}
+      <div className="p-4 lg:p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+        <div className="flex items-end space-x-3">
+          <div className="flex space-x-1 lg:space-x-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+            >
+              <Paperclip className="h-5 w-5" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+            >
+              <Smile className="h-5 w-5" />
+            </Button>
+          </div>
 
           <div className="flex-1 relative">
             <Input
@@ -591,8 +679,8 @@ const ChatWindow = ({
                   handleSendMessage();
                 }
               }}
-              placeholder="Type a message..."
-              className="pr-12"
+              placeholder={isGroupChat ? "Message the group..." : "Type a message..."}
+              className="h-12 lg:h-14 rounded-2xl text-base pr-16 bg-gray-50 dark:bg-gray-700 border-0 focus:ring-2 focus:ring-indigo-500/50"
               disabled={!userId}
             />
           </div>
@@ -601,26 +689,29 @@ const ChatWindow = ({
             onClick={handleSendMessage}
             disabled={!newMessage.trim() || !userId}
             size="icon"
-            className="bg-blue-500 hover:bg-blue-600 text-white disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="h-12 w-12 lg:h-14 lg:w-14 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white disabled:bg-gray-400 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/25 transition-all duration-300"
           >
-            <Send className="h-5 w-5" />
+            <Send className="h-5 w-5 lg:h-6 lg:w-6" />
           </Button>
         </div>
 
-        {/* Emoji Picker */}
+        {/* Enhanced Emoji Picker */}
         <AnimatePresence>
           {showEmojiPicker && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="absolute bottom-20 left-4 z-50"
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              className="absolute bottom-20 left-4 lg:left-6 z-50"
             >
-              <EmojiPicker
-                onEmojiClick={handleEmojiClick}
-                width={350}
-                height={400}
-              />
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <EmojiPicker
+                  onEmojiClick={handleEmojiClick}
+                  width={320}
+                  height={400}
+                  theme={document.documentElement.classList.contains('dark') ? 'dark' : 'light'}
+                />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -635,10 +726,10 @@ const ChatWindow = ({
         accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
       />
 
-      {/* Debug info */}
+      {/* Connection Status */}
       {!userId && (
-        <div className="bg-red-500 text-white p-2 text-center text-sm">
-          ⚠️ User not authenticated - Cannot send messages
+        <div className="bg-gradient-to-r from-red-500 to-pink-500 text-white p-3 text-center text-sm font-medium shadow-lg">
+          ⚠️ Please log in to send messages
         </div>
       )}
     </div>
