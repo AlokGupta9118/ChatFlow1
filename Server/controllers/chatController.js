@@ -878,3 +878,154 @@ export const markAsRead = async (req, res) => {
     });
   }
 };
+
+// Get or create private chat room between current user and another user
+export const getOrCreatePrivateChat = async (req, res) => {
+  try {
+    const { participantId } = req.params;
+    const currentUserId = req.user.id; // From auth middleware
+
+    // Validate participant ID
+    if (!participantId) {
+      return res.status(400).json({
+        success: false,
+        message: "Participant ID is required"
+      });
+    }
+
+    // Check if participant exists
+    const participant = await User.findById(participantId);
+    if (!participant) {
+      return res.status(404).json({
+        success: false,
+        message: "Participant not found"
+      });
+    }
+
+    // Check if a private chat room already exists between these two users
+    const existingChatRoom = await ChatRoom.findOne({
+      type: "direct",
+      $and: [
+        { "participants.user": currentUserId },
+        { "participants.user": participantId }
+      ]
+    }).populate({
+      path: "participants.user",
+      select: "name username profilePicture email status"
+    }).populate("lastMessage");
+
+    if (existingChatRoom) {
+      return res.status(200).json({
+        success: true,
+        chatRoom: existingChatRoom,
+        message: "Existing private chat room found"
+      });
+    }
+
+    // Create new private chat room
+    const newChatRoom = new ChatRoom({
+      name: null, // No name for direct messages
+      type: "direct",
+      participants: [
+        {
+          user: currentUserId,
+          role: "member"
+        },
+        {
+          user: participantId,
+          role: "member"
+        }
+      ],
+      createdBy: currentUserId,
+      settings: {
+        isPrivate: true,
+        allowReactions: true,
+        allowMedia: true,
+        allowLinks: true,
+        allowVoice: true,
+        allowGIFs: true,
+        allowMessageEdit: true,
+        allowMessageDelete: true
+      }
+    });
+
+    await newChatRoom.save();
+
+    // Populate the created chat room
+    const populatedChatRoom = await ChatRoom.findById(newChatRoom._id)
+      .populate({
+        path: "participants.user",
+        select: "name username profilePicture email status"
+      })
+      .populate("lastMessage");
+
+    res.status(201).json({
+      success: true,
+      chatRoom: populatedChatRoom,
+      message: "New private chat room created"
+    });
+
+  } catch (error) {
+    console.error("Error in getOrCreatePrivateChat:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+};
+
+// Alternative: Just get existing private chat room (don't create)
+export const getPrivateChatRoom = async (req, res) => {
+  try {
+    const { participantId } = req.params;
+    const currentUserId = req.user.id;
+
+    if (!participantId) {
+      return res.status(400).json({
+        success: false,
+        message: "Participant ID is required"
+      });
+    }
+
+    // Find existing private chat room
+    const chatRoom = await ChatRoom.findOne({
+      type: "direct",
+      $and: [
+        { "participants.user": currentUserId },
+        { "participants.user": participantId }
+      ]
+    })
+    .populate({
+      path: "participants.user",
+      select: "name username profilePicture email status"
+    })
+    .populate("lastMessage")
+    .populate({
+      path: "messages",
+      options: { sort: { createdAt: -1 }, limit: 1 }
+    });
+
+    if (!chatRoom) {
+      return res.status(404).json({
+        success: false,
+        message: "No chat room found with this user",
+        chatRoom: null
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      chatRoom: chatRoom,
+      message: "Private chat room found"
+    });
+
+  } catch (error) {
+    console.error("Error in getPrivateChatRoom:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+};

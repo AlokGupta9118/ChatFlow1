@@ -4,7 +4,8 @@ import {getAllGroups,getMessages,sendMessage,requestToJoinGroup,getMyPendingRequ
   removeParticipant,
   getPendingRequests,
   approveRequest,
-  rejectRequest,} from "../controllers/chatController.js";
+  rejectRequest,  getOrCreatePrivateChat, 
+  getPrivateChatRoom } from "../controllers/chatController.js";
 const router = express.Router();
 
 // GET messages with a friend
@@ -45,6 +46,14 @@ router.get('/groups/my', getMyGroups);
 router.post('/groups/create', createGroupChat);
 router.get('/groups/:id/members', getGroupMembers);
 
+
+//Private message
+
+// GET /api/chatroom/private/:participantId - Get or create private chat
+router.get("/private/:participantId", protect, getOrCreatePrivateChat);
+
+// Alternative: GET /api/chatroom/private/:participantId/existing - Get only existing
+router.get("/private/:participantId/existing", protect, getPrivateChatRoom);
 
 // Messages
 router.get("/messages/:chatRoomId", protect,getMessages);

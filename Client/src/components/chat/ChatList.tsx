@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getToken } from "@/utils/getToken";
 import { io } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 
 const socket = io(import.meta.env.VITE_API_URL);
 
@@ -89,23 +90,52 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     normalize(g?.name).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleSelect = (chat, isGroup = false) => {
-    console.log("🎯 ChatList: handleSelect called", {
-      chat: chat?.name,
-      isGroup,
-      chatType: isGroup ? "GROUP" : "PRIVATE"
-    });
-    
-    const key = chat._id;
-    setUnreadCounts((prev) => ({ ...prev, [key]: 0 }));
-    
-    // Make sure to pass the isGroup parameter to the parent
+ // In ChatList.jsx - Updated handleSelect function
+const handleSelect = async (chat, isGroup = false) => {
+  console.log("🎯 ChatList: handleSelect called", {
+    chat: chat?.name,
+    isGroup,
+    chatType: isGroup ? "GROUP" : "PRIVATE"
+  });
+
+  const key = chat._id;
+  setUnreadCounts((prev) => ({ ...prev, [key]: 0 }));
+
+  if (isGroup) {
+    // For groups, we already have the chat room object
     if (onSelectChat) {
       onSelectChat(chat, isGroup);
-    } else {
-      console.error("❌ onSelectChat callback is not defined!");
     }
-  };
+  } else {
+    // For private chats, we need to get or create the chat room
+    try {
+      const token = getToken();
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/chatroom/private/${chat._id}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success && data.chatRoom) {
+        console.log("✅ Found/Created chat room:", data.chatRoom);
+        if (onSelectChat) {
+          onSelectChat(data.chatRoom, isGroup);
+        }
+      } else {
+        console.error("❌ Failed to get/create chat room:", data.message);
+        toast.error("Failed to start chat");
+      }
+    } catch (error) {
+      console.error("❌ Error getting chat room:", error);
+      toast.error("Failed to load chat");
+    }
+  }
+};
 
   const getStatusColor = (status) => {
     switch (status) {
