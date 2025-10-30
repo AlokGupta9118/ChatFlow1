@@ -312,52 +312,55 @@ const ChatWindow = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // components/chat/ChatWindow.jsx - Updated handleSendMessage function
+// components/chat/ChatWindow.jsx - CORRECTED handleSendMessage
 const handleSendMessage = async () => {
-  if (!newMessage.trim() || !selectedChat || !userId) return;
+  if (!newMessage.trim() || !selectedChat || !userId) {
+    console.error('❌ Cannot send message: missing data');
+    return;
+  }
 
   const messageData = {
     chatRoomId: selectedChat._id,
     content: newMessage,
     replyTo: replyingTo?._id,
-    userId: userId
+    type: "text"
+    // Remove userId - it comes from req.user.id in backend
   };
 
-  console.log("📤 Sending message via socket:", messageData);
+  console.log("📤 Sending message via REST API:", messageData);
 
   try {
-    // Method 1: Send via Socket (for real-time)
-    socket.emit("send_message", messageData);
-    
-    // Method 2: Also send via REST API as backup
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/chatroom/message/send`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(messageData)
-        }
-      );
-      
-      if (!response.ok) {
-        console.warn("REST API send failed, but socket might work");
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/chatroom/messages/send`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messageData)
       }
-    } catch (apiError) {
-      console.warn("REST API error:", apiError);
-      // Continue with socket method
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to send message');
+    }
+
+    const result = await response.json();
+    
+    if (result.success) {
+      setNewMessage("");
+      setReplyingTo(null);
+      socket.emit("typing_stop", selectedChat._id);
+      console.log("✅ Message sent successfully via REST API");
+    } else {
+      throw new Error(result.message);
     }
     
-    setNewMessage("");
-    setReplyingTo(null);
-    socket.emit("typing_stop", selectedChat._id);
-    
   } catch (error) {
-    console.error("Error sending message:", error);
-    toast.error("Failed to send message");
+    console.error("❌ Error sending message:", error);
+    toast.error(error.message || "Failed to send message");
   }
 };
 
