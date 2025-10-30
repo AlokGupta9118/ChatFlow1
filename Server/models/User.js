@@ -16,6 +16,12 @@ const userSchema = new mongoose.Schema(
       enum: ["online", "offline", "away", "busy"], 
       default: "offline" 
     },
+    // In your User model
+  storySettings: {
+  allowReplies: { type: Boolean, default: true },
+  saveToGallery: { type: Boolean, default: true },
+  hideStoryFrom: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }]
+  },
     lastSeen: { type: Date, default: Date.now },
     theme: { type: String, enum: ["light", "dark", "system"], default: "system" },
 

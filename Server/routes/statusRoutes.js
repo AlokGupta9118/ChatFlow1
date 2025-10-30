@@ -1,31 +1,37 @@
-// routes/statusRoutes.js
 import express from "express";
 import { 
-  updateUserStatus,
-  getMyStatus,
-  getUsersStatuses,
-  getOnlineFriends,
-  setUserAway,
-  setUserBusy,
-  getUserStatus,
-  bulkUpdateStatuses,
-  autoSetOfflineForInactive
-} from "../controllers/statusController.js";
+  uploadStory,
+  getMyStories,
+  getFriendsStories,
+  markStoryViewed,
+  likeStory,
+  addComment,
+  deleteStory,
+  updateStoryPrivacy,
+  getStoryViewers,
+  updateStorySettings
+} from "../controllers/storyController.js";
 import { protect } from "../middleware/authMiddleware.js";
+import multer from "multer";
 
 const router = express.Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB
+  }
+});
 
 // Protected routes
-router.put("/status", protect, updateUserStatus);
-router.get("/status/me", protect, getMyStatus);
-router.post("/statuses", protect, getUsersStatuses);
-router.get("/friends/online", protect, getOnlineFriends);
-router.put("/status/away", protect, setUserAway);
-router.put("/status/busy", protect, setUserBusy);
-router.get("/status/:userId", protect, getUserStatus);
-
-// Admin routes
-router.post("/status/bulk-update", protect, bulkUpdateStatuses);
-router.post("/status/auto-offline", protect, autoSetOfflineForInactive);
+router.post("/upload", protect, upload.single('file'), uploadStory);
+router.get("/my", protect, getMyStories);
+router.get("/friends", protect, getFriendsStories);
+router.post("/viewed", protect, markStoryViewed);
+router.post("/:storyId/like", protect, likeStory);
+router.post("/:storyId/comment", protect, addComment);
+router.delete("/:storyId", protect, deleteStory);
+router.put("/:storyId/privacy", protect, updateStoryPrivacy);
+router.get("/:storyId/viewers", protect, getStoryViewers);
+router.put("/settings/update", protect, updateStorySettings);
 
 export default router;
