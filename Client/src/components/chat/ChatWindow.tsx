@@ -1,6 +1,5 @@
 // components/chat/ChatWindow.jsx
 import { useEffect, useState, useRef, useCallback } from "react";
-import { io } from "socket.io-client";
 import { 
   Send, 
   Paperclip, 
@@ -28,7 +27,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
+import EmojiPicker from "emoji-picker-react";
 import { toast } from "sonner";
 import { getToken } from "@/utils/getToken";
 
@@ -36,7 +35,9 @@ const ChatWindow = ({
   selectedChat, 
   currentUser, 
   onBack,
-  socket 
+  socket,
+  isGroup = false,
+  onToggleGroupInfo 
 }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
@@ -49,18 +50,44 @@ const ChatWindow = ({
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
 
-
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const isGroup = selectedChat?.type === "group";
-   const token = getToken();
+  
+  // ✅ FIXED: Safe user data handling
+  const getUserData = () => {
+    try {
+      // Use prop first, then fallback to localStorage
+      const user = currentUser || JSON.parse(localStorage.getItem("user") || "{}");
+      const userId = user?._id || user?.id;
+      
+      if (!userId) {
+        console.error('❌ No user ID available in ChatWindow');
+        return { user: null, userId: null };
+      }
+      
+      return { user, userId };
+    } catch (error) {
+      console.error('❌ Error getting user data in ChatWindow:', error);
+      return { user: null, userId: null };
+    }
+  };
+
+  const { user, userId } = getUserData();
+  const token = getToken();
+  
+  // Determine if it's a group chat
+  const isGroupChat = isGroup || selectedChat?.type === "group";
+
   // Socket event handlers
   useEffect(() => {
     if (!socket || !selectedChat) return;
 
+    console.log("🔌 Setting up socket events for chat:", selectedChat._id);
+
     const handleNewMessage = (message) => {
+      console.log("📨 New message received:", message);
       if (message.chatRoom === selectedChat._id) {
         setMessages(prev => [...prev, message]);
         markMessageAsRead(message._id);
@@ -106,6 +133,9 @@ const ChatWindow = ({
       });
     };
 
+    // Join the chat room
+    socket.emit("join_chat", selectedChat._id);
+
     socket.on("new_message", handleNewMessage);
     socket.on("user_typing", handleUserTyping);
     socket.on("user_stop_typing", handleUserStopTyping);
@@ -123,50 +153,65 @@ const ChatWindow = ({
 
   // Load messages
   const loadMessages = useCallback(async (pageNum = 1) => {
-    if (!selectedChat) return;
+    if (!selectedChat || !token) {
+      console.log('❌ Missing selectedChat or token');
+      return;
+    }
     
     setLoading(true);
     try {
-     
+      console.log('📡 Loading messages for chat:', selectedChat._id);
+      
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
+        `${import.meta.env.VITE_API_URL}/api/chat/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
         {
           headers: {
-            Authorization: `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
           },
         }
       );
 
+      console.log('📨 API Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+
       const data = await response.json();
+      console.log('📦 Messages data:', data);
 
       if (data.success) {
         if (pageNum === 1) {
-          setMessages(data.messages);
+          setMessages(data.messages || []);
         } else {
-          setMessages(prev => [...data.messages, ...prev]);
+          setMessages(prev => [...(data.messages || []), ...prev]);
         }
-        setHasMoreMessages(data.hasMore);
+        setHasMoreMessages(data.hasMore || false);
         setPage(pageNum);
+        
+        console.log(`✅ Loaded ${data.messages?.length || 0} messages`);
+      } else {
+        toast.error(data.message || 'Failed to load messages');
       }
     } catch (error) {
-      console.error("Error loading messages:", error);
-      toast.error("Failed to load messages");
+      console.error("❌ Error loading messages:", error);
+      toast.error("Failed to load messages: " + error.message);
     } finally {
       setLoading(false);
     }
-  }, [selectedChat]);
+  }, [selectedChat, token]);
 
   // Initial load and when chat changes
   useEffect(() => {
     if (selectedChat) {
+      console.log("🔄 Chat changed, loading messages for:", selectedChat._id);
       setMessages([]);
       setPage(1);
       loadMessages(1);
-      
-      // Join chat room
-      socket?.emit("join_chat", selectedChat._id);
     }
-  }, [selectedChat, socket, loadMessages]);
+  }, [selectedChat, loadMessages]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -178,13 +223,23 @@ const ChatWindow = ({
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat) return;
+    if (!newMessage.trim() || !selectedChat || !userId) {
+      console.error('❌ Cannot send message: missing data', { 
+        hasMessage: !!newMessage.trim(), 
+        hasChat: !!selectedChat, 
+        hasUserId: !!userId 
+      });
+      return;
+    }
 
     const messageData = {
       chatRoomId: selectedChat._id,
       content: newMessage,
       replyTo: replyingTo?._id,
+      userId: userId // ✅ FIXED: Include userId in message data
     };
+
+    console.log("📤 Sending message:", messageData);
 
     try {
       socket.emit("send_message", messageData);
@@ -212,6 +267,7 @@ const ChatWindow = ({
   };
 
   const markMessageAsRead = (messageId) => {
+    if (!selectedChat || !userId) return;
     socket.emit("message_read", { messageId, chatRoomId: selectedChat._id });
   };
 
@@ -223,16 +279,15 @@ const ChatWindow = ({
     const file = event.target.files[0];
     if (!file) return;
 
-    // Handle file upload logic here
     console.log("File selected:", file);
-    // You would typically upload to cloud storage and get URL
+    // Handle file upload logic here
   };
 
   const getMessageStatus = (message) => {
-    if (message.sender._id !== currentUser._id) return null;
+    if (!message.sender || message.sender._id !== userId) return null;
     
     const readByCount = message.readBy?.length || 0;
-    const participantCount = selectedChat.participants.length - 1; // Exclude self
+    const participantCount = (selectedChat.participants?.length || 1) - 1;
 
     if (readByCount >= participantCount) {
       return <CheckCheck className="w-4 h-4 text-blue-500" />;
@@ -251,8 +306,27 @@ const ChatWindow = ({
   };
 
   const getOnlineStatus = (user) => {
+    if (!user || !user._id) return "offline";
     return onlineUsers.has(user._id) ? "online" : "offline";
   };
+
+  // ✅ FIXED: Get other participant for private chats
+  const getOtherParticipant = () => {
+    if (!selectedChat?.participants || !userId) return null;
+    
+    if (isGroupChat) {
+      return null; // Groups don't have a single "other" participant
+    }
+    
+    // For private chats, find the participant who isn't the current user
+    const otherParticipant = selectedChat.participants.find(
+      p => String(p.user?._id || p.user) !== String(userId)
+    );
+    
+    return otherParticipant?.user || null;
+  };
+
+  const otherParticipant = getOtherParticipant();
 
   if (!selectedChat) {
     return (
@@ -283,28 +357,38 @@ const ChatWindow = ({
           
           <div className="flex items-center space-x-3">
             <Avatar className="h-10 w-10">
-              <AvatarImage src={selectedChat.avatar || selectedChat.participants?.[0]?.user?.profilePicture} />
+              <AvatarImage src={
+                isGroupChat 
+                  ? selectedChat.avatar 
+                  : otherParticipant?.profilePicture
+              } />
               <AvatarFallback>
-                {selectedChat.name?.[0] || selectedChat.participants?.[0]?.user?.name?.[0]}
+                {isGroupChat 
+                  ? selectedChat.name?.[0] 
+                  : otherParticipant?.name?.[0]
+                }
               </AvatarFallback>
             </Avatar>
             
             <div>
               <h2 className="font-semibold text-gray-900 dark:text-white">
-                {selectedChat.name || selectedChat.participants?.find(p => p.user._id !== currentUser._id)?.user?.name}
+                {isGroupChat 
+                  ? selectedChat.name 
+                  : otherParticipant?.name || "Unknown User"
+                }
               </h2>
               <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                {isGroup ? (
-                  <span>{selectedChat.participants?.length} members</span>
+                {isGroupChat ? (
+                  <span>{selectedChat.participants?.length || 0} members</span>
                 ) : (
                   <div className="flex items-center space-x-1">
                     <div className={`w-2 h-2 rounded-full ${
-                      getOnlineStatus(selectedChat.participants?.find(p => p.user._id !== currentUser._id)?.user) === "online" 
+                      getOnlineStatus(otherParticipant) === "online" 
                         ? "bg-green-500" 
                         : "bg-gray-400"
                     }`} />
                     <span>
-                      {getOnlineStatus(selectedChat.participants?.find(p => p.user._id !== currentUser._id)?.user) === "online" 
+                      {getOnlineStatus(otherParticipant) === "online" 
                         ? "Online" 
                         : "Offline"
                       }
@@ -326,10 +410,22 @@ const ChatWindow = ({
           <Button variant="ghost" size="icon">
             <Search className="h-5 w-5" />
           </Button>
-          {isGroup && (
-            <Button variant="ghost" size="icon">
-              <Users className="h-5 w-5" />
-            </Button>
+          {isGroupChat && (
+            <>
+              <Button variant="ghost" size="icon" onClick={onToggleGroupInfo}>
+                <Users className="h-5 w-5" />
+              </Button>
+              {/* Admin badge for group admins/owners */}
+              {selectedChat.participants?.some(p => 
+                String(p.user?._id || p.user) === String(userId) && 
+                ["admin", "owner"].includes(p.role)
+              ) && (
+                <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                  <Shield className="w-3 h-3 mr-1" />
+                  Admin
+                </Badge>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -339,7 +435,12 @@ const ChatWindow = ({
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900"
       >
-        {loading && <div className="text-center">Loading messages...</div>}
+        {loading && (
+          <div className="flex justify-center items-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+            <span className="ml-2 text-gray-500">Loading messages...</span>
+          </div>
+        )}
         
         <AnimatePresence>
           {messages.map((message) => (
@@ -348,27 +449,27 @@ const ChatWindow = ({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className={`flex ${message.sender._id === currentUser._id ? "justify-end" : "justify-start"}`}
+              className={`flex ${message.sender?._id === userId ? "justify-end" : "justify-start"}`}
             >
-              <div className={`flex space-x-2 max-w-[70%] ${message.sender._id === currentUser._id ? "flex-row-reverse space-x-reverse" : ""}`}>
-                {isGroup && message.sender._id !== currentUser._id && (
+              <div className={`flex space-x-2 max-w-[70%] ${message.sender?._id === userId ? "flex-row-reverse space-x-reverse" : ""}`}>
+                {isGroupChat && message.sender?._id !== userId && (
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={message.sender.profilePicture} />
-                    <AvatarFallback>{message.sender.name[0]}</AvatarFallback>
+                    <AvatarImage src={message.sender?.profilePicture} />
+                    <AvatarFallback>{message.sender?.name?.[0] || "U"}</AvatarFallback>
                   </Avatar>
                 )}
                 
-                <div className={`flex flex-col space-y-1 ${message.sender._id === currentUser._id ? "items-end" : "items-start"}`}>
-                  {isGroup && message.sender._id !== currentUser._id && (
+                <div className={`flex flex-col space-y-1 ${message.sender?._id === userId ? "items-end" : "items-start"}`}>
+                  {isGroupChat && message.sender?._id !== userId && (
                     <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                      {message.sender.name}
+                      {message.sender?.name || "Unknown User"}
                     </span>
                   )}
                   
                   {replyingTo?._id === message._id && (
                     <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2 border border-blue-200 dark:border-blue-800">
                       <div className="text-xs text-blue-600 dark:text-blue-400">
-                        Replying to {message.sender._id === currentUser._id ? "yourself" : message.sender.name}
+                        Replying to {message.sender?._id === userId ? "yourself" : message.sender?.name}
                       </div>
                       <div className="text-sm truncate">{message.content}</div>
                     </div>
@@ -376,14 +477,14 @@ const ChatWindow = ({
 
                   <div
                     className={`rounded-2xl px-4 py-2 ${
-                      message.sender._id === currentUser._id
+                      message.sender?._id === userId
                         ? "bg-blue-500 text-white rounded-br-md"
                         : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-md border border-gray-200 dark:border-gray-700"
                     }`}
                   >
                     {message.replyTo && (
                       <div className={`text-xs border-l-2 pl-2 mb-1 ${
-                        message.sender._id === currentUser._id 
+                        message.sender?._id === userId 
                           ? "border-blue-300 text-blue-100" 
                           : "border-gray-300 text-gray-500"
                       }`}>
@@ -394,10 +495,10 @@ const ChatWindow = ({
                     <p className="text-sm">{message.content}</p>
                     
                     <div className={`flex items-center space-x-1 mt-1 ${
-                      message.sender._id === currentUser._id ? "justify-end" : "justify-start"
+                      message.sender?._id === userId ? "justify-end" : "justify-start"
                     }`}>
                       <span className={`text-xs ${
-                        message.sender._id === currentUser._id 
+                        message.sender?._id === userId 
                           ? "text-blue-200" 
                           : "text-gray-500"
                       }`}>
@@ -440,7 +541,7 @@ const ChatWindow = ({
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                Replying to {replyingTo.sender._id === currentUser._id ? "yourself" : replyingTo.sender.name}
+                Replying to {replyingTo.sender?._id === userId ? "yourself" : replyingTo.sender?.name}
               </div>
               <div className="text-sm text-blue-800 dark:text-blue-200 truncate">
                 {replyingTo.content}
@@ -492,14 +593,15 @@ const ChatWindow = ({
               }}
               placeholder="Type a message..."
               className="pr-12"
+              disabled={!userId}
             />
           </div>
 
           <Button
             onClick={handleSendMessage}
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || !userId}
             size="icon"
-            className="bg-blue-500 hover:bg-blue-600 text-white"
+            className="bg-blue-500 hover:bg-blue-600 text-white disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             <Send className="h-5 w-5" />
           </Button>
@@ -532,6 +634,13 @@ const ChatWindow = ({
         onChange={handleFileUpload}
         accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
       />
+
+      {/* Debug info */}
+      {!userId && (
+        <div className="bg-red-500 text-white p-2 text-center text-sm">
+          ⚠️ User not authenticated - Cannot send messages
+        </div>
+      )}
     </div>
   );
 };
