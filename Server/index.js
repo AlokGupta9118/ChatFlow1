@@ -41,12 +41,11 @@ connectDB();
 
 // Static uploads
 const __dirname = path.resolve();
+
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-import storyRoutes from './routes/storyRoutes.js';
-
 // Add this with your other routes
-app.use('/api/stories', storyRoutes);
+app.use('/api/stories', statusRoutes);
 // Health check
 app.get("/health", (req, res) => {
   res.status(200).json({ 
