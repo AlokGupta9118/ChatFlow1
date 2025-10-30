@@ -126,8 +126,4 @@ const chatRoomSchema = new mongoose.Schema(
   }
 );
 
-chatRoomSchema.index({ "participants.user": 1 });
-chatRoomSchema.index({ type: 1, "participants.user": 1 });
-chatRoomSchema.index({ updatedAt: -1 });
-
 export default mongoose.model("ChatRoom", chatRoomSchema);
