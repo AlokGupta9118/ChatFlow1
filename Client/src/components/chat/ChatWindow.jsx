@@ -1,3 +1,4 @@
+// components/chat/ChatWindow.jsx
 import { useEffect, useState, useRef, useCallback } from "react";
 import { 
   Send, 
@@ -31,7 +32,8 @@ import {
   MessageCircle,
   Settings,
   UserPlus,
-  X
+  X,
+  FileText
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -65,6 +67,8 @@ const ChatWindow = ({
   const [reactionPicker, setReactionPicker] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
   const [currentUserRole, setCurrentUserRole] = useState("");
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [mediaPreview, setMediaPreview] = useState(null);
 
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -101,7 +105,15 @@ const ChatWindow = ({
     const handleNewMessage = (message) => {
       console.log('📨 New message received:', message);
       if (message.chatRoom === selectedChat._id) {
-        setMessages(prev => [...prev, message]);
+        setMessages(prev => {
+          // Remove optimistic message if exists and add the real one
+          const filtered = prev.filter(msg => 
+            !msg.isOptimistic || 
+            (msg.isOptimistic && msg.content !== message.content)
+          );
+          return [...filtered, message];
+        });
+        
         // Mark as read if it's not our own message
         if (message.sender?._id !== userId) {
           markMessageAsRead(message._id);
@@ -326,12 +338,48 @@ const ChatWindow = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Fixed handleSendMessage with proper socket checks
+  // Optimized message sending with instant UI update
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || !userId) {
+    if ((!newMessage.trim() && !mediaPreview) || !selectedChat || !userId) {
       console.error('❌ Cannot send message: missing data');
       toast.error("Cannot send message: missing data");
       return;
+    }
+
+    // If we have media preview, upload media first
+    if (mediaPreview && mediaPreview.file) {
+      await uploadMediaFile(mediaPreview.file);
+      return;
+    }
+
+    // Create optimistic message for instant UI update
+    const optimisticMessage = {
+      _id: `optimistic-${Date.now()}`,
+      chatRoom: selectedChat._id,
+      sender: {
+        _id: userId,
+        name: user?.name || 'You',
+        profilePicture: user?.profilePicture,
+        status: 'online'
+      },
+      content: newMessage,
+      type: "text",
+      replyTo: replyingTo,
+      status: "sent",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      readBy: [],
+      isOptimistic: true // Flag to identify optimistic messages
+    };
+
+    // Immediately add to UI
+    setMessages(prev => [...prev, optimisticMessage]);
+    setNewMessage("");
+    setReplyingTo(null);
+    
+    // Stop typing indicator
+    if (socket && isConnected) {
+      socket.emit("typing_stop", selectedChat._id);
     }
 
     const messageData = {
@@ -364,22 +412,150 @@ const ChatWindow = ({
       const result = await response.json();
       
       if (result.success) {
-        setNewMessage("");
-        setReplyingTo(null);
-        
-        // Stop typing indicator
-        if (socket && isConnected) {
-          socket.emit("typing_stop", selectedChat._id);
-        }
-        
         console.log("✅ Message sent successfully via REST API");
+        // The socket event will replace the optimistic message with the real one
       } else {
         throw new Error(result.message);
       }
       
     } catch (error) {
       console.error("❌ Error sending message:", error);
+      
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
+      
+      // Show error but keep the message for retry
+      setNewMessage(messageData.content);
+      if (replyingTo) setReplyingTo(replyingTo);
+      
       toast.error(error.message || "Failed to send message");
+    }
+  };
+
+  // Media upload handler
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file size (10MB max)
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > maxSize) {
+      toast.error("File size too large. Maximum size is 10MB.");
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'video/mp4', 'video/quicktime', 'video/webm',
+      'audio/mpeg', 'audio/wav', 'audio/ogg',
+      'application/pdf', 'text/plain',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("File type not supported. Please use images, videos, audio, or documents.");
+      return;
+    }
+
+    // Create preview
+    let previewUrl = '';
+    let previewType = 'file';
+
+    if (file.type.startsWith('image/')) {
+      previewType = 'image';
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setMediaPreview({
+          url: e.target.result,
+          type: 'image',
+          name: file.name,
+          file: file
+        });
+      };
+      reader.readAsDataURL(file);
+      return;
+    } else if (file.type.startsWith('video/')) {
+      previewType = 'video';
+      previewUrl = URL.createObjectURL(file);
+    } else if (file.type.startsWith('audio/')) {
+      previewType = 'audio';
+      previewUrl = URL.createObjectURL(file);
+    } else {
+      previewType = 'file';
+      previewUrl = URL.createObjectURL(file);
+    }
+
+    setMediaPreview({
+      url: previewUrl,
+      type: previewType,
+      name: file.name,
+      file: file
+    });
+  };
+
+  // Upload media file
+  const uploadMediaFile = async (file) => {
+    if (!selectedChat || !userId) return;
+
+    setUploadingMedia(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('chatRoomId', selectedChat._id);
+      formData.append('type', file.type.startsWith('image/') ? 'image' : 
+                      file.type.startsWith('video/') ? 'video' : 
+                      file.type.startsWith('audio/') ? 'audio' : 'file');
+
+      console.log("📤 Uploading media file:", file.name);
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/chatroom/messages/upload`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to upload file');
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log("✅ Media uploaded successfully");
+        setMediaPreview(null);
+        // The socket will handle the new message with media
+      } else {
+        throw new Error(result.message);
+      }
+      
+    } catch (error) {
+      console.error("❌ Error uploading media:", error);
+      toast.error(error.message || "Failed to upload file");
+    } finally {
+      setUploadingMedia(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Cancel media preview
+  const cancelMediaPreview = () => {
+    if (mediaPreview?.url) {
+      URL.revokeObjectURL(mediaPreview.url);
+    }
+    setMediaPreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -406,13 +582,7 @@ const ChatWindow = ({
 
   const handleEmojiClick = (emojiData) => {
     setNewMessage(prev => prev + emojiData.emoji);
-  };
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    // Handle file upload logic here
-    toast.info(`File selected: ${file.name}`);
+    setShowEmojiPicker(false);
   };
 
   const getMessageStatus = (message) => {
@@ -454,6 +624,72 @@ const ChatWindow = ({
     );
     
     return otherParticipant?.user || null;
+  };
+
+  const renderMediaMessage = (message) => {
+    if (!message.mediaUrl) return message.content;
+
+    switch (message.type) {
+      case 'image':
+        return (
+          <div className="space-y-2">
+            <img 
+              src={message.mediaUrl} 
+              alt="Shared image" 
+              className="max-w-full rounded-lg max-h-80 object-cover"
+            />
+            {message.content && message.content !== `Sent a ${message.type}` && (
+              <p className="text-sm">{message.content}</p>
+            )}
+          </div>
+        );
+      case 'video':
+        return (
+          <div className="space-y-2">
+            <video 
+              src={message.mediaUrl} 
+              controls 
+              className="max-w-full rounded-lg max-h-80"
+            />
+            {message.content && message.content !== `Sent a ${message.type}` && (
+              <p className="text-sm">{message.content}</p>
+            )}
+          </div>
+        );
+      case 'audio':
+        return (
+          <div className="space-y-2">
+            <audio src={message.mediaUrl} controls className="w-full" />
+            {message.content && message.content !== `Sent a ${message.type}` && (
+              <p className="text-sm">{message.content}</p>
+            )}
+          </div>
+        );
+      case 'file':
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center space-x-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+              <FileText className="h-8 w-8 text-blue-500" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{message.fileName || 'Download file'}</p>
+                <p className="text-xs text-gray-500">Click to download</p>
+              </div>
+              <a 
+                href={message.mediaUrl} 
+                download={message.fileName}
+                className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+              >
+                Download
+              </a>
+            </div>
+            {message.content && message.content !== `Sent a ${message.type}` && (
+              <p className="text-sm">{message.content}</p>
+            )}
+          </div>
+        );
+      default:
+        return message.content;
+    }
   };
 
   const isAdmin = currentUserRole === "admin" || currentUserRole === "owner";
@@ -621,7 +857,7 @@ const ChatWindow = ({
                           message.sender?._id === userId
                             ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-br-2xl"
                             : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-2xl border border-gray-100 dark:border-gray-700"
-                        }`}
+                        } ${message.isOptimistic ? 'opacity-80' : ''}`}
                       >
                         {message.replyTo && (
                           <div className={`text-xs border-l-2 pl-2 mb-2 ${
@@ -633,9 +869,9 @@ const ChatWindow = ({
                           </div>
                         )}
                         
-                        <p className="text-sm lg:text-base leading-relaxed">
-                          {message.content}
-                        </p>
+                        <div className="text-sm lg:text-base leading-relaxed">
+                          {renderMediaMessage(message)}
+                        </div>
                         
                         <div className={`flex items-center space-x-2 mt-2 ${
                           message.sender?._id === userId ? "justify-end" : "justify-start"
@@ -646,6 +882,7 @@ const ChatWindow = ({
                               : "text-gray-500"
                           }`}>
                             {formatTime(message.createdAt)}
+                            {message.isOptimistic && ' • Sending...'}
                           </span>
                           {getMessageStatus(message)}
                         </div>
@@ -680,6 +917,66 @@ const ChatWindow = ({
         )}
       </div>
 
+      {/* Media Preview */}
+      {mediaPreview && (
+        <div className="px-4 lg:px-6 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-t border-blue-200 dark:border-blue-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3 flex-1">
+              {mediaPreview.type === 'image' && (
+                <img 
+                  src={mediaPreview.url} 
+                  alt="Preview" 
+                  className="w-12 h-12 rounded-lg object-cover"
+                />
+              )}
+              {mediaPreview.type === 'video' && (
+                <div className="relative">
+                  <video 
+                    src={mediaPreview.url} 
+                    className="w-12 h-12 rounded-lg object-cover"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Video className="h-6 w-6 text-white bg-black bg-opacity-50 rounded-full p-1" />
+                  </div>
+                </div>
+              )}
+              {mediaPreview.type === 'audio' && (
+                <div className="w-12 h-12 rounded-lg bg-indigo-500 flex items-center justify-center">
+                  <Mic className="h-6 w-6 text-white" />
+                </div>
+              )}
+              {mediaPreview.type === 'file' && (
+                <div className="w-12 h-12 rounded-lg bg-gray-500 flex items-center justify-center">
+                  <FileText className="h-6 w-6 text-white" />
+                </div>
+              )}
+              
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                  {mediaPreview.name}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                  {mediaPreview.type} • {uploadingMedia ? 'Uploading...' : 'Ready to send'}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              {!uploadingMedia && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={cancelMediaPreview}
+                  className="h-8 w-8 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-xl"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Enhanced Reply Preview */}
       {replyingTo && (
         <div className="px-4 lg:px-6 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-t border-blue-200 dark:border-blue-800">
@@ -713,16 +1010,22 @@ const ChatWindow = ({
               variant="ghost"
               size="icon"
               onClick={() => fileInputRef.current?.click()}
-              className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+              disabled={uploadingMedia}
+              className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
             >
-              <Paperclip className="h-5 w-5" />
+              {uploadingMedia ? (
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-500" />
+              ) : (
+                <Paperclip className="h-5 w-5" />
+              )}
             </Button>
             
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+              disabled={uploadingMedia}
+              className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
             >
               <Smile className="h-5 w-5" />
             </Button>
@@ -741,19 +1044,26 @@ const ChatWindow = ({
                   handleSendMessage();
                 }
               }}
-              placeholder={isGroupChat ? "Message the group..." : "Type a message..."}
+              placeholder={
+                uploadingMedia ? "Uploading file..." : 
+                isGroupChat ? "Message the group..." : "Type a message..."
+              }
               className="h-12 lg:h-14 rounded-2xl text-base pr-16 bg-gray-50 dark:bg-gray-700 border-0 focus:ring-2 focus:ring-indigo-500/50"
-              disabled={!userId}
+              disabled={!userId || uploadingMedia}
             />
           </div>
 
           <Button
             onClick={handleSendMessage}
-            disabled={!newMessage.trim() || !userId}
+            disabled={(!newMessage.trim() && !mediaPreview) || !userId || uploadingMedia}
             size="icon"
             className="h-12 w-12 lg:h-14 lg:w-14 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white disabled:bg-gray-400 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/25 transition-all duration-300"
           >
-            <Send className="h-5 w-5 lg:h-6 lg:w-6" />
+            {uploadingMedia ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+            ) : (
+              <Send className="h-5 w-5 lg:h-6 lg:w-6" />
+            )}
           </Button>
         </div>
 
@@ -785,7 +1095,8 @@ const ChatWindow = ({
         ref={fileInputRef}
         className="hidden"
         onChange={handleFileUpload}
-        accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
+        multiple={false}
       />
 
       {/* Connection Status */}

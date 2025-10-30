@@ -6,8 +6,20 @@ import {getAllGroups,getMessages,sendMessage,requestToJoinGroup,getMyPendingRequ
   approveRequest,
   rejectRequest,  getOrCreatePrivateChat, 
   getPrivateChatRoom } from "../controllers/chatController.js";
+  import { uploadMedia } from '../controllers/mediaController.js';
+import multer from 'multer';
+
 const router = express.Router();
 
+
+const upload = multer({
+  storage: multer.memoryStorage(), // or diskStorage for local files
+  limits: {
+    fileSize: 50* 1024 * 1024, // 50MB limit
+  }
+});
+
+router.post('/messages/upload', upload.single('file'), uploadMedia);
 // GET messages with a friend
 
 router.get("/mygroups", protect, getMyGroups);

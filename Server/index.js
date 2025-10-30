@@ -20,6 +20,7 @@ import statusRoutes from "./routes/statusRoutes.js";
 import chatRoutes from "./routes/chat.js";
 import SocketService from "./socket/messageSocket.js"; // Your updated SocketService
 
+
 dotenv.config();
 
 const app = express();
@@ -36,6 +37,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // MongoDB
 connectDB();
+
 
 // Static uploads
 const __dirname = path.resolve();
