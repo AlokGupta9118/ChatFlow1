@@ -30,7 +30,14 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newGroup, setNewGroup] = useState({ name: "", avatar: "", description: "" });
+  const [newGroup, setNewGroup] = useState({ 
+    name: "", 
+    avatar: "", 
+    description: "" 
+  });
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [availableUsers, setAvailableUsers] = useState([]);
+  const [userSearch, setUserSearch] = useState("");
   const [pendingRequestsMap, setPendingRequestsMap] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -71,48 +78,74 @@ const GroupChatSidebar = ({ onSelectGroup, currentUser }) => {
     }
   };
 
-const handleCreateGroup = async (e) => {
-  e.preventDefault();
-  if (!newGroup.name.trim()) {
-    toast.error("Group name is required");
-    return;
-  }
-  
-  try {
-    // Add required fields that backend expects
-    const groupData = {
-      name: newGroup.name,
-      description: newGroup.description,
-      avatar: newGroup.avatar,
-      participantIds: [], // Empty array for now, you can add user selection later
-      settings: {
-        isPrivate: true,
-        allowReactions: true,
-        allowMedia: true,
-        allowLinks: true,
-        allowVoice: true,
-        allowGIFs: true,
-        allowMessageEdit: true,
-        allowMessageDelete: true,
-        allowInvites: true
-      }
-    };
+  const fetchUsers = async (query = "") => {
+    if (!token) return;
+    try {
+      // Try different user endpoints - adjust based on your API
+      const { data } = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/users?search=${query}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setAvailableUsers(data.users || data || []);
+    } catch (err) {
+      console.error("Error fetching users:", err);
+      // If the endpoint doesn't exist, use empty array
+      setAvailableUsers([]);
+    }
+  };
 
-    await axios.post(
-      `${import.meta.env.VITE_API_URL}/chatroom/groups/create`,
-      groupData,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    if (!newGroup.name.trim()) {
+      toast.error("Group name is required");
+      return;
+    }
     
-    toast.success("Group created successfully!");
-    setShowCreateModal(false);
-    setNewGroup({ name: "", avatar: "", description: "" });
-    fetchGroups();
-  } catch (err) {
-    console.error("❌ handleCreateGroup:", err);
-    toast.error(err.response?.data?.message || "Failed to create group");
-  }
-};
+    try {
+      // Prepare data in the format backend expects
+      const groupData = {
+        name: newGroup.name,
+        description: newGroup.description,
+        avatar: newGroup.avatar,
+        participantIds: selectedUsers.map(user => user._id), // Include selected users
+        settings: {
+          isPrivate: true,
+          allowReactions: true,
+          allowMedia: true,
+          allowLinks: true,
+          allowVoice: true,
+          allowGIFs: true,
+          allowMessageEdit: true,
+          allowMessageDelete: true,
+          allowInvites: true
+        }
+      };
+
+      console.log("📤 Sending group data:", groupData);
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/chatroom/groups/create`,
+        groupData,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      toast.success("Group created successfully!");
+      setShowCreateModal(false);
+      setNewGroup({ name: "", avatar: "", description: "" });
+      setSelectedUsers([]);
+      setUserSearch("");
+      fetchGroups();
+    } catch (err) {
+      console.error("❌ handleCreateGroup error:", err);
+      const errorMessage = err.response?.data?.message || "Failed to create group";
+      toast.error(errorMessage);
+      
+      // Log detailed error for debugging
+      if (err.response) {
+        console.error("Response error:", err.response.data);
+      }
+    }
+  };
 
   const handleRequestJoin = async (groupId) => {
     if (!groupId) return toast.error("Invalid group");
@@ -174,6 +207,18 @@ const handleCreateGroup = async (e) => {
   useEffect(() => {
     fetchGroups();
   }, []);
+
+  useEffect(() => {
+    if (userSearch) {
+      const delayDebounceFn = setTimeout(() => {
+        fetchUsers(userSearch);
+      }, 300);
+
+      return () => clearTimeout(delayDebounceFn);
+    } else {
+      setAvailableUsers([]);
+    }
+  }, [userSearch]);
 
   const filteredGroups = groups.filter(group =>
     group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -496,7 +541,7 @@ const handleCreateGroup = async (e) => {
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                     <Hash className="w-4 h-4" />
-                    Group Name
+                    Group Name *
                   </label>
                   <Input
                     type="text"
@@ -507,6 +552,7 @@ const handleCreateGroup = async (e) => {
                     }
                     className="w-full"
                     autoFocus
+                    required
                   />
                 </div>
 
@@ -542,11 +588,86 @@ const handleCreateGroup = async (e) => {
                   />
                 </div>
 
+                {/* User Selection Section */}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <UserPlus className="w-4 h-4" />
+                    Add Members (Optional)
+                  </label>
+                  
+                  {/* User search input */}
+                  <Input
+                    type="text"
+                    placeholder="Search users to add..."
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    className="w-full"
+                  />
+                  
+                  {/* Selected users */}
+                  {selectedUsers.length > 0 && (
+                    <div className="flex flex-wrap gap-2 p-2 border rounded-lg bg-gray-50 dark:bg-gray-800">
+                      {selectedUsers.map(user => (
+                        <Badge key={user._id} variant="secondary" className="flex items-center gap-1">
+                          <Avatar className="w-4 h-4">
+                            <AvatarImage src={user.profilePicture} />
+                            <AvatarFallback className="text-xs">
+                              {user.name?.charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
+                          {user.name}
+                          <X 
+                            className="w-3 h-3 cursor-pointer hover:text-red-500" 
+                            onClick={() => setSelectedUsers(prev => prev.filter(u => u._id !== user._id))}
+                          />
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Available users dropdown */}
+                  {userSearch && availableUsers.length > 0 && (
+                    <div className="max-h-32 overflow-y-auto border rounded-lg bg-white dark:bg-gray-800">
+                      {availableUsers
+                        .filter(user => !selectedUsers.some(selected => selected._id === user._id))
+                        .map(user => (
+                          <div
+                            key={user._id}
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                            onClick={() => {
+                              setSelectedUsers(prev => [...prev, user]);
+                              setUserSearch("");
+                            }}
+                          >
+                            <Avatar className="w-6 h-6">
+                              <AvatarImage src={user.profilePicture} />
+                              <AvatarFallback className="text-xs">
+                                {user.name?.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100 block truncate">
+                                {user.name}
+                              </span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400 block truncate">
+                                {user.email}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex gap-3 pt-4">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setShowCreateModal(false)}
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setSelectedUsers([]);
+                      setUserSearch("");
+                    }}
                     className="flex-1"
                   >
                     Cancel
@@ -554,6 +675,7 @@ const handleCreateGroup = async (e) => {
                   <Button
                     type="submit"
                     className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 shadow-lg"
+                    disabled={!newGroup.name.trim()}
                   >
                     <Sparkles className="w-4 h-4 mr-2" />
                     Create Group
