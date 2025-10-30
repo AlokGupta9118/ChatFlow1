@@ -1,7 +1,7 @@
 // controllers/mediaController.js
 import Message from "../models/Message.js";
 import ChatRoom from "../models/ChatRoom.js";
-import { uploadToCloudinary } from "../utils/cloudinary.js"; // You'll need to set this up
+import { uploadToCloudinary } from "../utils/Cloudinary.js";
 
 export const uploadMedia = async (req, res) => {
   try {
