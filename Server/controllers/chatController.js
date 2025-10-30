@@ -243,8 +243,8 @@ export const getChatRoomDetails = async (req, res) => {
 
     const chatRoom = await ChatRoom.findOne({
       _id: chatRoomId,
-      "participants.user": userId,
-      isActive: true
+      "participants.user": userId
+      
     })
     .populate("participants.user", "name profilePicture status lastSeen")
     .populate("createdBy", "name profilePicture")
@@ -688,8 +688,7 @@ export const sendMessage = async (req, res) => {
     // Verify user has access to this chat room
     const chatRoom = await ChatRoom.findOne({
       _id: chatRoomId,
-      "participants.user": userId,
-      isActive: true
+      "participants.user": userId
     }).populate("participants.user", "name profilePicture status socketId");
 
     if (!chatRoom) {
