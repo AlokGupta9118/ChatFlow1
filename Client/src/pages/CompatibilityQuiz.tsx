@@ -388,25 +388,25 @@ export default function AdvancedCompatibilityGame() {
     };
   }, []);
 
-  // NEW: Enhanced input handlers (from Truth and Dare)
-  const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setPlayerName(e.target.value);
-  }, []);
+  
+  // FIXED: Input handlers without useCallback to prevent stale closures
+const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  setPlayerName(e.target.value);
+};
 
-  const handleRoomChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setRoomId(e.target.value.toUpperCase());
-  }, []);
+const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  setRoomId(e.target.value.toUpperCase());
+};
 
-  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      if (playerName.trim() && !roomId.trim()) {
-        createRoom();
-      } else if (playerName.trim() && roomId.trim()) {
-        joinRoom();
-      }
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+  if (e.key === 'Enter') {
+    if (playerName.trim() && !roomId.trim()) {
+      createRoom();
+    } else if (playerName.trim() && roomId.trim()) {
+      joinRoom();
     }
-  }, [playerName, roomId]);
-
+  }
+};
   // KEEP ALL YOUR EXISTING STATE PERSISTENCE AND SOCKET CODE
   useEffect(() => {
     const savedState = localStorage.getItem('compatibilityGameState');
