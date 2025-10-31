@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,7 +23,7 @@ import {
   Zap as Lightning, Moon, Sun, Wifi, WifiOff,
   BarChart3, GitBranch, Eye, EyeOff, RotateCcw,
   Smartphone, Monitor, ArrowDown, X, Home,
-  User, Key
+  User, Key, ArrowLeft
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
@@ -121,8 +121,8 @@ const additionalCompatibilityFactors = {
   relationshipGoals: ["Long-term", "Casual", "Marriage", "Exploratory", "Friendship"]
 };
 
-// Enhanced Input Component with better mobile support
-const EnhancedInput = ({ 
+// NEW: FIXED Input Component with proper mobile handling
+const FixedInput = React.forwardRef(({ 
   label, 
   icon: Icon, 
   placeholder, 
@@ -134,39 +134,72 @@ const EnhancedInput = ({
   autoFocus = false,
   className = "",
   ...props 
-}) => (
-  <div className="space-y-2">
-    <Label htmlFor={label.toLowerCase()} className="font-semibold text-sm text-white/90 flex items-center">
-      <Icon className="w-4 h-4 mr-2" />
-      {label}
-    </Label>
-    <div className="relative">
-      <Input
-        id={label.toLowerCase()}
-        type={type}
-        placeholder={placeholder}
-        value={value}
-        onChange={onChange}
-        onFocus={onFocus}
-        onKeyPress={onKeyPress}
-        autoFocus={autoFocus}
-        className={`
-          w-full h-12 px-4 py-3 bg-white/10 border-2 border-white/20 
-          rounded-xl text-white placeholder-white/60
-          focus:bg-white/15 focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30
-          transition-all duration-200 text-base
-          backdrop-blur-sm
-          ${className}
-        `}
-        autoComplete="off"
-        {...props}
-      />
+}, ref) => {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  const handleFocus = (e) => {
+    setIsFocused(true);
+    if (onFocus) onFocus(e);
+    
+    // Prevent zoom on iOS
+    if (window.innerWidth <= 768) {
+      const target = e.target;
+      setTimeout(() => {
+        target.style.fontSize = "16px";
+      }, 100);
+    }
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={label.toLowerCase()} className="font-semibold text-sm text-white/90 flex items-center">
+        <Icon className="w-4 h-4 mr-2" />
+        {label}
+      </Label>
+      <div className="relative">
+        <Input
+          ref={ref}
+          id={label.toLowerCase()}
+          type={type}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          onKeyPress={onKeyPress}
+          autoFocus={autoFocus}
+          className={`
+            w-full h-12 px-4 bg-white/10 border-2 rounded-xl
+            text-white placeholder-white/60 text-base
+            transition-all duration-200 backdrop-blur-sm
+            ${isFocused 
+              ? 'border-purple-400 bg-white/15 ring-2 ring-purple-400/30' 
+              : 'border-white/20 hover:border-white/30'
+            }
+            ${className}
+          `}
+          style={{
+            WebkitAppearance: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            fontSize: '16px',
+            minHeight: '44px'
+          }}
+          autoComplete="off"
+          {...props}
+        />
+      </div>
     </div>
-  </div>
-);
+  );
+});
+
+FixedInput.displayName = "FixedInput";
 
 export default function AdvancedCompatibilityGame() {
-  // Core states
+  // Core states - KEEP ALL YOUR EXISTING STATES
   const [roomId, setRoomId] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [isHost, setIsHost] = useState(false);
@@ -234,27 +267,67 @@ export default function AdvancedCompatibilityGame() {
   const optionsContainerRef = useRef<HTMLDivElement>(null);
   const questionContainerRef = useRef<HTMLDivElement>(null);
 
-  // Enhanced mobile detection and viewport setup
+  // NEW: Improved mobile detection with better viewport handling
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
       
+      // Set proper viewport height for mobile
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
+      
+      // Add mobile class for specific styling
+      if (mobile) {
+        document.body.classList.add('mobile-device');
+      } else {
+        document.body.classList.remove('mobile-device');
+      }
     };
 
     checkMobile();
-    window.addEventListener('resize', checkMobile);
+    
+    const handleResize = () => {
+      checkMobile();
+    };
+
+    window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', checkMobile);
     
     return () => {
-      window.removeEventListener('resize', checkMobile);
+      window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', checkMobile);
     };
   }, []);
 
-  // Enhanced state persistence
+  // NEW: Improved input handlers with useCallback to prevent re-renders
+  const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setPlayerName(e.target.value);
+  }, []);
+
+  const handleRoomChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setRoomId(e.target.value.toUpperCase());
+  }, []);
+
+  const handleNameFocus = useCallback(() => {
+    setFocusedInput('name');
+  }, []);
+
+  const handleRoomFocus = useCallback(() => {
+    setFocusedInput('room');
+  }, []);
+
+  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      if (playerName.trim() && !roomId.trim()) {
+        createRoom();
+      } else if (playerName.trim() && roomId.trim()) {
+        joinRoom();
+      }
+    }
+  }, [playerName, roomId]);
+
+  // KEEP ALL YOUR EXISTING STATE PERSISTENCE AND SOCKET CODE
   useEffect(() => {
     const savedState = localStorage.getItem('compatibilityGameState');
     if (savedState) {
@@ -290,7 +363,7 @@ export default function AdvancedCompatibilityGame() {
     }
   }, [playerName, roomId, darkMode, joined, gameStarted, currentQuestion, answers, advancedAnswers, gameState]);
 
-  // Enhanced socket connection management
+  // KEEP ALL YOUR EXISTING SOCKET EVENT HANDLERS
   useEffect(() => {
     const handleConnect = () => {
       setConnectionStatus("connected");
@@ -322,7 +395,7 @@ export default function AdvancedCompatibilityGame() {
     };
   }, [joined, roomId, playerName]);
 
-  // Enhanced socket event handlers
+  // KEEP ALL YOUR EXISTING SOCKET EVENT HANDLERS
   useEffect(() => {
     const handleRoomCreated = (room: any) => {
       if (!room) return;
@@ -499,7 +572,7 @@ export default function AdvancedCompatibilityGame() {
     };
   }, []);
 
-  // Enhanced timer with proper cleanup
+  // KEEP ALL YOUR EXISTING TIMER AND SOUND EFFECTS
   useEffect(() => {
     if (timeLeft === null || !gameStarted || showResults) return;
     
@@ -515,14 +588,12 @@ export default function AdvancedCompatibilityGame() {
     return () => clearTimeout(timer);
   }, [timeLeft, gameStarted, showResults]);
 
-  // Start timer when question changes
   useEffect(() => {
     if (gameStarted && !showResults && currentQuestion < questions.length) {
       setTimeLeft(25);
     }
   }, [currentQuestion, gameStarted, showResults]);
 
-  // Enhanced sound effects
   const playSound = (soundName: string) => {
     if (!soundEnabled) return;
     
@@ -557,6 +628,7 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
+  // KEEP ALL YOUR EXISTING GAME FUNCTIONS
   const handleAutoSubmit = () => {
     if (currentAnswer) {
       submitAnswer();
@@ -576,62 +648,6 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // Enhanced mobile screenshot capture
-  const captureScreenshot = async () => {
-    if (!screenshotRef.current) return;
-    
-    setIsCapturing(true);
-    setShareSuccess(false);
-    
-    try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      const canvas = await html2canvas(screenshotRef.current, {
-        backgroundColor: darkMode ? '#0f172a' : '#ffffff',
-        scale: isMobile ? 1 : 1.2,
-        useCORS: true,
-        logging: false,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: document.documentElement.scrollWidth,
-        windowHeight: document.documentElement.scrollHeight
-      });
-      
-      const imageDataUrl = canvas.toDataURL('image/png', 0.9);
-      setCapturedImage(imageDataUrl);
-      
-      try {
-        if (navigator.clipboard && navigator.clipboard.write) {
-          const blob = await (await fetch(imageDataUrl)).blob();
-          const item = new ClipboardItem({ 'image/png': blob });
-          await navigator.clipboard.write([item]);
-          setShareSuccess(true);
-          setTimeout(() => setShareSuccess(false), 2000);
-        } else {
-          downloadImage(imageDataUrl);
-        }
-      } catch (clipboardError) {
-        downloadImage(imageDataUrl);
-      }
-      
-      setShowShareModal(true);
-    } catch (error) {
-      console.error('Screenshot capture failed:', error);
-    } finally {
-      setIsCapturing(false);
-    }
-  };
-
-  const downloadImage = (dataUrl: string) => {
-    const link = document.createElement('a');
-    link.download = `compatibility-${roomId}-${Date.now()}.png`;
-    link.href = dataUrl;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Enhanced room creation with validation
   const createRoom = () => {
     const trimmedName = playerName.trim();
     if (!trimmedName || trimmedName.length < 2) {
@@ -646,7 +662,6 @@ export default function AdvancedCompatibilityGame() {
     });
   };
 
-  // Enhanced room joining with validation
   const joinRoom = () => {
     const trimmedName = playerName.trim();
     const trimmedRoomId = roomId.trim();
@@ -676,7 +691,6 @@ export default function AdvancedCompatibilityGame() {
     socket.emit("start-game", { roomId });
   };
 
-  // Enhanced answer submission with waiting state
   const submitAnswer = () => {
     if (!currentAnswer || isSubmitting) return;
 
@@ -755,13 +769,12 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // Enhanced mobile option selection
   const handleOptionSelect = (option: string) => {
     setCurrentAnswer(option);
     playSound("select");
   };
 
-  // Enhanced compatibility calculation with additional factors
+  // KEEP ALL YOUR EXISTING COMPATIBILITY CALCULATION
   const calculateCompatibility = () => {
     console.log("Calculating compatibility with bothAnswers:", bothAnswers);
     
@@ -956,7 +969,7 @@ export default function AdvancedCompatibilityGame() {
     return "from-purple-400 to-pink-500";
   };
 
-  // Exit game function
+  // NEW: Improved navigation functions
   const exitGame = () => {
     if (window.confirm("Are you sure you want to exit the game?")) {
       localStorage.removeItem('compatibilityGameState');
@@ -964,7 +977,6 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // Back to home function
   const backToHome = () => {
     if (window.confirm("Return to home screen? Your current progress will be saved.")) {
       setJoined(false);
@@ -973,6 +985,8 @@ export default function AdvancedCompatibilityGame() {
       setWaitingForPartner(false);
     }
   };
+
+  // KEEP ALL YOUR EXISTING COMPONENTS BUT ADD BACK BUTTONS
 
   // Enhanced Player Card Component
   const PlayerCard = ({ player, index }: { player: any, index: number }) => (
@@ -1255,7 +1269,62 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // Enhanced ResultsScreen with comprehensive error handling
+  // NEW: Enhanced mobile screenshot capture
+  const captureScreenshot = async () => {
+    if (!screenshotRef.current) return;
+    
+    setIsCapturing(true);
+    setShareSuccess(false);
+    
+    try {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const canvas = await html2canvas(screenshotRef.current, {
+        backgroundColor: darkMode ? '#0f172a' : '#ffffff',
+        scale: isMobile ? 1 : 1.2,
+        useCORS: true,
+        logging: false,
+        scrollX: 0,
+        scrollY: -window.scrollY,
+        windowWidth: document.documentElement.scrollWidth,
+        windowHeight: document.documentElement.scrollHeight
+      });
+      
+      const imageDataUrl = canvas.toDataURL('image/png', 0.9);
+      setCapturedImage(imageDataUrl);
+      
+      try {
+        if (navigator.clipboard && navigator.clipboard.write) {
+          const blob = await (await fetch(imageDataUrl)).blob();
+          const item = new ClipboardItem({ 'image/png': blob });
+          await navigator.clipboard.write([item]);
+          setShareSuccess(true);
+          setTimeout(() => setShareSuccess(false), 2000);
+        } else {
+          downloadImage(imageDataUrl);
+        }
+      } catch (clipboardError) {
+        downloadImage(imageDataUrl);
+      }
+      
+      setShowShareModal(true);
+    } catch (error) {
+      console.error('Screenshot capture failed:', error);
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  const downloadImage = (dataUrl: string) => {
+    const link = document.createElement('a');
+    link.download = `compatibility-${roomId}-${Date.now()}.png`;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Enhanced ResultsScreen with BACK and CLOSE buttons
   const ResultsScreen = () => {
     const compatibility = calculateCompatibility();
     const { score, breakdown, insights, advancedAnalysis, advancedFactors, additionalFactors } = compatibility;
@@ -1294,14 +1363,16 @@ export default function AdvancedCompatibilityGame() {
     return (
       <div 
         ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
+        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 ${
           darkMode 
             ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
             : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
         }`}
+        style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}
       >
         <ConnectionStatus />
         
+        {/* NEW: Back Button */}
         <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
           <Button
             variant="ghost"
@@ -1309,7 +1380,7 @@ export default function AdvancedCompatibilityGame() {
             onClick={backToHome}
             className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
           >
-            <Home className="w-4 h-4 md:w-5 md:h-5" />
+            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
           </Button>
           <Button
             variant="ghost"
@@ -1470,6 +1541,8 @@ export default function AdvancedCompatibilityGame() {
         </div>
 
         {showAdvancedSettings && <SettingsPanel />}
+        
+        {/* NEW: Enhanced Share Modal with CLOSE button */}
         {showShareModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 md:p-4">
             <Card className="max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-xl md:rounded-2xl border-0 max-h-[90vh] overflow-y-auto">
@@ -1580,25 +1653,27 @@ export default function AdvancedCompatibilityGame() {
           variant="outline"
           className="mr-2"
         >
-          <Home className="w-4 h-4 mr-2" />
+          <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Home
         </Button>
       </Card>
     </div>
   );
 
-  // Waiting Screen Component
+  // Waiting Screen Component with BACK button
   const WaitingScreen = () => (
     <div 
       ref={mainContainerRef}
-      className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
+      className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 ${
         darkMode 
           ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
           : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
       }`}
+      style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}
     >
       <ConnectionStatus />
       
+      {/* NEW: Back Button */}
       <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
         <Button
           variant="ghost"
@@ -1606,7 +1681,7 @@ export default function AdvancedCompatibilityGame() {
           onClick={backToHome}
           className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
         >
-          <Home className="w-4 h-4 md:w-5 md:h-5" />
+          <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
         </Button>
         <Button
           variant="ghost"
@@ -1715,14 +1790,16 @@ export default function AdvancedCompatibilityGame() {
     return (
       <div 
         ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
+        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 ${
           darkMode 
             ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
             : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
         }`}
+        style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}
       >
         <ConnectionStatus />
         
+        {/* NEW: Back Button */}
         <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
           <Button
             variant="ghost"
@@ -1730,7 +1807,7 @@ export default function AdvancedCompatibilityGame() {
             onClick={backToHome}
             className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
           >
-            <Home className="w-4 h-4 md:w-5 md:h-5" />
+            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
           </Button>
           <Button
             variant="ghost"
@@ -1938,179 +2015,152 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // Completely redesigned Join/Create Screen with enhanced inputs
-  const JoinCreateScreen = () => {
-    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setPlayerName(e.target.value);
-    };
-
-    const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setRoomId(e.target.value.toUpperCase());
-    };
-
-    const handleNameFocus = () => {
-      setFocusedInput('name');
-    };
-
-    const handleRoomFocus = () => {
-      setFocusedInput('room');
-    };
-
-    const handleKeyPress = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        if (playerName.trim() && !roomId.trim()) {
-          createRoom();
-        } else if (playerName.trim() && roomId.trim()) {
-          joinRoom();
-        }
-      }
-    };
-
-    return (
-      <div 
-        ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-4 md:p-6 transition-colors duration-300 overflow-x-hidden ${
-          darkMode 
-            ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-blue-900' 
-            : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-        }`}
-        style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}
-      >
-        <ConnectionStatus />
-        
-        <div className="absolute top-4 left-4">
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-            className={`rounded-full ${darkMode ? 'bg-slate-800/50 hover:bg-slate-700/50 text-white' : 'bg-white/80 hover:bg-white text-gray-700'} backdrop-blur-sm border-0`}
-          >
-            <Settings className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
-        </div>
-
-        <div className="w-full max-w-md mx-auto px-4">
-          <Card className={`p-6 md:p-8 backdrop-blur-sm border-0 shadow-2xl transition-all duration-300 ${
-            darkMode ? 'bg-slate-800/40' : 'bg-white/80'
-          }`}>
-            <div className="text-center mb-8">
-              <div className="flex justify-center mb-6">
-                <div className="relative">
-                  <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
-                    <Heart className="w-10 h-10 md:w-12 md:h-12 text-white animate-pulse" />
-                  </div>
-                  <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 absolute -top-2 -right-2 animate-spin" />
-                </div>
-              </div>
-              
-              <h1 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Compatibility Test
-              </h1>
-              <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                Discover your deep connection with someone special
-              </p>
-            </div>
-
-            <div className="space-y-6 mb-8">
-              <EnhancedInput
-                label="Your Name"
-                icon={User}
-                placeholder="Enter your beautiful name"
-                value={playerName}
-                onChange={handleNameChange}
-                onFocus={handleNameFocus}
-                onKeyPress={handleKeyPress}
-                autoFocus={!isMobile}
-                ref={nameInputRef}
-              />
-              
-              <EnhancedInput
-                label="Room Code"
-                icon={Key}
-                placeholder="Enter room code (optional)"
-                value={roomId}
-                onChange={handleRoomChange}
-                onFocus={handleRoomFocus}
-                onKeyPress={handleKeyPress}
-                ref={roomInputRef}
-              />
-            </div>
-
-            <div className="space-y-4">
-              <Button
-                onClick={createRoom}
-                disabled={!playerName.trim()}
-                size="lg"
-                className="w-full py-6 text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95"
-              >
-                <Crown className="w-5 h-5 mr-3" />
-                Create New Room
-              </Button>
-
-              <Button
-                onClick={joinRoom}
-                disabled={!playerName.trim() || !roomId.trim()}
-                size="lg"
-                className="w-full py-6 text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95"
-              >
-                <Users className="w-5 h-5 mr-3" />
-                Join Existing Room
-              </Button>
-            </div>
-
-            <div className={`mt-8 p-4 rounded-xl border ${
-              darkMode ? 'bg-slate-700/30 border-slate-600' : 'bg-white/50 border-gray-200'
-            }`}>
-              <h4 className="font-semibold mb-3 flex items-center justify-center text-sm">
-                <Sparkles className="w-4 h-4 mr-2 text-yellow-500" />
-                Advanced Features
-              </h4>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="flex items-center space-x-1">
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                  <span>Personality Matching</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                  <span>Values Alignment</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
-                  <span>Real-time Progress</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <div className="w-1.5 h-1.5 bg-pink-500 rounded-full"></div>
-                  <span>Interactive Results</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 text-center">
-              <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs ${
-                darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
-              }`}>
-                {isMobile ? (
-                  <>
-                    <Smartphone className="w-3 h-3" />
-                    <span>Mobile Optimized</span>
-                  </>
-                ) : (
-                  <>
-                    <Monitor className="w-3 h-3" />
-                    <span>Desktop Experience</span>
-                  </>
-                )}
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {showAdvancedSettings && <SettingsPanel />}
+  // Completely redesigned Join/Create Screen with FIXED inputs
+  const JoinCreateScreen = () => (
+    <div 
+      ref={mainContainerRef}
+      className={`min-h-screen flex flex-col items-center justify-center p-4 md:p-6 transition-colors duration-300 ${
+        darkMode 
+          ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-blue-900' 
+          : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+      }`}
+      style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}
+    >
+      <ConnectionStatus />
+      
+      <div className="absolute top-4 left-4">
+        <Button
+          variant="ghost"
+          size={isMobile ? "sm" : "default"}
+          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+          className={`rounded-full ${darkMode ? 'bg-slate-800/50 hover:bg-slate-700/50 text-white' : 'bg-white/80 hover:bg-white text-gray-700'} backdrop-blur-sm border-0`}
+        >
+          <Settings className="w-4 h-4 md:w-5 md:h-5" />
+        </Button>
       </div>
-    );
-  };
 
-  // Add enhanced CSS for mobile optimizations
+      <div className="w-full max-w-md mx-auto px-4">
+        <Card className={`p-6 md:p-8 backdrop-blur-sm border-0 shadow-2xl transition-all duration-300 ${
+          darkMode ? 'bg-slate-800/40' : 'bg-white/80'
+        }`}>
+          <div className="text-center mb-8">
+            <div className="flex justify-center mb-6">
+              <div className="relative">
+                <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
+                  <Heart className="w-10 h-10 md:w-12 md:h-12 text-white animate-pulse" />
+                </div>
+                <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 absolute -top-2 -right-2 animate-spin" />
+              </div>
+            </div>
+            
+            <h1 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              Compatibility Test
+            </h1>
+            <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              Discover your deep connection with someone special
+            </p>
+          </div>
+
+          {/* NEW: FIXED Input Fields */}
+          <div className="space-y-6 mb-8">
+            <FixedInput
+              ref={nameInputRef}
+              label="Your Name"
+              icon={User}
+              placeholder="Enter your beautiful name"
+              value={playerName}
+              onChange={handleNameChange}
+              onFocus={handleNameFocus}
+              onKeyPress={handleKeyPress}
+              autoFocus={!isMobile}
+            />
+            
+            <FixedInput
+              ref={roomInputRef}
+              label="Room Code"
+              icon={Key}
+              placeholder="Enter room code (optional)"
+              value={roomId}
+              onChange={handleRoomChange}
+              onFocus={handleRoomFocus}
+              onKeyPress={handleKeyPress}
+            />
+          </div>
+
+          <div className="space-y-4">
+            <Button
+              onClick={createRoom}
+              disabled={!playerName.trim()}
+              size="lg"
+              className="w-full py-6 text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95"
+            >
+              <Crown className="w-5 h-5 mr-3" />
+              Create New Room
+            </Button>
+
+            <Button
+              onClick={joinRoom}
+              disabled={!playerName.trim() || !roomId.trim()}
+              size="lg"
+              className="w-full py-6 text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95"
+            >
+              <Users className="w-5 h-5 mr-3" />
+              Join Existing Room
+            </Button>
+          </div>
+
+          <div className={`mt-8 p-4 rounded-xl border ${
+            darkMode ? 'bg-slate-700/30 border-slate-600' : 'bg-white/50 border-gray-200'
+          }`}>
+            <h4 className="font-semibold mb-3 flex items-center justify-center text-sm">
+              <Sparkles className="w-4 h-4 mr-2 text-yellow-500" />
+              Advanced Features
+            </h4>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="flex items-center space-x-1">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                <span>Personality Matching</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                <span>Values Alignment</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                <span>Real-time Progress</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <div className="w-1.5 h-1.5 bg-pink-500 rounded-full"></div>
+                <span>Interactive Results</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 text-center">
+            <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs ${
+              darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
+            }`}>
+              {isMobile ? (
+                <>
+                  <Smartphone className="w-3 h-3" />
+                  <span>Mobile Optimized</span>
+                </>
+              ) : (
+                <>
+                  <Monitor className="w-3 h-3" />
+                  <span>Desktop Experience</span>
+                </>
+              )}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {showAdvancedSettings && <SettingsPanel />}
+    </div>
+  );
+
+  // NEW: Enhanced CSS for mobile optimizations
   useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
@@ -2130,6 +2180,15 @@ export default function AdvancedCompatibilityGame() {
       }
       
       /* Enhanced Mobile Optimizations */
+      .mobile-device {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -khtml-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+      
       @media (max-width: 768px) {
         .mobile-optimized-container {
           padding-left: env(safe-area-inset-left);
@@ -2137,28 +2196,33 @@ export default function AdvancedCompatibilityGame() {
           padding-bottom: env(safe-area-inset-bottom);
         }
         
+        /* Better touch targets */
         button, [role="button"] {
           min-height: 44px;
           min-width: 44px;
         }
         
-        input, textarea {
+        /* Improved input handling */
+        input, textarea, select {
           font-size: 16px !important;
           min-height: 44px;
         }
         
+        /* Prevent zoom on iOS */
         @media screen and (max-width: 768px) {
           input, select, textarea {
             font-size: 16px !important;
           }
         }
         
+        /* Smooth scrolling */
         * {
           -webkit-overflow-scrolling: touch;
         }
         
+        /* Better scrollbar */
         ::-webkit-scrollbar {
-          width: 4px;
+          width: 6px;
         }
         
         ::-webkit-scrollbar-track {
@@ -2169,16 +2233,27 @@ export default function AdvancedCompatibilityGame() {
           background: rgba(168, 85, 247, 0.5);
           border-radius: 10px;
         }
+        
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(168, 85, 247, 0.7);
+        }
       }
       
-      * {
+      /* Smooth transitions */
+      .smooth-transition {
         transition: all 0.2s ease-in-out;
       }
       
+      /* Focus styles */
       button:focus-visible,
       input:focus-visible {
         outline: 2px solid #8b5cf6;
         outline-offset: 2px;
+      }
+      
+      /* Prevent blue highlight on tap */
+      * {
+        -webkit-tap-highlight-color: transparent;
       }
     `;
     document.head.appendChild(style);
