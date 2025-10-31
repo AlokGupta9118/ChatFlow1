@@ -33,88 +33,6 @@ const socket = io(import.meta.env.VITE_API_URL || "http://localhost:3001", {
   autoConnect: true
 });
 
-// NEW: Enhanced Input Component with better mobile handling
-const EnhancedInput = React.forwardRef(({ 
-  label, 
-  icon: Icon, 
-  placeholder, 
-  value, 
-  onChange, 
-  onFocus,
-  onKeyPress,
-  type = "text",
-  autoFocus = false,
-  className = "",
-  ...props 
-}, ref) => {
-  const [isFocused, setIsFocused] = useState(false);
-  const inputRef = useRef(null);
-  
-  // Combine refs
-  React.useImperativeHandle(ref, () => inputRef.current);
-  
-  useEffect(() => {
-    if (autoFocus && inputRef.current && window.innerWidth >= 768) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 300);
-    }
-  }, [autoFocus]);
-
-  const handleFocus = (e) => {
-    setIsFocused(true);
-    if (onFocus) onFocus(e);
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
-  };
-
-  return (
-    <div className="space-y-3">
-      <Label htmlFor={label.toLowerCase()} className="font-semibold text-sm text-white/90 flex items-center">
-        <Icon className="w-4 h-4 mr-2" />
-        {label}
-      </Label>
-      <div className="relative">
-        <Input
-          ref={inputRef}
-          id={label.toLowerCase()}
-          type={type}
-          placeholder={placeholder}
-          value={value}
-          onChange={onChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          onKeyPress={onKeyPress}
-          autoFocus={autoFocus && window.innerWidth >= 768}
-          className={`
-            w-full h-12 px-4 bg-white/10 border-2 rounded-xl
-            text-white placeholder-white/60 text-base
-            transition-all duration-200 backdrop-blur-sm
-            ${isFocused 
-              ? 'border-purple-400 bg-white/15 ring-2 ring-purple-400/30' 
-              : 'border-white/20 hover:border-white/30'
-            }
-            ${className}
-          `}
-          style={{
-            WebkitAppearance: 'none',
-            WebkitTapHighlightColor: 'transparent',
-            fontSize: '16px',
-            minHeight: '44px',
-            lineHeight: '1.5'
-          }}
-          autoComplete="off"
-          {...props}
-        />
-      </div>
-    </div>
-  );
-});
-
-EnhancedInput.displayName = "EnhancedInput";
-
 // Enhanced questions with categories, weights, and personality insights
 const questions = [
   {
@@ -203,6 +121,57 @@ const additionalCompatibilityFactors = {
   relationshipGoals: ["Long-term", "Casual", "Marriage", "Exploratory", "Friendship"]
 };
 
+// FIXED: Simple Input Component with proper mobile handling
+const SimpleInput = React.forwardRef(({ 
+  label, 
+  icon: Icon, 
+  placeholder, 
+  value, 
+  onChange,
+  onKeyPress,
+  type = "text",
+  className = "",
+  ...props 
+}, ref) => {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={label.toLowerCase()} className="font-semibold text-sm text-white/90 flex items-center">
+        <Icon className="w-4 h-4 mr-2" />
+        {label}
+      </Label>
+      <div className="relative">
+        <Input
+          ref={ref}
+          id={label.toLowerCase()}
+          type={type}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+          onKeyPress={onKeyPress}
+          className={`
+            w-full h-12 px-4 bg-white/10 border-2 rounded-xl
+            text-white placeholder-white/60 text-base
+            transition-all duration-200 backdrop-blur-sm
+            border-white/20 hover:border-white/30
+            ${className}
+          `}
+          style={{
+            fontSize: '16px',
+            minHeight: '44px',
+          }}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck="false"
+          {...props}
+        />
+      </div>
+    </div>
+  );
+});
+
+SimpleInput.displayName = "SimpleInput";
+
 export default function AdvancedCompatibilityGame() {
   // Core states
   const [roomId, setRoomId] = useState("");
@@ -225,7 +194,7 @@ export default function AdvancedCompatibilityGame() {
   const [playerReactions, setPlayerReactions] = useState<{[key: string]: string}>({});
   const [connectionStatus, setConnectionStatus] = useState("connected");
 
-  // Advanced states
+  // Advanced states - FIXED: Initialize with empty arrays
   const [advancedAnswers, setAdvancedAnswers] = useState({
     communicationStyle: "",
     loveLanguage: "",
@@ -259,275 +228,25 @@ export default function AdvancedCompatibilityGame() {
   const [waitingForPartner, setWaitingForPartner] = useState(false);
   const [submissionStatus, setSubmissionStatus] = useState<{[key: string]: boolean}>({});
 
-  // Input focus states
-  const [focusedInput, setFocusedInput] = useState<string | null>(null);
-
   // Refs
   const audioRef = useRef<HTMLAudioElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const roomInputRef = useRef<HTMLInputElement>(null);
   const submitTimeoutRef = useRef<NodeJS.Timeout>();
   const screenshotRef = useRef<HTMLDivElement>(null);
-  const mainContainerRef = useRef<HTMLDivElement>(null);
-  const optionsContainerRef = useRef<HTMLDivElement>(null);
-  const questionContainerRef = useRef<HTMLDivElement>(null);
 
-  // NEW: Enhanced mobile detection with better viewport handling
+  // FIXED: Simple mobile detection
   useEffect(() => {
     const checkMobile = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      
-      // Set proper viewport height for mobile
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', `${vh}px`);
+      setIsMobile(window.innerWidth < 768);
     };
-
+    
     checkMobile();
-    
-    const handleResize = () => {
-      checkMobile();
-    };
-
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', checkMobile);
-    
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', checkMobile);
-    };
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // NEW: Enhanced scrolling fix for mobile
-  useEffect(() => {
-    const preventScroll = (e: TouchEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-      e.preventDefault();
-    };
-
-    // Improved scroll handling for mobile
-    if (isMobile) {
-      document.body.style.overflow = 'auto';
-      document.body.style.height = 'auto';
-      document.addEventListener('touchmove', preventScroll, { passive: false });
-    } else {
-      document.body.style.overflow = 'auto';
-      document.removeEventListener('touchmove', preventScroll);
-    }
-
-    return () => {
-      document.body.style.overflow = 'auto';
-      document.removeEventListener('touchmove', preventScroll);
-    };
-  }, [isMobile]);
-
-  // NEW: Auto-scroll to top when changing screens
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [joined, gameStarted, showResults, waitingForPartner]);
-
-  // NEW: Enhanced CSS for mobile optimizations
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-      :root {
-        --vh: 1vh;
-      }
-      
-      @keyframes confetti-fall {
-        0% {
-          transform: translateY(-20px) rotate(0deg) scale(1);
-          opacity: 1;
-        }
-        100% {
-          transform: translateY(100vh) rotate(720deg) scale(0.5);
-          opacity: 0;
-        }
-      }
-      
-      /* Enhanced Mobile Optimizations */
-      .mobile-viewport-fix {
-        height: 100vh;
-        height: calc(var(--vh, 1vh) * 100);
-        overflow: hidden;
-        position: fixed;
-        width: 100%;
-        top: 0;
-        left: 0;
-      }
-      
-      .mobile-scroll-container {
-        height: 100%;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
-        scrollbar-width: none;
-        -ms-overflow-style: none;
-      }
-      
-      .mobile-scroll-container::-webkit-scrollbar {
-        display: none;
-      }
-      
-      .game-content-container {
-        min-height: 100%;
-        padding-bottom: env(safe-area-inset-bottom, 20px);
-      }
-      
-      .safe-area-padding {
-        padding-left: env(safe-area-inset-left, 1rem);
-        padding-right: env(safe-area-inset-right, 1rem);
-        padding-bottom: env(safe-area-inset-bottom, 1rem);
-      }
-      
-      .safe-area-inset-bottom {
-        margin-bottom: env(safe-area-inset-bottom, 0px);
-      }
-
-      /* Enhanced mobile responsiveness */
-      @media (max-width: 768px) {
-        .mobile-viewport-fix {
-          height: 100vh;
-          height: -webkit-fill-available;
-          position: fixed;
-        }
-        
-        .mobile-scroll-container {
-          height: 100%;
-          overflow-y: auto;
-          -webkit-overflow-scrolling: touch;
-        }
-        
-        .safe-area-padding {
-          padding-left: max(0.75rem, env(safe-area-inset-left, 0.75rem));
-          padding-right: max(0.75rem, env(safe-area-inset-right, 0.75rem));
-          padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
-        }
-        
-        /* Fix for bottom content being cut off */
-        .game-content-container {
-          min-height: calc(100vh - env(safe-area-inset-bottom, 0px));
-          padding-bottom: env(safe-area-inset-bottom, 1rem);
-        }
-        
-        /* Ensure inputs are accessible */
-        input, textarea, select {
-          font-size: 16px !important; /* Prevent zoom on iOS */
-        }
-        
-        /* Better touch targets */
-        button, [role="button"] {
-          min-height: 44px;
-          min-width: 44px;
-        }
-        
-        /* Prevent input zoom on iOS */
-        @media screen and (-webkit-min-device-pixel-ratio:0) {
-          input, textarea, select {
-            font-size: 16px !important;
-          }
-        }
-      }
-
-      /* Smooth animations */
-      * {
-        transition: all 0.2s ease-in-out;
-      }
-      
-      /* Focus styles */
-      button:focus-visible,
-      input:focus-visible {
-        outline: 2px solid #8b5cf6;
-        outline-offset: 2px;
-      }
-      
-      /* Prevent blue highlight on tap */
-      * {
-        -webkit-tap-highlight-color: transparent;
-      }
-      
-      /* Enhanced scrolling fixes */
-      html, body {
-        overflow-x: hidden;
-        position: relative;
-        width: 100%;
-        -webkit-overflow-scrolling: touch;
-      }
-      
-      /* Improved mobile viewport handling */
-      @media (max-width: 768px) {
-        .mobile-viewport-fix {
-          height: 100vh;
-          height: calc(var(--vh, 1vh) * 100);
-          overflow: hidden;
-          position: fixed;
-          width: 100%;
-          top: 0;
-          left: 0;
-        }
-        
-        /* Fix for iOS Safari 100vh issue */
-        @supports (-webkit-touch-callout: none) {
-          .mobile-viewport-fix {
-            height: -webkit-fill-available;
-          }
-        }
-      }
-      
-      /* Input focus improvements */
-      input:focus {
-        transform: translateZ(0);
-      }
-    `;
-    document.head.appendChild(style);
-
-    // Enhanced viewport height calculation for mobile
-    const updateViewportHeight = () => {
-      const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', `${vh}px`);
-    };
-    
-    updateViewportHeight();
-    window.addEventListener('resize', updateViewportHeight);
-    window.addEventListener('orientationchange', updateViewportHeight);
-    
-    return () => {
-      document.head.removeChild(style);
-      window.removeEventListener('resize', updateViewportHeight);
-      window.removeEventListener('orientationchange', updateViewportHeight);
-    };
-  }, []);
-
-  // NEW: Enhanced input handlers with useCallback to prevent re-renders
-  const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setPlayerName(e.target.value);
-  }, []);
-
-  const handleRoomChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setRoomId(e.target.value.toUpperCase());
-  }, []);
-
-  const handleNameFocus = useCallback(() => {
-    setFocusedInput('name');
-  }, []);
-
-  const handleRoomFocus = useCallback(() => {
-    setFocusedInput('room');
-  }, []);
-
-  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      if (playerName.trim() && !roomId.trim()) {
-        createRoom();
-      } else if (playerName.trim() && roomId.trim()) {
-        joinRoom();
-      }
-    }
-  }, [playerName, roomId]);
-
-  // KEEP ALL YOUR EXISTING STATE PERSISTENCE AND SOCKET CODE
+  // State persistence
   useEffect(() => {
     const savedState = localStorage.getItem('compatibilityGameState');
     if (savedState) {
@@ -543,7 +262,6 @@ export default function AdvancedCompatibilityGame() {
     }
   }, []);
 
-  // Enhanced auto-save
   useEffect(() => {
     try {
       const state = {
@@ -563,11 +281,10 @@ export default function AdvancedCompatibilityGame() {
     }
   }, [playerName, roomId, darkMode, joined, gameStarted, currentQuestion, answers, advancedAnswers, gameState]);
 
-  // KEEP ALL YOUR EXISTING SOCKET EVENT HANDLERS
+  // Socket event handlers
   useEffect(() => {
     const handleConnect = () => {
       setConnectionStatus("connected");
-      console.log("Connected to server");
     };
 
     const handleDisconnect = () => {
@@ -595,7 +312,6 @@ export default function AdvancedCompatibilityGame() {
     };
   }, [joined, roomId, playerName]);
 
-  // KEEP ALL YOUR EXISTING SOCKET EVENT HANDLERS
   useEffect(() => {
     const handleRoomCreated = (room: any) => {
       if (!room) return;
@@ -772,7 +488,7 @@ export default function AdvancedCompatibilityGame() {
     };
   }, []);
 
-  // KEEP ALL YOUR EXISTING TIMER AND SOUND EFFECTS
+  // Timer and sound effects
   useEffect(() => {
     if (timeLeft === null || !gameStarted || showResults) return;
     
@@ -828,7 +544,27 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // KEEP ALL YOUR EXISTING GAME FUNCTIONS
+  // FIXED: Simple input handlers
+  const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setPlayerName(e.target.value);
+  }, []);
+
+  const handleRoomChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setRoomId(e.target.value.toUpperCase());
+  }, []);
+
+  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (playerName.trim() && !roomId.trim()) {
+        createRoom();
+      } else if (playerName.trim() && roomId.trim()) {
+        joinRoom();
+      }
+    }
+  }, [playerName, roomId]);
+
+  // Game functions
   const handleAutoSubmit = () => {
     if (currentAnswer) {
       submitAnswer();
@@ -891,6 +627,7 @@ export default function AdvancedCompatibilityGame() {
     socket.emit("start-game", { roomId });
   };
 
+  // FIXED: Enhanced submitAnswer function
   const submitAnswer = () => {
     if (!currentAnswer || isSubmitting) return;
 
@@ -925,11 +662,14 @@ export default function AdvancedCompatibilityGame() {
         setIsSubmitting(false);
       }, 400);
     } else {
+      // FIXED: Ensure advancedAnswers is properly sent
+      console.log("Submitting final answers with advanced data:", advancedAnswers);
+      
       socket.emit("submit-answers", { 
         roomId, 
         player: { name: playerName }, 
         answers: newAnswers,
-        advancedAnswers
+        advancedAnswers: advancedAnswers // FIXED: Ensure this is properly sent
       });
       
       setWaitingForPartner(true);
@@ -974,7 +714,7 @@ export default function AdvancedCompatibilityGame() {
     playSound("select");
   };
 
-  // KEEP ALL YOUR EXISTING COMPATIBILITY CALCULATION
+  // FIXED: Enhanced compatibility calculation
   const calculateCompatibility = () => {
     console.log("Calculating compatibility with bothAnswers:", bothAnswers);
     
@@ -1005,8 +745,23 @@ export default function AdvancedCompatibilityGame() {
     }
 
     const [p1, p2] = allPlayers;
-    const ans1 = bothAnswers[p1] || [];
-    const ans2 = bothAnswers[p2] || [];
+    const player1Data = bothAnswers[p1];
+    const player2Data = bothAnswers[p2];
+    
+    console.log("Player 1 data:", player1Data);
+    console.log("Player 2 data:", player2Data);
+    
+    // FIXED: Handle different data structures
+    const ans1 = Array.isArray(player1Data) ? player1Data : (player1Data?.answers || []);
+    const ans2 = Array.isArray(player2Data) ? player2Data : (player2Data?.answers || []);
+    
+    const adv1 = player1Data?.advancedAnswers || {};
+    const adv2 = player2Data?.advancedAnswers || {};
+    
+    console.log("Answers 1:", ans1);
+    console.log("Answers 2:", ans2);
+    console.log("Advanced 1:", adv1);
+    console.log("Advanced 2:", adv2);
     
     let totalScore = 0;
     let maxPossibleScore = 0;
@@ -1018,8 +773,8 @@ export default function AdvancedCompatibilityGame() {
       const weight = question.weight || 1;
       maxPossibleScore += weight;
       
-      const answer1 = Array.isArray(ans1) ? ans1[i]?.answer : null;
-      const answer2 = Array.isArray(ans2) ? ans2[i]?.answer : null;
+      const answer1 = ans1[i]?.answer;
+      const answer2 = ans2[i]?.answer;
       
       if (answer1 && answer2 && answer1 === answer2) {
         totalScore += weight;
@@ -1031,9 +786,6 @@ export default function AdvancedCompatibilityGame() {
     let advancedScore = 0;
     let maxAdvancedScore = 0;
     const advancedMatches: string[] = [];
-
-    const adv1 = (typeof ans1 === 'object' && !Array.isArray(ans1) ? ans1.advancedAnswers : {}) || {};
-    const adv2 = (typeof ans2 === 'object' && !Array.isArray(ans2) ? ans2.advancedAnswers : {}) || {};
 
     Object.keys(advancedCompatibilityFactors).forEach(factor => {
       if (adv1[factor] && adv2[factor]) {
@@ -1052,19 +804,19 @@ export default function AdvancedCompatibilityGame() {
     const traits1 = adv1.personalityTraits || [];
     const traits2 = adv2.personalityTraits || [];
     const commonTraits = traits1.filter((trait: string) => traits2.includes(trait));
-    additionalScore += (commonTraits.length / Math.max(traits1.length, traits2.length)) * 2;
+    additionalScore += (commonTraits.length / Math.max(traits1.length, traits2.length, 1)) * 2;
     maxAdditionalScore += 2;
 
     const values1 = adv1.values || [];
     const values2 = adv2.values || [];
     const commonValues = values1.filter((value: string) => values2.includes(value));
-    additionalScore += (commonValues.length / Math.max(values1.length, values2.length)) * 3;
+    additionalScore += (commonValues.length / Math.max(values1.length, values2.length, 1)) * 3;
     maxAdditionalScore += 3;
 
     const hobbies1 = adv1.hobbies || [];
     const hobbies2 = adv2.hobbies || [];
     const commonHobbies = hobbies1.filter((hobby: string) => hobbies2.includes(hobby));
-    additionalScore += (commonHobbies.length / Math.max(hobbies1.length, hobbies2.length)) * 2;
+    additionalScore += (commonHobbies.length / Math.max(hobbies1.length, hobbies2.length, 1)) * 2;
     maxAdditionalScore += 2;
 
     if (adv1.petPreference && adv2.petPreference) {
@@ -1169,7 +921,6 @@ export default function AdvancedCompatibilityGame() {
     return "from-purple-400 to-pink-500";
   };
 
-  // NEW: Improved navigation functions
   const exitGame = () => {
     if (window.confirm("Are you sure you want to exit the game?")) {
       localStorage.removeItem('compatibilityGameState');
@@ -1186,7 +937,7 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // Enhanced Player Card Component
+  // Player Card Component
   const PlayerCard = ({ player, index }: { player: any, index: number }) => (
     <div className={`flex items-center justify-between p-3 md:p-4 rounded-xl border transition-all ${
       darkMode ? 'bg-slate-800/50 hover:bg-slate-700/50 border-slate-600' : 'bg-white/80 hover:bg-white border-gray-200'
@@ -1303,58 +1054,69 @@ export default function AdvancedCompatibilityGame() {
     </Card>
   );
 
-  // Advanced Questions Component for additional compatibility factors
+  // FIXED: Advanced Questions Component with proper state management
   const AdvancedQuestions = () => {
-    const [selectedTraits, setSelectedTraits] = useState<string[]>(advancedAnswers.personalityTraits);
-    const [selectedValues, setSelectedValues] = useState<string[]>(advancedAnswers.values);
-    const [selectedHobbies, setSelectedHobbies] = useState<string[]>(advancedAnswers.hobbies);
-
     const toggleTrait = (trait: string) => {
-      setSelectedTraits(prev => 
-        prev.includes(trait) 
-          ? prev.filter(t => t !== trait)
-          : [...prev, trait]
-      );
+      setAdvancedAnswers(prev => {
+        const newTraits = prev.personalityTraits.includes(trait)
+          ? prev.personalityTraits.filter(t => t !== trait)
+          : [...prev.personalityTraits, trait];
+        
+        // Limit to 5 selections
+        const limitedTraits = newTraits.slice(0, 5);
+        
+        return {
+          ...prev,
+          personalityTraits: limitedTraits
+        };
+      });
     };
 
     const toggleValue = (value: string) => {
-      setSelectedValues(prev => 
-        prev.includes(value) 
-          ? prev.filter(v => v !== value)
-          : [...prev, value]
-      );
+      setAdvancedAnswers(prev => {
+        const newValues = prev.values.includes(value)
+          ? prev.values.filter(v => v !== value)
+          : [...prev.values, value];
+        
+        // Limit to 4 selections
+        const limitedValues = newValues.slice(0, 4);
+        
+        return {
+          ...prev,
+          values: limitedValues
+        };
+      });
     };
 
     const toggleHobby = (hobby: string) => {
-      setSelectedHobbies(prev => 
-        prev.includes(hobby) 
-          ? prev.filter(h => h !== hobby)
-          : [...prev, hobby]
-      );
+      setAdvancedAnswers(prev => {
+        const newHobbies = prev.hobbies.includes(hobby)
+          ? prev.hobbies.filter(h => h !== hobby)
+          : [...prev.hobbies, hobby];
+        
+        // Limit to 5 selections
+        const limitedHobbies = newHobbies.slice(0, 5);
+        
+        return {
+          ...prev,
+          hobbies: limitedHobbies
+        };
+      });
     };
-
-    useEffect(() => {
-      setAdvancedAnswers(prev => ({
-        ...prev,
-        personalityTraits: selectedTraits,
-        values: selectedValues,
-        hobbies: selectedHobbies
-      }));
-    }, [selectedTraits, selectedValues, selectedHobbies]);
 
     return (
       <div className="space-y-6">
         <div>
           <h4 className="text-lg font-semibold mb-3 flex items-center">
             <Brain className="w-5 h-5 mr-2 text-purple-500" />
-            Which traits describe you best? (Select 3-5)
+            Which traits describe you best? (Select up to 5)
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {additionalCompatibilityFactors.personalityTraits.map(trait => (
               <div
                 key={trait}
                 className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                  selectedTraits.includes(trait)
+                  advancedAnswers.personalityTraits.includes(trait)
                     ? 'bg-purple-500/20 border-purple-400'
                     : darkMode 
                       ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-600/50'
@@ -1363,22 +1125,28 @@ export default function AdvancedCompatibilityGame() {
                 onClick={() => toggleTrait(trait)}
               >
                 <div className="text-center text-sm font-medium">{trait}</div>
+                {advancedAnswers.personalityTraits.includes(trait) && (
+                  <div className="text-center text-xs text-purple-400 mt-1">✓</div>
+                )}
               </div>
             ))}
+          </div>
+          <div className="text-xs text-gray-500 mt-2 text-center">
+            Selected: {advancedAnswers.personalityTraits.length}/5
           </div>
         </div>
 
         <div>
           <h4 className="text-lg font-semibold mb-3 flex items-center">
             <Heart className="w-5 h-5 mr-2 text-red-500" />
-            What are your core values? (Select 2-4)
+            What are your core values? (Select up to 4)
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {additionalCompatibilityFactors.values.map(value => (
               <div
                 key={value}
                 className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                  selectedValues.includes(value)
+                  advancedAnswers.values.includes(value)
                     ? 'bg-red-500/20 border-red-400'
                     : darkMode 
                       ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-600/50'
@@ -1387,22 +1155,28 @@ export default function AdvancedCompatibilityGame() {
                 onClick={() => toggleValue(value)}
               >
                 <div className="text-center text-sm font-medium">{value}</div>
+                {advancedAnswers.values.includes(value) && (
+                  <div className="text-center text-xs text-red-400 mt-1">✓</div>
+                )}
               </div>
             ))}
+          </div>
+          <div className="text-xs text-gray-500 mt-2 text-center">
+            Selected: {advancedAnswers.values.length}/4
           </div>
         </div>
 
         <div>
           <h4 className="text-lg font-semibold mb-3 flex items-center">
             <Gamepad2 className="w-5 h-5 mr-2 text-blue-500" />
-            What are your favorite hobbies? (Select 3-5)
+            What are your favorite hobbies? (Select up to 5)
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {additionalCompatibilityFactors.hobbies.map(hobby => (
               <div
                 key={hobby}
                 className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                  selectedHobbies.includes(hobby)
+                  advancedAnswers.hobbies.includes(hobby)
                     ? 'bg-blue-500/20 border-blue-400'
                     : darkMode 
                       ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-600/50'
@@ -1411,8 +1185,14 @@ export default function AdvancedCompatibilityGame() {
                 onClick={() => toggleHobby(hobby)}
               >
                 <div className="text-center text-sm font-medium">{hobby}</div>
+                {advancedAnswers.hobbies.includes(hobby) && (
+                  <div className="text-center text-xs text-blue-400 mt-1">✓</div>
+                )}
               </div>
             ))}
+          </div>
+          <div className="text-xs text-gray-500 mt-2 text-center">
+            Selected: {advancedAnswers.hobbies.length}/5
           </div>
         </div>
 
@@ -1432,9 +1212,12 @@ export default function AdvancedCompatibilityGame() {
                       ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-600/50'
                       : 'bg-white border-gray-200 hover:bg-gray-50'
                 }`}
-                onClick={() => setAdvancedAnswers(prev => ({ ...prev, petPreference: pref }))}
+                onClick={() => setAdvancedAnswers(prev => ({ ...prev, petPreference: prev.petPreference === pref ? "" : pref }))}
               >
                 <div className="text-center text-sm font-medium">{pref}</div>
+                {advancedAnswers.petPreference === pref && (
+                  <div className="text-center text-xs text-green-400 mt-1">✓</div>
+                )}
               </div>
             ))}
           </div>
@@ -1456,9 +1239,12 @@ export default function AdvancedCompatibilityGame() {
                       ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-600/50'
                       : 'bg-white border-gray-200 hover:bg-gray-50'
                 }`}
-                onClick={() => setAdvancedAnswers(prev => ({ ...prev, relationshipGoal: goal }))}
+                onClick={() => setAdvancedAnswers(prev => ({ ...prev, relationshipGoal: prev.relationshipGoal === goal ? "" : goal }))}
               >
                 <div className="text-center text-sm font-medium">{goal}</div>
+                {advancedAnswers.relationshipGoal === goal && (
+                  <div className="text-center text-xs text-orange-400 mt-1">✓</div>
+                )}
               </div>
             ))}
           </div>
@@ -1467,7 +1253,7 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // Enhanced mobile screenshot capture
+  // Screenshot capture
   const captureScreenshot = async () => {
     if (!screenshotRef.current) return;
     
@@ -1481,11 +1267,7 @@ export default function AdvancedCompatibilityGame() {
         backgroundColor: darkMode ? '#0f172a' : '#ffffff',
         scale: isMobile ? 1 : 1.2,
         useCORS: true,
-        logging: false,
-        scrollX: 0,
-        scrollY: -window.scrollY,
-        windowWidth: document.documentElement.scrollWidth,
-        windowHeight: document.documentElement.scrollHeight
+        logging: false
       });
       
       const imageDataUrl = canvas.toDataURL('image/png', 0.9);
@@ -1522,10 +1304,10 @@ export default function AdvancedCompatibilityGame() {
     document.body.removeChild(link);
   };
 
-  // Enhanced ResultsScreen with BACK and CLOSE buttons
+  // FIXED: ResultsScreen with proper data handling
   const ResultsScreen = () => {
     const compatibility = calculateCompatibility();
-    const { score, breakdown, insights, advancedAnalysis, advancedFactors, additionalFactors } = compatibility;
+    const { score, breakdown, insights, advancedFactors, additionalFactors } = compatibility;
 
     const hasValidResults = bothAnswers && 
                            typeof bothAnswers === 'object' && 
@@ -1534,289 +1316,7 @@ export default function AdvancedCompatibilityGame() {
 
     if (!hasValidResults) {
       return (
-        <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
-          <div className="flex-1 overflow-y-auto mobile-scroll-container">
-            <div className={`min-h-full flex flex-col items-center justify-center p-6 ${
-              darkMode ? 'bg-slate-900' : 'bg-gray-100'
-            }`}>
-              <Card className={`p-8 max-w-2xl w-full text-center ${
-                darkMode ? 'bg-slate-800' : 'bg-white'
-              }`}>
-                <div className="flex justify-center mb-6">
-                  <Loader2 className="w-16 h-16 animate-spin text-purple-500" />
-                </div>
-                <h2 className="text-2xl font-bold mb-4">Processing Results...</h2>
-                <p className={`mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  Please wait while we calculate your compatibility results.
-                </p>
-                <Button 
-                  onClick={() => window.location.reload()}
-                  className="bg-purple-500 hover:bg-purple-600 text-white"
-                >
-                  Return to Home
-                </Button>
-              </Card>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
-        <div className="flex-1 overflow-y-auto mobile-scroll-container" ref={mainContainerRef}>
-          <div className={`min-h-full flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 safe-area-padding game-content-container ${
-            darkMode 
-              ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
-              : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-          }`}>
-            <ConnectionStatus />
-            
-            {/* NEW: Back Button */}
-            <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
-              <Button
-                variant="ghost"
-                size={isMobile ? "sm" : "default"}
-                onClick={backToHome}
-                className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-              >
-                <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size={isMobile ? "sm" : "default"}
-                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-                className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-              >
-                <Settings className="w-4 h-4 md:w-5 md:h-5" />
-              </Button>
-            </div>
-
-            <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-6xl">
-              <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
-                darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-              }`}>
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4">
-                  <div>
-                    <h2 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-                      Compatibility Results
-                    </h2>
-                    <p className={`mt-1 md:mt-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                      {Object.keys(bothAnswers).join(" 💞 ")}
-                    </p>
-                  </div>
-                  
-                  <Button
-                    onClick={captureScreenshot}
-                    disabled={isCapturing}
-                    size={isMobile ? "sm" : "default"}
-                    className={`${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`}
-                  >
-                    {isCapturing ? (
-                      <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
-                    ) : (
-                      <Share2 className="w-4 h-4 md:w-5 md:h-5" />
-                    )}
-                  </Button>
-                </div>
-
-                <div className="text-center mb-6 md:mb-8">
-                  <div className={`text-5xl md:text-7xl font-black mb-3 md:mb-4 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
-                    {score}%
-                  </div>
-                  <h3 className="text-xl md:text-3xl font-bold mb-1 md:mb-2">{getCompatibilityMessage(score)}</h3>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
-                  {Object.entries(advancedFactors).map(([key, value]) => (
-                    <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
-                      darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-                    }`}>
-                      <div className="text-xs md:text-sm font-medium capitalize mb-1">
-                        {key.replace(/([A-Z])/g, ' $1').trim()}
-                      </div>
-                      <div className={`text-base md:text-lg font-semibold ${
-                        typeof value === 'string' && value.includes('match') 
-                          ? 'text-green-500' 
-                          : typeof value === 'string' && value.includes('Different')
-                          ? 'text-orange-500'
-                          : darkMode ? 'text-white' : 'text-gray-800'
-                      }`}>
-                        {value}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
-                  {Object.entries(additionalFactors).map(([key, value]) => (
-                    <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
-                      darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-                    }`}>
-                      <div className="text-xs md:text-sm font-medium capitalize mb-1">
-                        {key.replace(/([A-Z])/g, ' $1').trim()}
-                      </div>
-                      <div className={`text-base md:text-lg font-semibold ${
-                        typeof value === 'string' && (value.includes('shared') || value.includes('Aligned') || value.includes('match'))
-                          ? 'text-green-500' 
-                          : typeof value === 'string' && value.includes('Different')
-                          ? 'text-orange-500'
-                          : darkMode ? 'text-white' : 'text-gray-800'
-                      }`}>
-                        {value}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
-                  {Object.entries(breakdown).map(([category, catScore]) => (
-                    <div key={category} className={`p-3 md:p-4 rounded-xl border ${
-                      darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-                    }`}>
-                      <div className="text-xs md:text-sm mb-1 md:mb-2">{category}</div>
-                      <div className="text-xl md:text-2xl font-bold mb-1 md:mb-2">
-                        {Math.round((catScore as number / questions.filter(q => q.category === category).length) * 100)}%
-                      </div>
-                      <Progress 
-                        value={(catScore as number / questions.filter(q => q.category === category).length) * 100} 
-                        className={`h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
-                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-                }`}>
-                  <h3 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center justify-center">
-                    <Brain className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-500" />
-                    Relationship Insights
-                  </h3>
-                  <div className="space-y-2 md:space-y-3">
-                    {insights.map((insight, index) => (
-                      <div key={index} className={`flex items-start space-x-2 md:space-x-3 p-2 md:p-3 rounded-lg ${
-                        darkMode ? 'bg-slate-600/50' : 'bg-white'
-                      }`}>
-                        <Sparkles className="w-3 h-3 md:w-4 md:h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm md:text-base">{insight}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex gap-3 md:gap-4 flex-col sm:flex-row">
-                  <Button 
-                    onClick={() => window.location.reload()} 
-                    size={isMobile ? "sm" : "lg"}
-                    className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white"
-                  >
-                    <RotateCcw className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                    Play Again
-                  </Button>
-                  <Button 
-                    onClick={captureScreenshot}
-                    disabled={isCapturing}
-                    size={isMobile ? "sm" : "lg"}
-                    className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
-                  >
-                    {isCapturing ? (
-                      <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-2 animate-spin" />
-                    ) : (
-                      <Share2 className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                    )}
-                    {isCapturing ? 'Capturing...' : 'Share Results'}
-                  </Button>
-                  <Button 
-                    onClick={exitGame}
-                    size={isMobile ? "sm" : "lg"}
-                    variant="outline"
-                    className="flex-1 py-4 md:py-6 text-base md:text-lg"
-                  >
-                    <X className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                    Exit Game
-                  </Button>
-                </div>
-              </Card>
-            </div>
-
-            {showAdvancedSettings && <SettingsPanel />}
-            
-            {/* NEW: Enhanced Share Modal with CLOSE button */}
-            {showShareModal && (
-              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 md:p-4">
-                <Card className="max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-xl md:rounded-2xl border-0 max-h-[90vh] overflow-y-auto">
-                  <div className="p-4 md:p-6">
-                    <div className="flex justify-between items-center mb-3 md:mb-4">
-                      <h3 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center">
-                        <Share2 className="w-5 h-5 md:w-6 md:h-6 mr-2 text-blue-600" />
-                        Share Your Results
-                      </h3>
-                      <Button
-                        variant="ghost"
-                        size={isMobile ? "sm" : "default"}
-                        onClick={() => setShowShareModal(false)}
-                      >
-                        <X className="w-5 h-5" />
-                      </Button>
-                    </div>
-                    
-                    <div className="space-y-3 md:space-y-4">
-                      {capturedImage && (
-                        <div className="text-center">
-                          <img
-                            src={capturedImage}
-                            alt="Compatibility Results"
-                            className="w-full h-auto max-h-48 md:max-h-96 object-contain border rounded-lg"
-                          />
-                        </div>
-                      )}
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
-                        <Button
-                          onClick={() => capturedImage && downloadImage(capturedImage)}
-                          size={isMobile ? "sm" : "default"}
-                          className="py-3 md:py-4"
-                        >
-                          <Download className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                          Download
-                        </Button>
-                        
-                        <Button
-                          onClick={() => capturedImage && navigator.clipboard?.writeText(`Check out our compatibility score: ${score}%! 🎉`)}
-                          size={isMobile ? "sm" : "default"}
-                          className="py-3 md:py-4"
-                        >
-                          <Copy className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                          Copy Text
-                        </Button>
-                      </div>
-
-                      <div className="pt-4 border-t">
-                        <Button
-                          onClick={() => setShowShareModal(false)}
-                          className="w-full"
-                          variant="outline"
-                        >
-                          Close
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Waiting for Partner Screen for final question
-  const WaitingForPartnerScreen = () => (
-    <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
-      <div className="flex-1 overflow-y-auto mobile-scroll-container">
-        <div className={`min-h-full flex flex-col items-center justify-center p-6 safe-area-padding game-content-container ${
+        <div className={`min-h-screen flex flex-col items-center justify-center p-6 ${
           darkMode ? 'bg-slate-900' : 'bg-gray-100'
         }`}>
           <Card className={`p-8 max-w-2xl w-full text-center ${
@@ -1825,149 +1325,163 @@ export default function AdvancedCompatibilityGame() {
             <div className="flex justify-center mb-6">
               <Loader2 className="w-16 h-16 animate-spin text-purple-500" />
             </div>
-            <h2 className="text-2xl font-bold mb-4">Waiting for Partner...</h2>
+            <h2 className="text-2xl font-bold mb-4">Processing Results...</h2>
             <p className={`mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-              You've completed all questions! Waiting for your partner to finish.
+              Please wait while we calculate your compatibility results.
             </p>
-            
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-3">Submission Status:</h3>
-              <div className="space-y-2">
-                {players.map((player, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50">
-                    <span className="font-medium">{player.name}</span>
-                    {submissionStatus[player.name] ? (
-                      <Badge className="bg-green-500">
-                        <Check className="w-3 h-3 mr-1" />
-                        Submitted
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-yellow-500 border-yellow-500">
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        Waiting...
-                      </Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <Button 
-              onClick={backToHome}
-              variant="outline"
-              className="mr-2"
+              onClick={() => window.location.reload()}
+              className="bg-purple-500 hover:bg-purple-600 text-white"
             >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Home
+              Return to Home
             </Button>
           </Card>
         </div>
-      </div>
-    </div>
-  );
+      );
+    }
 
-  // Waiting Screen Component with BACK button
-  const WaitingScreen = () => (
-    <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
-      <div className="flex-1 overflow-y-auto mobile-scroll-container" ref={mainContainerRef}>
-        <div className={`min-h-full flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 safe-area-padding game-content-container ${
-          darkMode 
-            ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
-            : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-        }`}>
-          <ConnectionStatus />
-          
-          {/* NEW: Back Button */}
-          <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
+    return (
+      <div className={`min-h-screen ${darkMode ? 'bg-slate-900' : 'bg-gray-100'} py-8`}>
+        <ConnectionStatus />
+        
+        <div className="container mx-auto px-4">
+          <div className="flex justify-between items-center mb-6">
             <Button
               variant="ghost"
-              size={isMobile ? "sm" : "default"}
+              size="sm"
               onClick={backToHome}
-              className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
+              className={darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}
             >
-              <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
             </Button>
             <Button
               variant="ghost"
-              size={isMobile ? "sm" : "default"}
+              size="sm"
               onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-              className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
+              className={darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}
             >
-              <Settings className="w-4 h-4 md:w-5 md:h-5" />
+              <Settings className="w-4 h-4" />
             </Button>
           </div>
 
-          <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-2xl">
-            <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
+          <div ref={screenshotRef} className="w-full max-w-4xl mx-auto">
+            <Card className={`p-6 backdrop-blur-sm border ${
               darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
             }`}>
-              <div className="text-center mb-6 md:mb-8">
-                <div className="flex justify-center mb-4 md:mb-6">
-                  <div className="relative">
-                    <Heart className="w-16 h-16 md:w-20 md:h-20 text-pink-500 animate-pulse" />
-                    <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-500 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-spin" />
-                  </div>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <div>
+                  <h2 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                    Compatibility Results
+                  </h2>
+                  <p className={`mt-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                    {Object.keys(bothAnswers).join(" 💞 ")}
+                  </p>
                 </div>
                 
-                <h2 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-                  Advanced Compatibility
-                </h2>
-                <p className={`text-base md:text-lg ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  Room Code: <span className="font-mono font-bold text-xl md:text-2xl">{roomId}</span>
-                </p>
+                <Button
+                  onClick={captureScreenshot}
+                  disabled={isCapturing}
+                  size="sm"
+                  className={darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}
+                >
+                  {isCapturing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Share2 className="w-4 h-4" />
+                  )}
+                </Button>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 md:gap-4 mb-6 md:mb-8">
-                {players.map((player, index) => (
-                  <PlayerCard key={player.name || index} player={player} index={index} />
+              <div className="text-center mb-6">
+                <div className={`text-5xl md:text-7xl font-black mb-4 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
+                  {score}%
+                </div>
+                <h3 className="text-xl md:text-3xl font-bold mb-2">{getCompatibilityMessage(score)}</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+                {Object.entries(advancedFactors).map(([key, value]) => (
+                  <div key={key} className={`p-3 rounded-xl border text-center ${
+                    darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+                  }`}>
+                    <div className="text-xs font-medium capitalize mb-1">
+                      {key.replace(/([A-Z])/g, ' $1').trim()}
+                    </div>
+                    <div className={`text-lg font-semibold ${
+                      typeof value === 'string' && value.includes('match') 
+                        ? 'text-green-500' 
+                        : typeof value === 'string' && value.includes('Different')
+                        ? 'text-orange-500'
+                        : darkMode ? 'text-white' : 'text-gray-800'
+                    }`}>
+                      {value}
+                    </div>
+                  </div>
                 ))}
               </div>
 
-              {players.length === 1 && (
-                <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 text-center ${
-                  darkMode ? 'bg-yellow-500/20 border-yellow-400/30' : 'bg-yellow-100 border-yellow-200'
-                }`}>
-                  <div className="flex items-center justify-center space-x-1 md:space-x-2">
-                    <Users className="w-4 h-4 md:w-5 md:h-5 text-yellow-600" />
-                    <span className={`text-sm md:text-base ${darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
-                      Waiting for partner to join...
-                    </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+                {Object.entries(additionalFactors).map(([key, value]) => (
+                  <div key={key} className={`p-3 rounded-xl border text-center ${
+                    darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+                  }`}>
+                    <div className="text-xs font-medium capitalize mb-1">
+                      {key.replace(/([A-Z])/g, ' $1').trim()}
+                    </div>
+                    <div className={`text-lg font-semibold ${
+                      typeof value === 'string' && (value.includes('shared') || value.includes('Aligned') || value.includes('match'))
+                        ? 'text-green-500' 
+                        : typeof value === 'string' && value.includes('Different')
+                        ? 'text-orange-500'
+                        : darkMode ? 'text-white' : 'text-gray-800'
+                    }`}>
+                      {value}
+                    </div>
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
 
-              {isHost ? (
+              <div className={`p-4 rounded-xl border mb-6 ${
+                darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+              }`}>
+                <h3 className="text-lg font-bold mb-3 flex items-center justify-center">
+                  <Brain className="w-4 h-4 mr-2 text-purple-500" />
+                  Relationship Insights
+                </h3>
+                <div className="space-y-2">
+                  {insights.map((insight, index) => (
+                    <div key={index} className={`flex items-start space-x-2 p-2 rounded-lg ${
+                      darkMode ? 'bg-slate-600/50' : 'bg-white'
+                    }`}>
+                      <Sparkles className="w-3 h-3 text-yellow-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm">{insight}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-3 flex-col sm:flex-row">
                 <Button 
-                  onClick={startGame} 
-                  disabled={players.length < 2}
-                  size={isMobile ? "sm" : "lg"}
-                  className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-2xl disabled:opacity-50"
+                  onClick={() => window.location.reload()} 
+                  size="lg"
+                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white"
                 >
-                  <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                  Start Compatibility Test {players.length < 2 && `(Need ${2 - players.length} more)`}
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Play Again
                 </Button>
-              ) : (
-                <div className={`p-3 md:p-4 rounded-xl border text-center ${
-                  darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
-                }`}>
-                  <div className="flex items-center justify-center space-x-1 md:space-x-2">
-                    <Clock className="w-4 h-4 md:w-5 md:h-5 text-blue-500 animate-pulse" />
-                    <span className={`text-sm md:text-base ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
-                      Waiting for host to start the test...
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-4 md:mt-6 text-center">
-                <Button
-                  onClick={() => navigator.clipboard?.writeText(roomId)}
-                  variant="outline"
-                  size={isMobile ? "sm" : "default"}
-                  className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
+                <Button 
+                  onClick={captureScreenshot}
+                  disabled={isCapturing}
+                  size="lg"
+                  className="flex-1 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
                 >
-                  <LinkIcon className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                  Copy Room Code
+                  {isCapturing ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Share2 className="w-4 h-4 mr-2" />
+                  )}
+                  {isCapturing ? 'Capturing...' : 'Share Results'}
                 </Button>
               </div>
             </Card>
@@ -1976,10 +1490,166 @@ export default function AdvancedCompatibilityGame() {
           {showAdvancedSettings && <SettingsPanel />}
         </div>
       </div>
+    );
+  };
+
+  // WaitingForPartnerScreen
+  const WaitingForPartnerScreen = () => (
+    <div className={`min-h-screen flex flex-col items-center justify-center p-6 ${
+      darkMode ? 'bg-slate-900' : 'bg-gray-100'
+    }`}>
+      <Card className={`p-8 max-w-2xl w-full text-center ${
+        darkMode ? 'bg-slate-800' : 'bg-white'
+      }`}>
+        <div className="flex justify-center mb-6">
+          <Loader2 className="w-16 h-16 animate-spin text-purple-500" />
+        </div>
+        <h2 className="text-2xl font-bold mb-4">Waiting for Partner...</h2>
+        <p className={`mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+          You've completed all questions! Waiting for your partner to finish.
+        </p>
+        
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-3">Submission Status:</h3>
+          <div className="space-y-2">
+            {players.map((player, index) => (
+              <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50">
+                <span className="font-medium">{player.name}</span>
+                {submissionStatus[player.name] ? (
+                  <Badge className="bg-green-500">
+                    <Check className="w-3 h-3 mr-1" />
+                    Submitted
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-yellow-500 border-yellow-500">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Waiting...
+                  </Badge>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Button 
+          onClick={backToHome}
+          variant="outline"
+          className="mr-2"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Home
+        </Button>
+      </Card>
     </div>
   );
 
-  // Enhanced Game Screen with mobile scroll handling and advanced questions
+  // WaitingScreen
+  const WaitingScreen = () => (
+    <div className={`min-h-screen flex flex-col items-center justify-center p-6 ${
+      darkMode ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+    }`}>
+      <ConnectionStatus />
+      
+      <div className="flex justify-between items-center w-full max-w-2xl mb-6">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={backToHome}
+          className={darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+          className={darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}
+        >
+          <Settings className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <div className="w-full max-w-2xl">
+        <Card className={`p-6 backdrop-blur-sm border ${
+          darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+        }`}>
+          <div className="text-center mb-6">
+            <div className="flex justify-center mb-4">
+              <div className="relative">
+                <Heart className="w-16 h-16 text-pink-500 animate-pulse" />
+                <Sparkles className="w-6 h-6 text-yellow-500 absolute -top-1 -right-1 animate-spin" />
+              </div>
+            </div>
+            
+            <h2 className="text-2xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+              Advanced Compatibility
+            </h2>
+            <p className={`text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              Room Code: <span className="font-mono font-bold text-xl">{roomId}</span>
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 mb-6">
+            {players.map((player, index) => (
+              <PlayerCard key={player.name || index} player={player} index={index} />
+            ))}
+          </div>
+
+          {players.length === 1 && (
+            <div className={`p-3 rounded-xl border mb-4 text-center ${
+              darkMode ? 'bg-yellow-500/20 border-yellow-400/30' : 'bg-yellow-100 border-yellow-200'
+            }`}>
+              <div className="flex items-center justify-center space-x-2">
+                <Users className="w-4 h-4 text-yellow-600" />
+                <span className={`text-sm ${darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                  Waiting for partner to join...
+                </span>
+              </div>
+            </div>
+          )}
+
+          {isHost ? (
+            <Button 
+              onClick={startGame} 
+              disabled={players.length < 2}
+              size="lg"
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-2xl disabled:opacity-50"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Start Compatibility Test {players.length < 2 && `(Need ${2 - players.length} more)`}
+            </Button>
+          ) : (
+            <div className={`p-3 rounded-xl border text-center ${
+              darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
+            }`}>
+              <div className="flex items-center justify-center space-x-2">
+                <Clock className="w-4 h-4 text-blue-500 animate-pulse" />
+                <span className={`text-sm ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                  Waiting for host to start the test...
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 text-center">
+            <Button
+              onClick={() => navigator.clipboard?.writeText(roomId)}
+              variant="outline"
+              size="sm"
+              className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
+            >
+              <LinkIcon className="w-3 h-3 mr-1" />
+              Copy Room Code
+            </Button>
+          </div>
+        </Card>
+      </div>
+
+      {showAdvancedSettings && <SettingsPanel />}
+    </div>
+  );
+
+  // FIXED: GameScreen with working advanced questions
   const GameScreen = () => {
     const currentQ = questions[currentQuestion];
     
@@ -1994,403 +1664,355 @@ export default function AdvancedCompatibilityGame() {
     const isFinalQuestion = currentQuestion === questions.length - 1;
 
     return (
-      <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
-        <div className="flex-1 overflow-y-auto mobile-scroll-container" ref={mainContainerRef}>
-          <div className={`min-h-full flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 safe-area-padding game-content-container ${
-            darkMode 
-              ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
-              : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-          }`}>
-            <ConnectionStatus />
-            
-            {/* NEW: Back Button */}
-            <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
-              <Button
-                variant="ghost"
-                size={isMobile ? "sm" : "default"}
-                onClick={backToHome}
-                className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-              >
-                <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size={isMobile ? "sm" : "default"}
-                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-                className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-              >
-                <Settings className="w-4 h-4 md:w-5 md:h-5" />
-              </Button>
-            </div>
+      <div className={`min-h-screen py-8 ${
+        darkMode ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+      }`}>
+        <ConnectionStatus />
+        
+        <div className="container mx-auto px-4">
+          <div className="flex justify-between items-center mb-6">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={backToHome}
+              className={darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+              className={darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+          </div>
 
-            <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
-              <div className="mb-4 md:mb-6">
-                <div className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 md:p-6 rounded-xl border backdrop-blur-sm gap-3 md:gap-0 ${
-                  darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-                }`}>
-                  <div>
-                    <h2 className="text-lg md:text-xl font-bold">Room: {roomId}</h2>
-                    <div className={`flex items-center space-x-1 md:space-x-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                      <Users className="w-3 h-3 md:w-4 md:h-4" />
-                      <span>{players.map(p => p.name).join(" & ")}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-4 md:space-x-6 w-full md:w-auto justify-between md:justify-normal">
-                    <div className="text-right md:text-left">
-                      <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Progress</div>
-                      <div className="text-base md:text-lg font-bold">
-                        {currentQuestion + 1} / {questions.length}
-                      </div>
-                    </div>
-                    
-                    {timeLeft !== null && (
-                      <div className="text-right md:text-left">
-                        <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Time Left</div>
-                        <div className={`text-base md:text-lg font-bold flex items-center ${
-                          timeLeft <= 10 ? 'text-red-500 animate-pulse' : ''
-                        }`}>
-                          <Timer className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                          {timeLeft}s
-                        </div>
-                      </div>
-                    )}
-                  </div>
+          <div className="mb-6">
+            <div className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 rounded-xl border backdrop-blur-sm gap-3 ${
+              darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+            }`}>
+              <div>
+                <h2 className="text-lg font-bold">Room: {roomId}</h2>
+                <div className={`flex items-center space-x-2 text-sm ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                  <Users className="w-3 h-3" />
+                  <span>{players.map(p => p.name).join(" & ")}</span>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 gap-3 md:gap-4 mb-4 md:mb-6">
-                {players.map((player) => (
-                  <div key={player.name} className={`p-3 md:p-4 rounded-xl border backdrop-blur-sm ${
-                    darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-                  }`}>
-                    <div className="flex items-center justify-between mb-1 md:mb-2">
-                      <div className="flex items-center space-x-2 md:space-x-3">
-                        <Avatar className="w-8 h-8 md:w-10 md:h-10">
-                          <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-600 text-white text-xs md:text-base">
-                            {player.name?.charAt(0)?.toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="font-semibold text-sm md:text-base">{player.name}</span>
-                      </div>
-                      <div className="text-base md:text-lg font-bold">
-                        {playerProgress[player.name] || 0}%
-                      </div>
-                    </div>
-                    <Progress 
-                      value={playerProgress[player.name] || 0} 
-                      className={`h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
-                    />
+              
+              <div className="flex items-center space-x-4 w-full md:w-auto justify-between md:justify-normal">
+                <div className="text-right md:text-left">
+                  <div className={`text-xs ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Progress</div>
+                  <div className="text-lg font-bold">
+                    {currentQuestion + 1} / {questions.length}
                   </div>
-                ))}
+                </div>
+                
+                {timeLeft !== null && (
+                  <div className="text-right md:text-left">
+                    <div className={`text-xs ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Time Left</div>
+                    <div className={`text-lg font-bold flex items-center ${
+                      timeLeft <= 10 ? 'text-red-500 animate-pulse' : ''
+                    }`}>
+                      <Timer className="w-3 h-3 mr-1" />
+                      {timeLeft}s
+                    </div>
+                  </div>
+                )}
               </div>
+            </div>
+          </div>
 
-              <Card 
-                ref={questionContainerRef}
-                className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 mb-4 md:mb-6 ${
-                  darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+          <div className="grid grid-cols-1 gap-3 mb-6">
+            {players.map((player) => (
+              <div key={player.name} className={`p-3 rounded-xl border backdrop-blur-sm ${
+                darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    <Avatar className="w-8 h-8">
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-600 text-white text-xs">
+                        {player.name?.charAt(0)?.toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="font-semibold text-sm">{player.name}</span>
+                  </div>
+                  <div className="text-lg font-bold">
+                    {playerProgress[player.name] || 0}%
+                  </div>
+                </div>
+                <Progress 
+                  value={playerProgress[player.name] || 0} 
+                  className={`h-1.5 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
+                />
+              </div>
+            ))}
+          </div>
+
+          <Card className={`p-6 backdrop-blur-sm border mb-6 ${
+            darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+          }`}>
+            <div className="text-center mb-6">
+              <Badge className={`mb-2 text-xs ${darkMode ? 'bg-purple-500/20 text-purple-300 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>
+                {currentQ.category} • Weight: {currentQ.weight}x
+              </Badge>
+              <h3 className="text-xl md:text-3xl font-bold mb-3">
+                {currentQ.question}
+              </h3>
+              <p className={`text-sm ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                Question {currentQuestion + 1} of {questions.length}
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              {currentQ.options.map((option, index) => (
+                <div 
+                  key={index} 
+                  className={`flex items-center space-x-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                    currentAnswer === option 
+                      ? 'bg-purple-500/20 border-purple-400/50 scale-105 shadow-lg' 
+                      : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50 border-slate-600' : 'bg-white hover:bg-gray-50 border-gray-200'} hover:scale-102`
+                  }`}
+                  onClick={() => handleOptionSelect(option)}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                    currentAnswer === option 
+                      ? 'border-purple-400 bg-purple-400' 
+                      : 'border-gray-400'
+                  }`}>
+                    {currentAnswer === option && (
+                      <div className="w-2 h-2 rounded-full bg-white"></div>
+                    )}
+                  </div>
+                  <Label className="flex-1 cursor-pointer font-semibold text-base">
+                    {option}
+                  </Label>
+                </div>
+              ))}
+            </div>
+
+            {isFinalQuestion && (
+              <div className={`p-4 rounded-xl border mb-6 ${
+                darkMode ? 'bg-blue-500/10 border-blue-400/30' : 'bg-blue-50 border-blue-200'
+              }`}>
+                <h3 className="text-lg font-bold mb-4 flex items-center">
+                  <Sparkles className="w-4 h-4 mr-2 text-blue-500" />
+                  Additional Compatibility Factors
+                </h3>
+                <p className={`mb-4 text-sm ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                  These additional questions will help us calculate a more accurate compatibility score.
+                </p>
+                <AdvancedQuestions />
+              </div>
+            )}
+
+            {currentAnswer && currentQ.insights && (
+              <div className={`p-3 rounded-xl border mb-4 ${
+                darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
+              }`}>
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-blue-500" />
+                  <span className="font-medium text-sm">
+                    This suggests: {currentQ.insights[currentAnswer]}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
+              >
+                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              </Button>
+
+              <Button
+                onClick={handleSubmit}
+                disabled={!currentAnswer || isSubmitting}
+                size="lg"
+                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 py-2 text-base disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Submitting...
+                  </>
+                ) : isFinalQuestion ? (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Finish Test
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Next Question
+                  </>
+                )}
+              </Button>
+            </div>
+          </Card>
+
+          <div className="flex justify-center space-x-2">
+            {['❤️', '😂', '😮', '👏', '🎉'].map(reaction => (
+              <Button
+                key={reaction}
+                variant="outline"
+                size="sm"
+                onClick={() => sendReaction(reaction)}
+                className={`text-base h-10 w-10 ${
+                  darkMode ? 'bg-slate-700 border-slate-600 hover:bg-slate-600' : 'bg-white border-gray-200 hover:bg-gray-50'
                 }`}
               >
-                <div className="text-center mb-6 md:mb-8">
-                  <Badge className={`mb-2 md:mb-3 text-xs md:text-sm ${darkMode ? 'bg-purple-500/20 text-purple-300 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>
-                    {currentQ.category} • Weight: {currentQ.weight}x
-                  </Badge>
-                  <h3 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">
-                    {currentQ.question}
-                  </h3>
-                  <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                    Question {currentQuestion + 1} of {questions.length}
-                  </p>
-                </div>
-
-                <div 
-                  ref={optionsContainerRef}
-                  className="space-y-3 md:space-y-4 mb-6 md:mb-8"
-                >
-                  {currentQ.options.map((option, index) => (
-                    <div 
-                      key={index} 
-                      className={`flex items-center space-x-3 md:space-x-4 p-3 md:p-4 rounded-xl border transition-all cursor-pointer ${
-                        currentAnswer === option 
-                          ? 'bg-purple-500/20 border-purple-400/50 scale-105 shadow-lg' 
-                          : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50 border-slate-600' : 'bg-white hover:bg-gray-50 border-gray-200'} hover:scale-102`
-                      }`}
-                      onClick={() => handleOptionSelect(option)}
-                    >
-                      <div className={`w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center ${
-                        currentAnswer === option 
-                          ? 'border-purple-400 bg-purple-400' 
-                          : 'border-gray-400'
-                      }`}>
-                        {currentAnswer === option && (
-                          <div className="w-2 h-2 md:w-3 md:h-3 rounded-full bg-white"></div>
-                        )}
-                      </div>
-                      <Label className="flex-1 cursor-pointer font-semibold text-base md:text-lg">
-                        {option}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-
-                {isFinalQuestion && (
-                  <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
-                    darkMode ? 'bg-blue-500/10 border-blue-400/30' : 'bg-blue-50 border-blue-200'
-                  }`}>
-                    <h3 className="text-lg md:text-xl font-bold mb-4 flex items-center">
-                      <Sparkles className="w-5 h-5 mr-2 text-blue-500" />
-                      Additional Compatibility Factors
-                    </h3>
-                    <p className={`mb-4 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                      These additional questions will help us calculate a more accurate compatibility score.
-                    </p>
-                    <AdvancedQuestions />
-                  </div>
-                )}
-
-                {currentAnswer && currentQ.insights && (
-                  <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 ${
-                    darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
-                  }`}>
-                    <div className="flex items-center space-x-2">
-                      <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
-                      <span className="font-medium text-sm md:text-base">
-                        This suggests: {currentQ.insights[currentAnswer]}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center">
-                  <Button
-                    variant="outline"
-                    size={isMobile ? "sm" : "default"}
-                    onClick={() => setSoundEnabled(!soundEnabled)}
-                    className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
-                  >
-                    {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                  </Button>
-
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={!currentAnswer || isSubmitting}
-                    size={isMobile ? "sm" : "default"}
-                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 md:px-8 py-2 md:py-3 text-base md:text-lg disabled:opacity-50 transition-all"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2 animate-spin" />
-                        Submitting...
-                      </>
-                    ) : isFinalQuestion ? (
-                      <>
-                        <CheckCircle className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
-                        Finish Test
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
-                        Next Question
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </Card>
-
-              <div className="flex justify-center space-x-1 md:space-x-2">
-                {['❤️', '😂', '😮', '👏', '🎉'].map(reaction => (
-                  <Button
-                    key={reaction}
-                    variant="outline"
-                    size={isMobile ? "sm" : "default"}
-                    onClick={() => sendReaction(reaction)}
-                    className={`text-base md:text-lg h-10 w-10 md:h-12 md:w-12 ${
-                      darkMode ? 'bg-slate-700 border-slate-600 hover:bg-slate-600' : 'bg-white border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    {reaction}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {showAdvancedSettings && <SettingsPanel />}
+                {reaction}
+              </Button>
+            ))}
           </div>
         </div>
+
+        {showAdvancedSettings && <SettingsPanel />}
       </div>
     );
   };
 
-  // Completely redesigned Join/Create Screen with ENHANCED inputs
+  // FIXED: JoinCreateScreen with working inputs
   const JoinCreateScreen = () => (
-    <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
-      <div className="flex-1 overflow-y-auto mobile-scroll-container" ref={mainContainerRef}>
-        <div className={`min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4 md:p-6 flex items-center justify-center relative game-content-container safe-area-padding`}>
-          {/* Animated background elements */}
-          <div className="absolute inset-0 overflow-hidden">
-            {[...Array(15)].map((_, i) => (
-              <div
-                key={i}
-                className="absolute w-2 h-2 bg-yellow-400 rounded-full opacity-30 animate-pulse"
-                style={{
-                  top: `${Math.random() * 100}%`,
-                  left: `${Math.random() * 100}%`,
-                  animationDelay: `${Math.random() * 2}s`,
-                  animationDuration: `${3 + Math.random() * 2}s`
-                }}
-              />
-            ))}
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
+      {/* Background elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        {[...Array(15)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-2 h-2 bg-yellow-400 rounded-full opacity-30 animate-pulse"
+            style={{
+              top: `${Math.random() * 100}%`,
+              left: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 2}s`,
+              animationDuration: `${3 + Math.random() * 2}s`
+            }}
+          />
+        ))}
+      </div>
+
+      <ConnectionStatus />
+      
+      <div className="absolute top-4 left-4 z-10">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+          className="rounded-full bg-slate-800/50 hover:bg-slate-700/50 text-white backdrop-blur-sm border-0"
+        >
+          <Settings className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <div className="w-full max-w-md mx-auto">
+        <Card className="p-6 backdrop-blur-sm border-0 shadow-2xl bg-slate-800/40">
+          <div className="text-center mb-6">
+            <div className="flex justify-center mb-4">
+              <div className="relative">
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
+                  <Heart className="w-8 h-8 text-white animate-pulse" />
+                </div>
+                <Sparkles className="w-4 h-4 text-yellow-400 absolute -top-1 -right-1 animate-spin" />
+              </div>
+            </div>
+            
+            <h1 className="text-2xl md:text-3xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              Compatibility Test
+            </h1>
+            <p className="text-sm text-slate-300">
+              Discover your deep connection with someone special
+            </p>
           </div>
 
-          <ConnectionStatus />
-          
-          <div className="absolute top-4 left-4">
+          {/* FIXED: Working Input Fields */}
+          <div className="space-y-4 mb-6">
+            <SimpleInput
+              ref={nameInputRef}
+              label="Your Name"
+              icon={User}
+              placeholder="Enter your name"
+              value={playerName}
+              onChange={handleNameChange}
+              onKeyPress={handleKeyPress}
+            />
+            
+            <SimpleInput
+              ref={roomInputRef}
+              label="Room Code"
+              icon={Key}
+              placeholder="Enter room code (optional)"
+              value={roomId}
+              onChange={handleRoomChange}
+              onKeyPress={handleKeyPress}
+            />
+          </div>
+
+          <div className="space-y-3">
             <Button
-              variant="ghost"
-              size={isMobile ? "sm" : "default"}
-              onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-              className={`rounded-full ${darkMode ? 'bg-slate-800/50 hover:bg-slate-700/50 text-white' : 'bg-white/80 hover:bg-white text-gray-700'} backdrop-blur-sm border-0`}
+              onClick={createRoom}
+              disabled={!playerName.trim()}
+              size="lg"
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-xl disabled:opacity-50"
             >
-              <Settings className="w-4 h-4 md:w-5 md:h-5" />
+              <Crown className="w-4 h-4 mr-2" />
+              Create New Room
+            </Button>
+
+            <Button
+              onClick={joinRoom}
+              disabled={!playerName.trim() || !roomId.trim()}
+              size="lg"
+              className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-xl disabled:opacity-50"
+            >
+              <Users className="w-4 h-4 mr-2" />
+              Join Existing Room
             </Button>
           </div>
 
-          <div className="w-full max-w-md mx-auto px-4">
-            <Card className={`p-6 md:p-8 backdrop-blur-sm border-0 shadow-2xl transition-all duration-300 ${
-              darkMode ? 'bg-slate-800/40' : 'bg-white/80'
-            }`}>
-              <div className="text-center mb-8">
-                <div className="flex justify-center mb-6">
-                  <div className="relative">
-                    <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
-                      <Heart className="w-10 h-10 md:w-12 md:h-12 text-white animate-pulse" />
-                    </div>
-                    <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 absolute -top-2 -right-2 animate-spin" />
-                  </div>
-                </div>
-                
-                <h1 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  Compatibility Test
-                </h1>
-                <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  Discover your deep connection with someone special
-                </p>
+          <div className="mt-6 p-3 rounded-xl border bg-slate-700/30 border-slate-600">
+            <h4 className="font-semibold mb-2 flex items-center justify-center text-xs">
+              <Sparkles className="w-3 h-3 mr-1 text-yellow-500" />
+              Advanced Features
+            </h4>
+            <div className="grid grid-cols-2 gap-1 text-xs">
+              <div className="flex items-center space-x-1">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                <span>Personality Matching</span>
               </div>
-
-              {/* FIXED: ENHANCED Input Fields with proper mobile handling */}
-              <div className="space-y-6 mb-8">
-                <EnhancedInput
-                  ref={nameInputRef}
-                  label="Your Name"
-                  icon={User}
-                  placeholder="Enter your beautiful name"
-                  value={playerName}
-                  onChange={handleNameChange}
-                  onFocus={handleNameFocus}
-                  onKeyPress={handleKeyPress}
-                  autoFocus={true}
-                />
-                
-                <EnhancedInput
-                  ref={roomInputRef}
-                  label="Room Code"
-                  icon={Key}
-                  placeholder="Enter room code (optional)"
-                  value={roomId}
-                  onChange={handleRoomChange}
-                  onFocus={handleRoomFocus}
-                  onKeyPress={handleKeyPress}
-                />
+              <div className="flex items-center space-x-1">
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                <span>Values Alignment</span>
               </div>
-
-              <div className="space-y-4">
-                <Button
-                  onClick={createRoom}
-                  disabled={!playerName.trim()}
-                  size="lg"
-                  className="w-full py-6 text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95"
-                >
-                  <Crown className="w-5 h-5 mr-3" />
-                  Create New Room
-                </Button>
-
-                <Button
-                  onClick={joinRoom}
-                  disabled={!playerName.trim() || !roomId.trim()}
-                  size="lg"
-                  className="w-full py-6 text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95"
-                >
-                  <Users className="w-5 h-5 mr-3" />
-                  Join Existing Room
-                </Button>
+              <div className="flex items-center space-x-1">
+                <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                <span>Real-time Progress</span>
               </div>
-
-              <div className={`mt-8 p-4 rounded-xl border ${
-                darkMode ? 'bg-slate-700/30 border-slate-600' : 'bg-white/50 border-gray-200'
-              }`}>
-                <h4 className="font-semibold mb-3 flex items-center justify-center text-sm">
-                  <Sparkles className="w-4 h-4 mr-2 text-yellow-500" />
-                  Advanced Features
-                </h4>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="flex items-center space-x-1">
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                    <span>Personality Matching</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                    <span>Values Alignment</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
-                    <span>Real-time Progress</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <div className="w-1.5 h-1.5 bg-pink-500 rounded-full"></div>
-                    <span>Interactive Results</span>
-                  </div>
-                </div>
+              <div className="flex items-center space-x-1">
+                <div className="w-1.5 h-1.5 bg-pink-500 rounded-full"></div>
+                <span>Interactive Results</span>
               </div>
-
-              <div className="mt-4 text-center">
-                <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs ${
-                  darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
-                }`}>
-                  {isMobile ? (
-                    <>
-                      <Smartphone className="w-3 h-3" />
-                      <span>Mobile Optimized</span>
-                    </>
-                  ) : (
-                    <>
-                      <Monitor className="w-3 h-3" />
-                      <span>Desktop Experience</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </Card>
+            </div>
           </div>
-
-          {showAdvancedSettings && <SettingsPanel />}
-        </div>
+        </Card>
       </div>
+
+      {showAdvancedSettings && <SettingsPanel />}
     </div>
   );
 
-  // Enhanced cleanup on unmount
+  // Cleanup
   useEffect(() => {
     return () => {
       if (submitTimeoutRef.current) {
         clearTimeout(submitTimeoutRef.current);
       }
-      
-      const confettiElements = document.querySelectorAll('div[style*="confetti-fall"]');
-      confettiElements.forEach(el => {
-        if (document.body.contains(el)) {
-          document.body.removeChild(el);
-        }
-      });
     };
   }, []);
 
