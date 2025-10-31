@@ -121,8 +121,8 @@ const additionalCompatibilityFactors = {
   relationshipGoals: ["Long-term", "Casual", "Marriage", "Exploratory", "Friendship"]
 };
 
-// NEW: IMPROVED Input Component with better mobile handling and auto-focus
-const FixedInput = React.forwardRef(({ 
+// NEW: Enhanced Input Component with better mobile handling (from Truth and Dare)
+const EnhancedInput = React.forwardRef(({ 
   label, 
   icon: Icon, 
   placeholder, 
@@ -142,7 +142,7 @@ const FixedInput = React.forwardRef(({
   React.useImperativeHandle(ref, () => inputRef.current);
   
   useEffect(() => {
-    if (autoFocus && inputRef.current && !isMobile) {
+    if (autoFocus && inputRef.current && window.innerWidth >= 768) {
       setTimeout(() => {
         inputRef.current?.focus();
       }, 300);
@@ -152,22 +152,11 @@ const FixedInput = React.forwardRef(({
   const handleFocus = (e) => {
     setIsFocused(true);
     if (onFocus) onFocus(e);
-    
-    // Enhanced mobile handling
-    if (window.innerWidth <= 768) {
-      const target = e.target;
-      setTimeout(() => {
-        target.style.fontSize = "16px";
-      }, 100);
-    }
   };
 
   const handleBlur = () => {
     setIsFocused(false);
   };
-
-  // Check if mobile
-  const isMobile = window.innerWidth < 768;
 
   return (
     <div className="space-y-2">
@@ -186,7 +175,7 @@ const FixedInput = React.forwardRef(({
           onFocus={handleFocus}
           onBlur={handleBlur}
           onKeyPress={onKeyPress}
-          autoFocus={autoFocus && !isMobile}
+          autoFocus={autoFocus && window.innerWidth >= 768}
           className={`
             w-full h-12 px-4 bg-white/10 border-2 rounded-xl
             text-white placeholder-white/60 text-base
@@ -211,7 +200,7 @@ const FixedInput = React.forwardRef(({
   );
 });
 
-FixedInput.displayName = "FixedInput";
+EnhancedInput.displayName = "EnhancedInput";
 
 export default function AdvancedCompatibilityGame() {
   // Core states - KEEP ALL YOUR EXISTING STATES
@@ -282,7 +271,7 @@ export default function AdvancedCompatibilityGame() {
   const optionsContainerRef = useRef<HTMLDivElement>(null);
   const questionContainerRef = useRef<HTMLDivElement>(null);
 
-  // NEW: Enhanced mobile detection with better viewport handling
+  // NEW: Enhanced mobile detection with better viewport handling (from Truth and Dare)
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
@@ -291,13 +280,6 @@ export default function AdvancedCompatibilityGame() {
       // Set proper viewport height for mobile
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
-      
-      // Add mobile class for specific styling
-      if (mobile) {
-        document.body.classList.add('mobile-device');
-      } else {
-        document.body.classList.remove('mobile-device');
-      }
     };
 
     checkMobile();
@@ -315,7 +297,210 @@ export default function AdvancedCompatibilityGame() {
     };
   }, []);
 
-  // NEW: Improved input handlers with useCallback to prevent re-renders
+  // NEW: Enhanced scrolling fix for mobile (from Truth and Dare)
+  useEffect(() => {
+    const preventScroll = (e: TouchEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      e.preventDefault();
+    };
+
+    // Improved scroll handling for mobile
+    if (isMobile) {
+      document.body.style.overflow = 'auto';
+      document.body.style.height = 'auto';
+      document.addEventListener('touchmove', preventScroll, { passive: false });
+    } else {
+      document.body.style.overflow = 'auto';
+      document.removeEventListener('touchmove', preventScroll);
+    }
+
+    return () => {
+      document.body.style.overflow = 'auto';
+      document.removeEventListener('touchmove', preventScroll);
+    };
+  }, [isMobile]);
+
+  // NEW: Auto-scroll to top when changing screens (from Truth and Dare)
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [joined, gameStarted, showResults, waitingForPartner]);
+
+  // NEW: Enhanced CSS for mobile optimizations (from Truth and Dare)
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      :root {
+        --vh: 1vh;
+      }
+      
+      @keyframes confetti-fall {
+        0% {
+          transform: translateY(-20px) rotate(0deg) scale(1);
+          opacity: 1;
+        }
+        100% {
+          transform: translateY(100vh) rotate(720deg) scale(0.5);
+          opacity: 0;
+        }
+      }
+      
+      /* Enhanced Mobile Optimizations from Truth and Dare */
+      .mobile-viewport-fix {
+        height: 100vh;
+        height: calc(var(--vh, 1vh) * 100);
+        overflow: hidden;
+        position: fixed;
+        width: 100%;
+        top: 0;
+        left: 0;
+      }
+      
+      .mobile-scroll-container {
+        height: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+      }
+      
+      .game-content-container {
+        min-height: 100%;
+        padding-bottom: env(safe-area-inset-bottom, 20px);
+      }
+      
+      .safe-area-padding {
+        padding-left: env(safe-area-inset-left, 1rem);
+        padding-right: env(safe-area-inset-right, 1rem);
+        padding-bottom: env(safe-area-inset-bottom, 1rem);
+      }
+      
+      .safe-area-inset-bottom {
+        margin-bottom: env(safe-area-inset-bottom, 0px);
+      }
+
+      .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(168, 85, 247, 0.5) transparent;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+        border-radius: 10px;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: linear-gradient(to bottom, #8b5cf6, #3b82f6);
+        border-radius: 10px;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(to bottom, #7c3aed, #2563eb);
+      }
+      
+      /* Enhanced mobile responsiveness */
+      @media (max-width: 768px) {
+        .mobile-viewport-fix {
+          height: 100vh;
+          height: -webkit-fill-available;
+          position: fixed;
+        }
+        
+        .mobile-scroll-container {
+          height: 100%;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        
+        .safe-area-padding {
+          padding-left: max(0.75rem, env(safe-area-inset-left, 0.75rem));
+          padding-right: max(0.75rem, env(safe-area-inset-right, 0.75rem));
+          padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
+        }
+        
+        /* Fix for bottom content being cut off */
+        .game-content-container {
+          min-height: calc(100vh - env(safe-area-inset-bottom, 0px));
+          padding-bottom: env(safe-area-inset-bottom, 1rem);
+        }
+        
+        /* Ensure inputs are accessible */
+        input, textarea, select {
+          font-size: 16px !important; /* Prevent zoom on iOS */
+        }
+        
+        /* Better touch targets */
+        button, [role="button"] {
+          min-height: 44px;
+          min-width: 44px;
+        }
+      }
+
+      /* Smooth animations */
+      * {
+        transition: all 0.2s ease-in-out;
+      }
+      
+      /* Focus styles */
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid #8b5cf6;
+        outline-offset: 2px;
+      }
+      
+      /* Prevent blue highlight on tap */
+      * {
+        -webkit-tap-highlight-color: transparent;
+      }
+      
+      /* Enhanced scrolling fixes */
+      html, body {
+        overflow-x: hidden;
+        position: relative;
+        width: 100%;
+      }
+      
+      body {
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* Improved mobile viewport handling */
+      @media (max-width: 768px) {
+        .mobile-viewport-fix {
+          height: 100vh;
+          height: calc(var(--vh, 1vh) * 100);
+          overflow: hidden;
+          position: fixed;
+          width: 100%;
+          top: 0;
+          left: 0;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    // Enhanced viewport height calculation for mobile
+    const updateViewportHeight = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    };
+    
+    updateViewportHeight();
+    window.addEventListener('resize', updateViewportHeight);
+    window.addEventListener('orientationchange', updateViewportHeight);
+    
+    return () => {
+      document.head.removeChild(style);
+      window.removeEventListener('resize', updateViewportHeight);
+      window.removeEventListener('orientationchange', updateViewportHeight);
+    };
+  }, []);
+
+  // NEW: Enhanced input handlers with useCallback to prevent re-renders
   const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setPlayerName(e.target.value);
   }, []);
@@ -341,36 +526,6 @@ export default function AdvancedCompatibilityGame() {
       }
     }
   }, [playerName, roomId]);
-
-  // NEW: Enhanced scrolling fix for mobile
-  useEffect(() => {
-    const preventScroll = (e: TouchEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-      e.preventDefault();
-    };
-
-    // Improved scroll handling for mobile
-    if (isMobile) {
-      document.body.style.overflow = 'auto';
-      document.body.style.height = 'auto';
-      document.addEventListener('touchmove', preventScroll, { passive: false });
-    } else {
-      document.body.style.overflow = 'auto';
-      document.removeEventListener('touchmove', preventScroll);
-    }
-
-    return () => {
-      document.body.style.overflow = 'auto';
-      document.removeEventListener('touchmove', preventScroll);
-    };
-  }, [isMobile]);
-
-  // NEW: Auto-scroll to top when changing screens
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [joined, gameStarted, showResults, waitingForPartner]);
 
   // KEEP ALL YOUR EXISTING STATE PERSISTENCE AND SOCKET CODE
   useEffect(() => {
@@ -1406,413 +1561,420 @@ export default function AdvancedCompatibilityGame() {
     return (
       <div 
         ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 ${
-          darkMode 
-            ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
-            : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-        }`}
-        style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}
+        className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix"
       >
-        <ConnectionStatus />
-        
-        {/* NEW: Back Button */}
-        <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={backToHome}
-            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-          >
-            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-          >
-            <Settings className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
-        </div>
-
-        <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-6xl">
-          <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
-            darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+        <div className="flex-1 overflow-y-auto mobile-scroll-container" ref={mainContainerRef}>
+          <div className={`min-h-full flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 safe-area-padding game-content-container ${
+            darkMode 
+              ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
+              : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
           }`}>
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4">
-              <div>
-                <h2 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-                  Compatibility Results
-                </h2>
-                <p className={`mt-1 md:mt-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  {Object.keys(bothAnswers).join(" 💞 ")}
-                </p>
-              </div>
-              
+            <ConnectionStatus />
+            
+            {/* NEW: Back Button */}
+            <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
               <Button
-                onClick={captureScreenshot}
-                disabled={isCapturing}
+                variant="ghost"
                 size={isMobile ? "sm" : "default"}
-                className={`${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`}
+                onClick={backToHome}
+                className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
               >
-                {isCapturing ? (
-                  <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
-                ) : (
-                  <Share2 className="w-4 h-4 md:w-5 md:h-5" />
-                )}
+                <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size={isMobile ? "sm" : "default"}
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
+              >
+                <Settings className="w-4 h-4 md:w-5 md:h-5" />
               </Button>
             </div>
 
-            <div className="text-center mb-6 md:mb-8">
-              <div className={`text-5xl md:text-7xl font-black mb-3 md:mb-4 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
-                {score}%
-              </div>
-              <h3 className="text-xl md:text-3xl font-bold mb-1 md:mb-2">{getCompatibilityMessage(score)}</h3>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
-              {Object.entries(advancedFactors).map(([key, value]) => (
-                <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
-                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-                }`}>
-                  <div className="text-xs md:text-sm font-medium capitalize mb-1">
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
+            <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-6xl">
+              <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
+                darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+              }`}>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4">
+                  <div>
+                    <h2 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                      Compatibility Results
+                    </h2>
+                    <p className={`mt-1 md:mt-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                      {Object.keys(bothAnswers).join(" 💞 ")}
+                    </p>
                   </div>
-                  <div className={`text-base md:text-lg font-semibold ${
-                    typeof value === 'string' && value.includes('match') 
-                      ? 'text-green-500' 
-                      : typeof value === 'string' && value.includes('Different')
-                      ? 'text-orange-500'
-                      : darkMode ? 'text-white' : 'text-gray-800'
-                  }`}>
-                    {value}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
-              {Object.entries(additionalFactors).map(([key, value]) => (
-                <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
-                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-                }`}>
-                  <div className="text-xs md:text-sm font-medium capitalize mb-1">
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
-                  </div>
-                  <div className={`text-base md:text-lg font-semibold ${
-                    typeof value === 'string' && (value.includes('shared') || value.includes('Aligned') || value.includes('match'))
-                      ? 'text-green-500' 
-                      : typeof value === 'string' && value.includes('Different')
-                      ? 'text-orange-500'
-                      : darkMode ? 'text-white' : 'text-gray-800'
-                  }`}>
-                    {value}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
-              {Object.entries(breakdown).map(([category, catScore]) => (
-                <div key={category} className={`p-3 md:p-4 rounded-xl border ${
-                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-                }`}>
-                  <div className="text-xs md:text-sm mb-1 md:mb-2">{category}</div>
-                  <div className="text-xl md:text-2xl font-bold mb-1 md:mb-2">
-                    {Math.round((catScore as number / questions.filter(q => q.category === category).length) * 100)}%
-                  </div>
-                  <Progress 
-                    value={(catScore as number / questions.filter(q => q.category === category).length) * 100} 
-                    className={`h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
-              darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-            }`}>
-              <h3 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center justify-center">
-                <Brain className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-500" />
-                Relationship Insights
-              </h3>
-              <div className="space-y-2 md:space-y-3">
-                {insights.map((insight, index) => (
-                  <div key={index} className={`flex items-start space-x-2 md:space-x-3 p-2 md:p-3 rounded-lg ${
-                    darkMode ? 'bg-slate-600/50' : 'bg-white'
-                  }`}>
-                    <Sparkles className="w-3 h-3 md:w-4 md:h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm md:text-base">{insight}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex gap-3 md:gap-4 flex-col sm:flex-row">
-              <Button 
-                onClick={() => window.location.reload()} 
-                size={isMobile ? "sm" : "lg"}
-                className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white"
-              >
-                <RotateCcw className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                Play Again
-              </Button>
-              <Button 
-                onClick={captureScreenshot}
-                disabled={isCapturing}
-                size={isMobile ? "sm" : "lg"}
-                className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
-              >
-                {isCapturing ? (
-                  <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-2 animate-spin" />
-                ) : (
-                  <Share2 className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                )}
-                {isCapturing ? 'Capturing...' : 'Share Results'}
-              </Button>
-              <Button 
-                onClick={exitGame}
-                size={isMobile ? "sm" : "lg"}
-                variant="outline"
-                className="flex-1 py-4 md:py-6 text-base md:text-lg"
-              >
-                <X className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                Exit Game
-              </Button>
-            </div>
-          </Card>
-        </div>
-
-        {showAdvancedSettings && <SettingsPanel />}
-        
-        {/* NEW: Enhanced Share Modal with CLOSE button */}
-        {showShareModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 md:p-4">
-            <Card className="max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-xl md:rounded-2xl border-0 max-h-[90vh] overflow-y-auto">
-              <div className="p-4 md:p-6">
-                <div className="flex justify-between items-center mb-3 md:mb-4">
-                  <h3 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center">
-                    <Share2 className="w-5 h-5 md:w-6 md:h-6 mr-2 text-blue-600" />
-                    Share Your Results
-                  </h3>
+                  
                   <Button
-                    variant="ghost"
+                    onClick={captureScreenshot}
+                    disabled={isCapturing}
                     size={isMobile ? "sm" : "default"}
-                    onClick={() => setShowShareModal(false)}
+                    className={`${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`}
                   >
-                    <X className="w-5 h-5" />
+                    {isCapturing ? (
+                      <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
+                    ) : (
+                      <Share2 className="w-4 h-4 md:w-5 md:h-5" />
+                    )}
                   </Button>
                 </div>
-                
-                <div className="space-y-3 md:space-y-4">
-                  {capturedImage && (
-                    <div className="text-center">
-                      <img
-                        src={capturedImage}
-                        alt="Compatibility Results"
-                        className="w-full h-auto max-h-48 md:max-h-96 object-contain border rounded-lg"
+
+                <div className="text-center mb-6 md:mb-8">
+                  <div className={`text-5xl md:text-7xl font-black mb-3 md:mb-4 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
+                    {score}%
+                  </div>
+                  <h3 className="text-xl md:text-3xl font-bold mb-1 md:mb-2">{getCompatibilityMessage(score)}</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
+                  {Object.entries(advancedFactors).map(([key, value]) => (
+                    <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
+                      darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+                    }`}>
+                      <div className="text-xs md:text-sm font-medium capitalize mb-1">
+                        {key.replace(/([A-Z])/g, ' $1').trim()}
+                      </div>
+                      <div className={`text-base md:text-lg font-semibold ${
+                        typeof value === 'string' && value.includes('match') 
+                          ? 'text-green-500' 
+                          : typeof value === 'string' && value.includes('Different')
+                          ? 'text-orange-500'
+                          : darkMode ? 'text-white' : 'text-gray-800'
+                      }`}>
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
+                  {Object.entries(additionalFactors).map(([key, value]) => (
+                    <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
+                      darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+                    }`}>
+                      <div className="text-xs md:text-sm font-medium capitalize mb-1">
+                        {key.replace(/([A-Z])/g, ' $1').trim()}
+                      </div>
+                      <div className={`text-base md:text-lg font-semibold ${
+                        typeof value === 'string' && (value.includes('shared') || value.includes('Aligned') || value.includes('match'))
+                          ? 'text-green-500' 
+                          : typeof value === 'string' && value.includes('Different')
+                          ? 'text-orange-500'
+                          : darkMode ? 'text-white' : 'text-gray-800'
+                      }`}>
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
+                  {Object.entries(breakdown).map(([category, catScore]) => (
+                    <div key={category} className={`p-3 md:p-4 rounded-xl border ${
+                      darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+                    }`}>
+                      <div className="text-xs md:text-sm mb-1 md:mb-2">{category}</div>
+                      <div className="text-xl md:text-2xl font-bold mb-1 md:mb-2">
+                        {Math.round((catScore as number / questions.filter(q => q.category === category).length) * 100)}%
+                      </div>
+                      <Progress 
+                        value={(catScore as number / questions.filter(q => q.category === category).length) * 100} 
+                        className={`h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
                       />
                     </div>
-                  )}
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
-                    <Button
-                      onClick={() => capturedImage && downloadImage(capturedImage)}
-                      size={isMobile ? "sm" : "default"}
-                      className="py-3 md:py-4"
-                    >
-                      <Download className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                      Download
-                    </Button>
-                    
-                    <Button
-                      onClick={() => capturedImage && navigator.clipboard?.writeText(`Check out our compatibility score: ${score}%! 🎉`)}
-                      size={isMobile ? "sm" : "default"}
-                      className="py-3 md:py-4"
-                    >
-                      <Copy className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                      Copy Text
-                    </Button>
-                  </div>
+                  ))}
+                </div>
 
-                  <div className="pt-4 border-t">
-                    <Button
-                      onClick={() => setShowShareModal(false)}
-                      className="w-full"
-                      variant="outline"
-                    >
-                      Close
-                    </Button>
+                <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
+                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
+                }`}>
+                  <h3 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center justify-center">
+                    <Brain className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-500" />
+                    Relationship Insights
+                  </h3>
+                  <div className="space-y-2 md:space-y-3">
+                    {insights.map((insight, index) => (
+                      <div key={index} className={`flex items-start space-x-2 md:space-x-3 p-2 md:p-3 rounded-lg ${
+                        darkMode ? 'bg-slate-600/50' : 'bg-white'
+                      }`}>
+                        <Sparkles className="w-3 h-3 md:w-4 md:h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm md:text-base">{insight}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
+
+                <div className="flex gap-3 md:gap-4 flex-col sm:flex-row">
+                  <Button 
+                    onClick={() => window.location.reload()} 
+                    size={isMobile ? "sm" : "lg"}
+                    className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white"
+                  >
+                    <RotateCcw className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                    Play Again
+                  </Button>
+                  <Button 
+                    onClick={captureScreenshot}
+                    disabled={isCapturing}
+                    size={isMobile ? "sm" : "lg"}
+                    className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
+                  >
+                    {isCapturing ? (
+                      <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-2 animate-spin" />
+                    ) : (
+                      <Share2 className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                    )}
+                    {isCapturing ? 'Capturing...' : 'Share Results'}
+                  </Button>
+                  <Button 
+                    onClick={exitGame}
+                    size={isMobile ? "sm" : "lg"}
+                    variant="outline"
+                    className="flex-1 py-4 md:py-6 text-base md:text-lg"
+                  >
+                    <X className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                    Exit Game
+                  </Button>
+                </div>
+              </Card>
+            </div>
+
+            {showAdvancedSettings && <SettingsPanel />}
+            
+            {/* NEW: Enhanced Share Modal with CLOSE button */}
+            {showShareModal && (
+              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 md:p-4">
+                <Card className="max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-xl md:rounded-2xl border-0 max-h-[90vh] overflow-y-auto">
+                  <div className="p-4 md:p-6">
+                    <div className="flex justify-between items-center mb-3 md:mb-4">
+                      <h3 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center">
+                        <Share2 className="w-5 h-5 md:w-6 md:h-6 mr-2 text-blue-600" />
+                        Share Your Results
+                      </h3>
+                      <Button
+                        variant="ghost"
+                        size={isMobile ? "sm" : "default"}
+                        onClick={() => setShowShareModal(false)}
+                      >
+                        <X className="w-5 h-5" />
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-3 md:space-y-4">
+                      {capturedImage && (
+                        <div className="text-center">
+                          <img
+                            src={capturedImage}
+                            alt="Compatibility Results"
+                            className="w-full h-auto max-h-48 md:max-h-96 object-contain border rounded-lg"
+                          />
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+                        <Button
+                          onClick={() => capturedImage && downloadImage(capturedImage)}
+                          size={isMobile ? "sm" : "default"}
+                          className="py-3 md:py-4"
+                        >
+                          <Download className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                          Download
+                        </Button>
+                        
+                        <Button
+                          onClick={() => capturedImage && navigator.clipboard?.writeText(`Check out our compatibility score: ${score}%! 🎉`)}
+                          size={isMobile ? "sm" : "default"}
+                          className="py-3 md:py-4"
+                        >
+                          <Copy className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                          Copy Text
+                        </Button>
+                      </div>
+
+                      <div className="pt-4 border-t">
+                        <Button
+                          onClick={() => setShowShareModal(false)}
+                          className="w-full"
+                          variant="outline"
+                        >
+                          Close
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
               </div>
-            </Card>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
   };
 
   // Waiting for Partner Screen for final question
   const WaitingForPartnerScreen = () => (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-6 ${
-      darkMode ? 'bg-slate-900' : 'bg-gray-100'
-    }`}>
-      <Card className={`p-8 max-w-2xl w-full text-center ${
-        darkMode ? 'bg-slate-800' : 'bg-white'
-      }`}>
-        <div className="flex justify-center mb-6">
-          <Loader2 className="w-16 h-16 animate-spin text-purple-500" />
-        </div>
-        <h2 className="text-2xl font-bold mb-4">Waiting for Partner...</h2>
-        <p className={`mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-          You've completed all questions! Waiting for your partner to finish.
-        </p>
-        
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-3">Submission Status:</h3>
-          <div className="space-y-2">
-            {players.map((player, index) => (
-              <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50">
-                <span className="font-medium">{player.name}</span>
-                {submissionStatus[player.name] ? (
-                  <Badge className="bg-green-500">
-                    <Check className="w-3 h-3 mr-1" />
-                    Submitted
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-yellow-500 border-yellow-500">
-                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                    Waiting...
-                  </Badge>
-                )}
+    <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
+      <div className="flex-1 overflow-y-auto mobile-scroll-container">
+        <div className={`min-h-full flex flex-col items-center justify-center p-6 safe-area-padding game-content-container ${
+          darkMode ? 'bg-slate-900' : 'bg-gray-100'
+        }`}>
+          <Card className={`p-8 max-w-2xl w-full text-center ${
+            darkMode ? 'bg-slate-800' : 'bg-white'
+          }`}>
+            <div className="flex justify-center mb-6">
+              <Loader2 className="w-16 h-16 animate-spin text-purple-500" />
+            </div>
+            <h2 className="text-2xl font-bold mb-4">Waiting for Partner...</h2>
+            <p className={`mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              You've completed all questions! Waiting for your partner to finish.
+            </p>
+            
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-3">Submission Status:</h3>
+              <div className="space-y-2">
+                {players.map((player, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50">
+                    <span className="font-medium">{player.name}</span>
+                    {submissionStatus[player.name] ? (
+                      <Badge className="bg-green-500">
+                        <Check className="w-3 h-3 mr-1" />
+                        Submitted
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-yellow-500 border-yellow-500">
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Waiting...
+                      </Badge>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
 
-        <Button 
-          onClick={backToHome}
-          variant="outline"
-          className="mr-2"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Home
-        </Button>
-      </Card>
+            <Button 
+              onClick={backToHome}
+              variant="outline"
+              className="mr-2"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Home
+            </Button>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 
   // Waiting Screen Component with BACK button
   const WaitingScreen = () => (
-    <div 
-      ref={mainContainerRef}
-      className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 ${
-        darkMode 
-          ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
-          : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-      }`}
-      style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}
-    >
-      <ConnectionStatus />
-      
-      {/* NEW: Back Button */}
-      <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
-        <Button
-          variant="ghost"
-          size={isMobile ? "sm" : "default"}
-          onClick={backToHome}
-          className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-        >
-          <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size={isMobile ? "sm" : "default"}
-          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-          className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-        >
-          <Settings className="w-4 h-4 md:w-5 md:h-5" />
-        </Button>
-      </div>
-
-      <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-2xl">
-        <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
-          darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+    <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
+      <div className="flex-1 overflow-y-auto mobile-scroll-container" ref={mainContainerRef}>
+        <div className={`min-h-full flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 safe-area-padding game-content-container ${
+          darkMode 
+            ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
+            : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
         }`}>
-          <div className="text-center mb-6 md:mb-8">
-            <div className="flex justify-center mb-4 md:mb-6">
-              <div className="relative">
-                <Heart className="w-16 h-16 md:w-20 md:h-20 text-pink-500 animate-pulse" />
-                <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-500 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-spin" />
-              </div>
-            </div>
-            
-            <h2 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-              Advanced Compatibility
-            </h2>
-            <p className={`text-base md:text-lg ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-              Room Code: <span className="font-mono font-bold text-xl md:text-2xl">{roomId}</span>
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:gap-4 mb-6 md:mb-8">
-            {players.map((player, index) => (
-              <PlayerCard key={player.name || index} player={player} index={index} />
-            ))}
-          </div>
-
-          {players.length === 1 && (
-            <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 text-center ${
-              darkMode ? 'bg-yellow-500/20 border-yellow-400/30' : 'bg-yellow-100 border-yellow-200'
-            }`}>
-              <div className="flex items-center justify-center space-x-1 md:space-x-2">
-                <Users className="w-4 h-4 md:w-5 md:h-5 text-yellow-600" />
-                <span className={`text-sm md:text-base ${darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
-                  Waiting for partner to join...
-                </span>
-              </div>
-            </div>
-          )}
-
-          {isHost ? (
-            <Button 
-              onClick={startGame} 
-              disabled={players.length < 2}
-              size={isMobile ? "sm" : "lg"}
-              className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-2xl disabled:opacity-50"
-            >
-              <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-              Start Compatibility Test {players.length < 2 && `(Need ${2 - players.length} more)`}
-            </Button>
-          ) : (
-            <div className={`p-3 md:p-4 rounded-xl border text-center ${
-              darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
-            }`}>
-              <div className="flex items-center justify-center space-x-1 md:space-x-2">
-                <Clock className="w-4 h-4 md:w-5 md:h-5 text-blue-500 animate-pulse" />
-                <span className={`text-sm md:text-base ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
-                  Waiting for host to start the test...
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-4 md:mt-6 text-center">
+          <ConnectionStatus />
+          
+          {/* NEW: Back Button */}
+          <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
             <Button
-              onClick={() => navigator.clipboard?.writeText(roomId)}
-              variant="outline"
+              variant="ghost"
               size={isMobile ? "sm" : "default"}
-              className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
+              onClick={backToHome}
+              className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
             >
-              <LinkIcon className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-              Copy Room Code
+              <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size={isMobile ? "sm" : "default"}
+              onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+              className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
+            >
+              <Settings className="w-4 h-4 md:w-5 md:h-5" />
             </Button>
           </div>
-        </Card>
-      </div>
 
-      {showAdvancedSettings && <SettingsPanel />}
+          <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-2xl">
+            <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
+              darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+            }`}>
+              <div className="text-center mb-6 md:mb-8">
+                <div className="flex justify-center mb-4 md:mb-6">
+                  <div className="relative">
+                    <Heart className="w-16 h-16 md:w-20 md:h-20 text-pink-500 animate-pulse" />
+                    <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-500 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-spin" />
+                  </div>
+                </div>
+                
+                <h2 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                  Advanced Compatibility
+                </h2>
+                <p className={`text-base md:text-lg ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                  Room Code: <span className="font-mono font-bold text-xl md:text-2xl">{roomId}</span>
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:gap-4 mb-6 md:mb-8">
+                {players.map((player, index) => (
+                  <PlayerCard key={player.name || index} player={player} index={index} />
+                ))}
+              </div>
+
+              {players.length === 1 && (
+                <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 text-center ${
+                  darkMode ? 'bg-yellow-500/20 border-yellow-400/30' : 'bg-yellow-100 border-yellow-200'
+                }`}>
+                  <div className="flex items-center justify-center space-x-1 md:space-x-2">
+                    <Users className="w-4 h-4 md:w-5 md:h-5 text-yellow-600" />
+                    <span className={`text-sm md:text-base ${darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                      Waiting for partner to join...
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {isHost ? (
+                <Button 
+                  onClick={startGame} 
+                  disabled={players.length < 2}
+                  size={isMobile ? "sm" : "lg"}
+                  className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-2xl disabled:opacity-50"
+                >
+                  <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                  Start Compatibility Test {players.length < 2 && `(Need ${2 - players.length} more)`}
+                </Button>
+              ) : (
+                <div className={`p-3 md:p-4 rounded-xl border text-center ${
+                  darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
+                }`}>
+                  <div className="flex items-center justify-center space-x-1 md:space-x-2">
+                    <Clock className="w-4 h-4 md:w-5 md:h-5 text-blue-500 animate-pulse" />
+                    <span className={`text-sm md:text-base ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
+                      Waiting for host to start the test...
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 md:mt-6 text-center">
+                <Button
+                  onClick={() => navigator.clipboard?.writeText(roomId)}
+                  variant="outline"
+                  size={isMobile ? "sm" : "default"}
+                  className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
+                >
+                  <LinkIcon className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                  Copy Room Code
+                </Button>
+              </div>
+            </Card>
+          </div>
+
+          {showAdvancedSettings && <SettingsPanel />}
+        </div>
+      </div>
     </div>
   );
 
@@ -1831,499 +1993,389 @@ export default function AdvancedCompatibilityGame() {
     const isFinalQuestion = currentQuestion === questions.length - 1;
 
     return (
-      <div 
-        ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 ${
-          darkMode 
-            ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
-            : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-        }`}
-        style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}
-      >
-        <ConnectionStatus />
-        
-        {/* NEW: Back Button */}
-        <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={backToHome}
-            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-          >
-            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-          >
-            <Settings className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
-        </div>
+      <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
+        <div className="flex-1 overflow-y-auto mobile-scroll-container" ref={mainContainerRef}>
+          <div className={`min-h-full flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 safe-area-padding game-content-container ${
+            darkMode 
+              ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
+              : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+          }`}>
+            <ConnectionStatus />
+            
+            {/* NEW: Back Button */}
+            <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
+              <Button
+                variant="ghost"
+                size={isMobile ? "sm" : "default"}
+                onClick={backToHome}
+                className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
+              >
+                <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size={isMobile ? "sm" : "default"}
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
+              >
+                <Settings className="w-4 h-4 md:w-5 md:h-5" />
+              </Button>
+            </div>
 
-        <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
-          <div className="mb-4 md:mb-6">
-            <div className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 md:p-6 rounded-xl border backdrop-blur-sm gap-3 md:gap-0 ${
-              darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-            }`}>
-              <div>
-                <h2 className="text-lg md:text-xl font-bold">Room: {roomId}</h2>
-                <div className={`flex items-center space-x-1 md:space-x-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  <Users className="w-3 h-3 md:w-4 md:h-4" />
-                  <span>{players.map(p => p.name).join(" & ")}</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-4 md:space-x-6 w-full md:w-auto justify-between md:justify-normal">
-                <div className="text-right md:text-left">
-                  <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Progress</div>
-                  <div className="text-base md:text-lg font-bold">
-                    {currentQuestion + 1} / {questions.length}
+            <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
+              <div className="mb-4 md:mb-6">
+                <div className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 md:p-6 rounded-xl border backdrop-blur-sm gap-3 md:gap-0 ${
+                  darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+                }`}>
+                  <div>
+                    <h2 className="text-lg md:text-xl font-bold">Room: {roomId}</h2>
+                    <div className={`flex items-center space-x-1 md:space-x-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                      <Users className="w-3 h-3 md:w-4 md:h-4" />
+                      <span>{players.map(p => p.name).join(" & ")}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-4 md:space-x-6 w-full md:w-auto justify-between md:justify-normal">
+                    <div className="text-right md:text-left">
+                      <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Progress</div>
+                      <div className="text-base md:text-lg font-bold">
+                        {currentQuestion + 1} / {questions.length}
+                      </div>
+                    </div>
+                    
+                    {timeLeft !== null && (
+                      <div className="text-right md:text-left">
+                        <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Time Left</div>
+                        <div className={`text-base md:text-lg font-bold flex items-center ${
+                          timeLeft <= 10 ? 'text-red-500 animate-pulse' : ''
+                        }`}>
+                          <Timer className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                          {timeLeft}s
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-                
-                {timeLeft !== null && (
-                  <div className="text-right md:text-left">
-                    <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Time Left</div>
-                    <div className={`text-base md:text-lg font-bold flex items-center ${
-                      timeLeft <= 10 ? 'text-red-500 animate-pulse' : ''
-                    }`}>
-                      <Timer className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                      {timeLeft}s
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:gap-4 mb-4 md:mb-6">
+                {players.map((player) => (
+                  <div key={player.name} className={`p-3 md:p-4 rounded-xl border backdrop-blur-sm ${
+                    darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1 md:mb-2">
+                      <div className="flex items-center space-x-2 md:space-x-3">
+                        <Avatar className="w-8 h-8 md:w-10 md:h-10">
+                          <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-600 text-white text-xs md:text-base">
+                            {player.name?.charAt(0)?.toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-semibold text-sm md:text-base">{player.name}</span>
+                      </div>
+                      <div className="text-base md:text-lg font-bold">
+                        {playerProgress[player.name] || 0}%
+                      </div>
+                    </div>
+                    <Progress 
+                      value={playerProgress[player.name] || 0} 
+                      className={`h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <Card 
+                ref={questionContainerRef}
+                className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 mb-4 md:mb-6 ${
+                  darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
+                }`}
+              >
+                <div className="text-center mb-6 md:mb-8">
+                  <Badge className={`mb-2 md:mb-3 text-xs md:text-sm ${darkMode ? 'bg-purple-500/20 text-purple-300 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>
+                    {currentQ.category} • Weight: {currentQ.weight}x
+                  </Badge>
+                  <h3 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">
+                    {currentQ.question}
+                  </h3>
+                  <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                    Question {currentQuestion + 1} of {questions.length}
+                  </p>
+                </div>
+
+                <div 
+                  ref={optionsContainerRef}
+                  className="space-y-3 md:space-y-4 mb-6 md:mb-8"
+                >
+                  {currentQ.options.map((option, index) => (
+                    <div 
+                      key={index} 
+                      className={`flex items-center space-x-3 md:space-x-4 p-3 md:p-4 rounded-xl border transition-all cursor-pointer ${
+                        currentAnswer === option 
+                          ? 'bg-purple-500/20 border-purple-400/50 scale-105 shadow-lg' 
+                          : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50 border-slate-600' : 'bg-white hover:bg-gray-50 border-gray-200'} hover:scale-102`
+                      }`}
+                      onClick={() => handleOptionSelect(option)}
+                    >
+                      <div className={`w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center ${
+                        currentAnswer === option 
+                          ? 'border-purple-400 bg-purple-400' 
+                          : 'border-gray-400'
+                      }`}>
+                        {currentAnswer === option && (
+                          <div className="w-2 h-2 md:w-3 md:h-3 rounded-full bg-white"></div>
+                        )}
+                      </div>
+                      <Label className="flex-1 cursor-pointer font-semibold text-base md:text-lg">
+                        {option}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+
+                {isFinalQuestion && (
+                  <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
+                    darkMode ? 'bg-blue-500/10 border-blue-400/30' : 'bg-blue-50 border-blue-200'
+                  }`}>
+                    <h3 className="text-lg md:text-xl font-bold mb-4 flex items-center">
+                      <Sparkles className="w-5 h-5 mr-2 text-blue-500" />
+                      Additional Compatibility Factors
+                    </h3>
+                    <p className={`mb-4 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                      These additional questions will help us calculate a more accurate compatibility score.
+                    </p>
+                    <AdvancedQuestions />
+                  </div>
+                )}
+
+                {currentAnswer && currentQ.insights && (
+                  <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 ${
+                    darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
+                  }`}>
+                    <div className="flex items-center space-x-2">
+                      <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
+                      <span className="font-medium text-sm md:text-base">
+                        This suggests: {currentQ.insights[currentAnswer]}
+                      </span>
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 gap-3 md:gap-4 mb-4 md:mb-6">
-            {players.map((player) => (
-              <div key={player.name} className={`p-3 md:p-4 rounded-xl border backdrop-blur-sm ${
-                darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-              }`}>
-                <div className="flex items-center justify-between mb-1 md:mb-2">
-                  <div className="flex items-center space-x-2 md:space-x-3">
-                    <Avatar className="w-8 h-8 md:w-10 md:h-10">
-                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-600 text-white text-xs md:text-base">
-                        {player.name?.charAt(0)?.toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="font-semibold text-sm md:text-base">{player.name}</span>
-                  </div>
-                  <div className="text-base md:text-lg font-bold">
-                    {playerProgress[player.name] || 0}%
-                  </div>
-                </div>
-                <Progress 
-                  value={playerProgress[player.name] || 0} 
-                  className={`h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
-                />
-              </div>
-            ))}
-          </div>
+                <div className="flex justify-between items-center">
+                  <Button
+                    variant="outline"
+                    size={isMobile ? "sm" : "default"}
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
+                  >
+                    {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                  </Button>
 
-          <Card 
-            ref={questionContainerRef}
-            className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 mb-4 md:mb-6 ${
-              darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-            }`}
-          >
-            <div className="text-center mb-6 md:mb-8">
-              <Badge className={`mb-2 md:mb-3 text-xs md:text-sm ${darkMode ? 'bg-purple-500/20 text-purple-300 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>
-                {currentQ.category} • Weight: {currentQ.weight}x
-              </Badge>
-              <h3 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">
-                {currentQ.question}
-              </h3>
-              <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                Question {currentQuestion + 1} of {questions.length}
-              </p>
-            </div>
-
-            <div 
-              ref={optionsContainerRef}
-              className="space-y-3 md:space-y-4 mb-6 md:mb-8"
-            >
-              {currentQ.options.map((option, index) => (
-                <div 
-                  key={index} 
-                  className={`flex items-center space-x-3 md:space-x-4 p-3 md:p-4 rounded-xl border transition-all cursor-pointer ${
-                    currentAnswer === option 
-                      ? 'bg-purple-500/20 border-purple-400/50 scale-105 shadow-lg' 
-                      : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50 border-slate-600' : 'bg-white hover:bg-gray-50 border-gray-200'} hover:scale-102`
-                  }`}
-                  onClick={() => handleOptionSelect(option)}
-                >
-                  <div className={`w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center ${
-                    currentAnswer === option 
-                      ? 'border-purple-400 bg-purple-400' 
-                      : 'border-gray-400'
-                  }`}>
-                    {currentAnswer === option && (
-                      <div className="w-2 h-2 md:w-3 md:h-3 rounded-full bg-white"></div>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={!currentAnswer || isSubmitting}
+                    size={isMobile ? "sm" : "default"}
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 md:px-8 py-2 md:py-3 text-base md:text-lg disabled:opacity-50 transition-all"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : isFinalQuestion ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
+                        Finish Test
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
+                        Next Question
+                      </>
                     )}
-                  </div>
-                  <Label className="flex-1 cursor-pointer font-semibold text-base md:text-lg">
-                    {option}
-                  </Label>
+                  </Button>
                 </div>
-              ))}
+              </Card>
+
+              <div className="flex justify-center space-x-1 md:space-x-2">
+                {['❤️', '😂', '😮', '👏', '🎉'].map(reaction => (
+                  <Button
+                    key={reaction}
+                    variant="outline"
+                    size={isMobile ? "sm" : "default"}
+                    onClick={() => sendReaction(reaction)}
+                    className={`text-base md:text-lg h-10 w-10 md:h-12 md:w-12 ${
+                      darkMode ? 'bg-slate-700 border-slate-600 hover:bg-slate-600' : 'bg-white border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    {reaction}
+                  </Button>
+                ))}
+              </div>
             </div>
 
-            {isFinalQuestion && (
-              <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
-                darkMode ? 'bg-blue-500/10 border-blue-400/30' : 'bg-blue-50 border-blue-200'
-              }`}>
-                <h3 className="text-lg md:text-xl font-bold mb-4 flex items-center">
-                  <Sparkles className="w-5 h-5 mr-2 text-blue-500" />
-                  Additional Compatibility Factors
-                </h3>
-                <p className={`mb-4 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  These additional questions will help us calculate a more accurate compatibility score.
-                </p>
-                <AdvancedQuestions />
-              </div>
-            )}
-
-            {currentAnswer && currentQ.insights && (
-              <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 ${
-                darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
-              }`}>
-                <div className="flex items-center space-x-2">
-                  <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
-                  <span className="font-medium text-sm md:text-base">
-                    This suggests: {currentQ.insights[currentAnswer]}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-between items-center">
-              <Button
-                variant="outline"
-                size={isMobile ? "sm" : "default"}
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
-              >
-                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-              </Button>
-
-              <Button
-                onClick={handleSubmit}
-                disabled={!currentAnswer || isSubmitting}
-                size={isMobile ? "sm" : "default"}
-                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 md:px-8 py-2 md:py-3 text-base md:text-lg disabled:opacity-50 transition-all"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2 animate-spin" />
-                    Submitting...
-                  </>
-                ) : isFinalQuestion ? (
-                  <>
-                    <CheckCircle className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
-                    Finish Test
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
-                    Next Question
-                  </>
-                )}
-              </Button>
-            </div>
-          </Card>
-
-          <div className="flex justify-center space-x-1 md:space-x-2">
-            {['❤️', '😂', '😮', '👏', '🎉'].map(reaction => (
-              <Button
-                key={reaction}
-                variant="outline"
-                size={isMobile ? "sm" : "default"}
-                onClick={() => sendReaction(reaction)}
-                className={`text-base md:text-lg h-10 w-10 md:h-12 md:w-12 ${
-                  darkMode ? 'bg-slate-700 border-slate-600 hover:bg-slate-600' : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                {reaction}
-              </Button>
-            ))}
+            {showAdvancedSettings && <SettingsPanel />}
           </div>
         </div>
-
-        {showAdvancedSettings && <SettingsPanel />}
       </div>
     );
   };
 
-  // Completely redesigned Join/Create Screen with FIXED inputs
+  // Completely redesigned Join/Create Screen with ENHANCED inputs (from Truth and Dare)
   const JoinCreateScreen = () => (
-    <div 
-      ref={mainContainerRef}
-      className={`min-h-screen flex flex-col items-center justify-center p-4 md:p-6 transition-colors duration-300 ${
-        darkMode 
-          ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-blue-900' 
-          : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-      }`}
-      style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}
-    >
-      <ConnectionStatus />
-      
-      <div className="absolute top-4 left-4">
-        <Button
-          variant="ghost"
-          size={isMobile ? "sm" : "default"}
-          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-          className={`rounded-full ${darkMode ? 'bg-slate-800/50 hover:bg-slate-700/50 text-white' : 'bg-white/80 hover:bg-white text-gray-700'} backdrop-blur-sm border-0`}
-        >
-          <Settings className="w-4 h-4 md:w-5 md:h-5" />
-        </Button>
-      </div>
-
-      <div className="w-full max-w-md mx-auto px-4">
-        <Card className={`p-6 md:p-8 backdrop-blur-sm border-0 shadow-2xl transition-all duration-300 ${
-          darkMode ? 'bg-slate-800/40' : 'bg-white/80'
-        }`}>
-          <div className="text-center mb-8">
-            <div className="flex justify-center mb-6">
-              <div className="relative">
-                <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
-                  <Heart className="w-10 h-10 md:w-12 md:h-12 text-white animate-pulse" />
-                </div>
-                <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 absolute -top-2 -right-2 animate-spin" />
-              </div>
-            </div>
-            
-            <h1 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Compatibility Test
-            </h1>
-            <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-              Discover your deep connection with someone special
-            </p>
+    <div className="h-screen w-full flex overflow-hidden bg-background mobile-viewport-fix">
+      <div className="flex-1 overflow-y-auto mobile-scroll-container" ref={mainContainerRef}>
+        <div className={`min-h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4 md:p-6 flex items-center justify-center relative game-content-container safe-area-padding`}>
+          {/* Animated background elements */}
+          <div className="absolute inset-0 overflow-hidden">
+            {[...Array(15)].map((_, i) => (
+              <div
+                key={i}
+                className="absolute w-2 h-2 bg-yellow-400 rounded-full opacity-30 animate-pulse"
+                style={{
+                  top: `${Math.random() * 100}%`,
+                  left: `${Math.random() * 100}%`,
+                  animationDelay: `${Math.random() * 2}s`,
+                  animationDuration: `${3 + Math.random() * 2}s`
+                }}
+              />
+            ))}
           </div>
 
-          {/* NEW: FIXED Input Fields */}
-          <div className="space-y-6 mb-8">
-            <FixedInput
-              ref={nameInputRef}
-              label="Your Name"
-              icon={User}
-              placeholder="Enter your beautiful name"
-              value={playerName}
-              onChange={handleNameChange}
-              onFocus={handleNameFocus}
-              onKeyPress={handleKeyPress}
-              autoFocus={true}
-            />
-            
-            <FixedInput
-              ref={roomInputRef}
-              label="Room Code"
-              icon={Key}
-              placeholder="Enter room code (optional)"
-              value={roomId}
-              onChange={handleRoomChange}
-              onFocus={handleRoomFocus}
-              onKeyPress={handleKeyPress}
-            />
-          </div>
-
-          <div className="space-y-4">
+          <ConnectionStatus />
+          
+          <div className="absolute top-4 left-4">
             <Button
-              onClick={createRoom}
-              disabled={!playerName.trim()}
-              size="lg"
-              className="w-full py-6 text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95"
+              variant="ghost"
+              size={isMobile ? "sm" : "default"}
+              onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+              className={`rounded-full ${darkMode ? 'bg-slate-800/50 hover:bg-slate-700/50 text-white' : 'bg-white/80 hover:bg-white text-gray-700'} backdrop-blur-sm border-0`}
             >
-              <Crown className="w-5 h-5 mr-3" />
-              Create New Room
-            </Button>
-
-            <Button
-              onClick={joinRoom}
-              disabled={!playerName.trim() || !roomId.trim()}
-              size="lg"
-              className="w-full py-6 text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95"
-            >
-              <Users className="w-5 h-5 mr-3" />
-              Join Existing Room
+              <Settings className="w-4 h-4 md:w-5 md:h-5" />
             </Button>
           </div>
 
-          <div className={`mt-8 p-4 rounded-xl border ${
-            darkMode ? 'bg-slate-700/30 border-slate-600' : 'bg-white/50 border-gray-200'
-          }`}>
-            <h4 className="font-semibold mb-3 flex items-center justify-center text-sm">
-              <Sparkles className="w-4 h-4 mr-2 text-yellow-500" />
-              Advanced Features
-            </h4>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center space-x-1">
-                <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                <span>Personality Matching</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                <span>Values Alignment</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
-                <span>Real-time Progress</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-1.5 h-1.5 bg-pink-500 rounded-full"></div>
-                <span>Interactive Results</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 text-center">
-            <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs ${
-              darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
+          <div className="w-full max-w-md mx-auto px-4">
+            <Card className={`p-6 md:p-8 backdrop-blur-sm border-0 shadow-2xl transition-all duration-300 ${
+              darkMode ? 'bg-slate-800/40' : 'bg-white/80'
             }`}>
-              {isMobile ? (
-                <>
-                  <Smartphone className="w-3 h-3" />
-                  <span>Mobile Optimized</span>
-                </>
-              ) : (
-                <>
-                  <Monitor className="w-3 h-3" />
-                  <span>Desktop Experience</span>
-                </>
-              )}
-            </div>
-          </div>
-        </Card>
-      </div>
+              <div className="text-center mb-8">
+                <div className="flex justify-center mb-6">
+                  <div className="relative">
+                    <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
+                      <Heart className="w-10 h-10 md:w-12 md:h-12 text-white animate-pulse" />
+                    </div>
+                    <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 absolute -top-2 -right-2 animate-spin" />
+                  </div>
+                </div>
+                
+                <h1 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  Compatibility Test
+                </h1>
+                <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                  Discover your deep connection with someone special
+                </p>
+              </div>
 
-      {showAdvancedSettings && <SettingsPanel />}
+              {/* NEW: ENHANCED Input Fields (from Truth and Dare) */}
+              <div className="space-y-6 mb-8">
+                <EnhancedInput
+                  ref={nameInputRef}
+                  label="Your Name"
+                  icon={User}
+                  placeholder="Enter your beautiful name"
+                  value={playerName}
+                  onChange={handleNameChange}
+                  onFocus={handleNameFocus}
+                  onKeyPress={handleKeyPress}
+                  autoFocus={true}
+                />
+                
+                <EnhancedInput
+                  ref={roomInputRef}
+                  label="Room Code"
+                  icon={Key}
+                  placeholder="Enter room code (optional)"
+                  value={roomId}
+                  onChange={handleRoomChange}
+                  onFocus={handleRoomFocus}
+                  onKeyPress={handleKeyPress}
+                />
+              </div>
+
+              <div className="space-y-4">
+                <Button
+                  onClick={createRoom}
+                  disabled={!playerName.trim()}
+                  size="lg"
+                  className="w-full py-6 text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95"
+                >
+                  <Crown className="w-5 h-5 mr-3" />
+                  Create New Room
+                </Button>
+
+                <Button
+                  onClick={joinRoom}
+                  disabled={!playerName.trim() || !roomId.trim()}
+                  size="lg"
+                  className="w-full py-6 text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95"
+                >
+                  <Users className="w-5 h-5 mr-3" />
+                  Join Existing Room
+                </Button>
+              </div>
+
+              <div className={`mt-8 p-4 rounded-xl border ${
+                darkMode ? 'bg-slate-700/30 border-slate-600' : 'bg-white/50 border-gray-200'
+              }`}>
+                <h4 className="font-semibold mb-3 flex items-center justify-center text-sm">
+                  <Sparkles className="w-4 h-4 mr-2 text-yellow-500" />
+                  Advanced Features
+                </h4>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center space-x-1">
+                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                    <span>Personality Matching</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                    <span>Values Alignment</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                    <span>Real-time Progress</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-1.5 h-1.5 bg-pink-500 rounded-full"></div>
+                    <span>Interactive Results</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 text-center">
+                <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs ${
+                  darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
+                }`}>
+                  {isMobile ? (
+                    <>
+                      <Smartphone className="w-3 h-3" />
+                      <span>Mobile Optimized</span>
+                    </>
+                  ) : (
+                    <>
+                      <Monitor className="w-3 h-3" />
+                      <span>Desktop Experience</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {showAdvancedSettings && <SettingsPanel />}
+        </div>
+      </div>
     </div>
   );
-
-  // NEW: Enhanced CSS for mobile optimizations
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-      :root {
-        --vh: 1vh;
-      }
-      
-      @keyframes confetti-fall {
-        0% {
-          transform: translateY(-20px) rotate(0deg) scale(1);
-          opacity: 1;
-        }
-        100% {
-          transform: translateY(100vh) rotate(720deg) scale(0.5);
-          opacity: 0;
-        }
-      }
-      
-      /* Enhanced Mobile Optimizations */
-      .mobile-device {
-        -webkit-touch-callout: none;
-        -webkit-user-select: none;
-        -khtml-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-        user-select: none;
-      }
-      
-      @media (max-width: 768px) {
-        .mobile-optimized-container {
-          padding-left: env(safe-area-inset-left);
-          padding-right: env(safe-area-inset-right);
-          padding-bottom: env(safe-area-inset-bottom);
-        }
-        
-        /* Better touch targets */
-        button, [role="button"] {
-          min-height: 44px;
-          min-width: 44px;
-        }
-        
-        /* Improved input handling */
-        input, textarea, select {
-          font-size: 16px !important;
-          min-height: 44px;
-        }
-        
-        /* Prevent zoom on iOS */
-        @media screen and (max-width: 768px) {
-          input, select, textarea {
-            font-size: 16px !important;
-          }
-        }
-        
-        /* Smooth scrolling */
-        * {
-          -webkit-overflow-scrolling: touch;
-        }
-        
-        /* Better scrollbar */
-        ::-webkit-scrollbar {
-          width: 6px;
-        }
-        
-        ::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-          background: rgba(168, 85, 247, 0.5);
-          border-radius: 10px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-          background: rgba(168, 85, 247, 0.7);
-        }
-      }
-      
-      /* Smooth transitions */
-      .smooth-transition {
-        transition: all 0.2s ease-in-out;
-      }
-      
-      /* Focus styles */
-      button:focus-visible,
-      input:focus-visible {
-        outline: 2px solid #8b5cf6;
-        outline-offset: 2px;
-      }
-      
-      /* Prevent blue highlight on tap */
-      * {
-        -webkit-tap-highlight-color: transparent;
-      }
-      
-      /* NEW: Enhanced scrolling fixes */
-      html, body {
-        overflow-x: hidden;
-        position: relative;
-        width: 100%;
-      }
-      
-      body {
-        -webkit-overflow-scrolling: touch;
-      }
-      
-      /* NEW: Improved mobile viewport handling */
-      @media (max-width: 768px) {
-        .mobile-viewport-fix {
-          height: calc(var(--vh, 1vh) * 100);
-          overflow-y: auto;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
 
   // Enhanced cleanup on unmount
   useEffect(() => {
