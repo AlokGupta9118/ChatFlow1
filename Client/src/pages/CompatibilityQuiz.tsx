@@ -112,7 +112,7 @@ const advancedCompatibilityFactors = {
   socialPreferences: ["Large Groups", "Small Circles", "One-on-One", "Mixed"]
 };
 
-// NEW: Additional compatibility parameters for enhanced matching
+// Additional compatibility parameters for enhanced matching
 const additionalCompatibilityFactors = {
   personalityTraits: ["Adventurous", "Cautious", "Spontaneous", "Planner", "Creative", "Logical", "Empathetic", "Independent"],
   values: ["Honesty", "Loyalty", "Freedom", "Security", "Growth", "Tradition", "Innovation", "Community"],
@@ -121,7 +121,7 @@ const additionalCompatibilityFactors = {
   relationshipGoals: ["Long-term", "Casual", "Marriage", "Exploratory", "Friendship"]
 };
 
-// NEW: Enhanced Input Component with better mobile support
+// Enhanced Input Component with better mobile support
 const EnhancedInput = ({ 
   label, 
   icon: Icon, 
@@ -217,7 +217,7 @@ export default function AdvancedCompatibilityGame() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // NEW: Waiting state for final question
+  // Waiting state for final question
   const [waitingForPartner, setWaitingForPartner] = useState(false);
   const [submissionStatus, setSubmissionStatus] = useState<{[key: string]: boolean}>({});
 
@@ -234,13 +234,12 @@ export default function AdvancedCompatibilityGame() {
   const optionsContainerRef = useRef<HTMLDivElement>(null);
   const questionContainerRef = useRef<HTMLDivElement>(null);
 
-  // FIXED: Enhanced mobile detection and viewport setup
+  // Enhanced mobile detection and viewport setup
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
       
-      // Set viewport height for mobile
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
     };
@@ -255,7 +254,7 @@ export default function AdvancedCompatibilityGame() {
     };
   }, []);
 
-  // FIXED: Enhanced state persistence
+  // Enhanced state persistence
   useEffect(() => {
     const savedState = localStorage.getItem('compatibilityGameState');
     if (savedState) {
@@ -271,7 +270,7 @@ export default function AdvancedCompatibilityGame() {
     }
   }, []);
 
-  // FIXED: Enhanced auto-save
+  // Enhanced auto-save
   useEffect(() => {
     try {
       const state = {
@@ -291,7 +290,7 @@ export default function AdvancedCompatibilityGame() {
     }
   }, [playerName, roomId, darkMode, joined, gameStarted, currentQuestion, answers, advancedAnswers, gameState]);
 
-  // FIXED: Enhanced socket connection management
+  // Enhanced socket connection management
   useEffect(() => {
     const handleConnect = () => {
       setConnectionStatus("connected");
@@ -323,7 +322,7 @@ export default function AdvancedCompatibilityGame() {
     };
   }, [joined, roomId, playerName]);
 
-  // FIXED: Enhanced socket event handlers
+  // Enhanced socket event handlers
   useEffect(() => {
     const handleRoomCreated = (room: any) => {
       if (!room) return;
@@ -416,7 +415,6 @@ export default function AdvancedCompatibilityGame() {
       setGameState(data.gameState || null);
     };
 
-    // FIXED: Enhanced show-results handler with waiting state management
     const handleShowResults = (data: any) => {
       console.log("Show results data received:", data);
       
@@ -439,7 +437,6 @@ export default function AdvancedCompatibilityGame() {
       triggerConfetti();
     };
 
-    // NEW: Handle submission status updates
     const handleSubmissionStatus = (data: {player: string, submitted: boolean}) => {
       if (!data || !data.player) return;
       setSubmissionStatus(prev => ({
@@ -473,7 +470,6 @@ export default function AdvancedCompatibilityGame() {
       console.error("Connection error:", error);
     };
 
-    // Register event listeners
     socket.on("room-created", handleRoomCreated);
     socket.on("room-joined", handleRoomJoined);
     socket.on("rejoin-success", handleRejoinSuccess);
@@ -503,7 +499,7 @@ export default function AdvancedCompatibilityGame() {
     };
   }, []);
 
-  // FIXED: Enhanced timer with proper cleanup
+  // Enhanced timer with proper cleanup
   useEffect(() => {
     if (timeLeft === null || !gameStarted || showResults) return;
     
@@ -519,14 +515,14 @@ export default function AdvancedCompatibilityGame() {
     return () => clearTimeout(timer);
   }, [timeLeft, gameStarted, showResults]);
 
-  // FIXED: Start timer when question changes
+  // Start timer when question changes
   useEffect(() => {
     if (gameStarted && !showResults && currentQuestion < questions.length) {
       setTimeLeft(25);
     }
   }, [currentQuestion, gameStarted, showResults]);
 
-  // FIXED: Enhanced sound effects
+  // Enhanced sound effects
   const playSound = (soundName: string) => {
     if (!soundEnabled) return;
     
@@ -580,7 +576,7 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // FIXED: Enhanced mobile screenshot capture
+  // Enhanced mobile screenshot capture
   const captureScreenshot = async () => {
     if (!screenshotRef.current) return;
     
@@ -594,7 +590,11 @@ export default function AdvancedCompatibilityGame() {
         backgroundColor: darkMode ? '#0f172a' : '#ffffff',
         scale: isMobile ? 1 : 1.2,
         useCORS: true,
-        logging: false
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: document.documentElement.scrollWidth,
+        windowHeight: document.documentElement.scrollHeight
       });
       
       const imageDataUrl = canvas.toDataURL('image/png', 0.9);
@@ -631,7 +631,7 @@ export default function AdvancedCompatibilityGame() {
     document.body.removeChild(link);
   };
 
-  // FIXED: Enhanced room creation with validation
+  // Enhanced room creation with validation
   const createRoom = () => {
     const trimmedName = playerName.trim();
     if (!trimmedName || trimmedName.length < 2) {
@@ -646,7 +646,7 @@ export default function AdvancedCompatibilityGame() {
     });
   };
 
-  // FIXED: Enhanced room joining with validation
+  // Enhanced room joining with validation
   const joinRoom = () => {
     const trimmedName = playerName.trim();
     const trimmedRoomId = roomId.trim();
@@ -676,7 +676,7 @@ export default function AdvancedCompatibilityGame() {
     socket.emit("start-game", { roomId });
   };
 
-  // FIXED: Enhanced answer submission with waiting state
+  // Enhanced answer submission with waiting state
   const submitAnswer = () => {
     if (!currentAnswer || isSubmitting) return;
 
@@ -697,7 +697,6 @@ export default function AdvancedCompatibilityGame() {
     const progress = Math.round(((currentQuestion + 1) / questions.length) * 100);
     socket.emit("player-progress", { roomId, progress });
 
-    // NEW: Handle final question submission differently
     if (currentQuestion < questions.length - 1) {
       socket.emit("answer-submitted", {
         roomId,
@@ -712,7 +711,6 @@ export default function AdvancedCompatibilityGame() {
         setIsSubmitting(false);
       }, 400);
     } else {
-      // This is the final question - submit all answers and advanced data
       socket.emit("submit-answers", { 
         roomId, 
         player: { name: playerName }, 
@@ -720,7 +718,6 @@ export default function AdvancedCompatibilityGame() {
         advancedAnswers
       });
       
-      // NEW: Set waiting state for final question
       setWaitingForPartner(true);
       socket.emit("submission-status", { roomId, player: playerName, submitted: true });
     }
@@ -758,13 +755,13 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // FIXED: Enhanced mobile option selection
+  // Enhanced mobile option selection
   const handleOptionSelect = (option: string) => {
     setCurrentAnswer(option);
     playSound("select");
   };
 
-  // NEW: Enhanced compatibility calculation with additional factors
+  // Enhanced compatibility calculation with additional factors
   const calculateCompatibility = () => {
     console.log("Calculating compatibility with bothAnswers:", bothAnswers);
     
@@ -804,7 +801,6 @@ export default function AdvancedCompatibilityGame() {
     const insights: string[] = [];
     const advancedAnalysis: any = {};
 
-    // Calculate basic question compatibility
     questions.forEach((question, i) => {
       const weight = question.weight || 1;
       maxPossibleScore += weight;
@@ -819,7 +815,6 @@ export default function AdvancedCompatibilityGame() {
       }
     });
 
-    // Calculate advanced compatibility
     let advancedScore = 0;
     let maxAdvancedScore = 0;
     const advancedMatches: string[] = [];
@@ -837,33 +832,28 @@ export default function AdvancedCompatibilityGame() {
       }
     });
 
-    // NEW: Calculate additional compatibility factors
     let additionalScore = 0;
     let maxAdditionalScore = 0;
     const additionalMatches: string[] = [];
 
-    // Personality traits matching (common traits)
     const traits1 = adv1.personalityTraits || [];
     const traits2 = adv2.personalityTraits || [];
     const commonTraits = traits1.filter((trait: string) => traits2.includes(trait));
     additionalScore += (commonTraits.length / Math.max(traits1.length, traits2.length)) * 2;
     maxAdditionalScore += 2;
 
-    // Values matching
     const values1 = adv1.values || [];
     const values2 = adv2.values || [];
     const commonValues = values1.filter((value: string) => values2.includes(value));
     additionalScore += (commonValues.length / Math.max(values1.length, values2.length)) * 3;
     maxAdditionalScore += 3;
 
-    // Hobbies matching
     const hobbies1 = adv1.hobbies || [];
     const hobbies2 = adv2.hobbies || [];
     const commonHobbies = hobbies1.filter((hobby: string) => hobbies2.includes(hobby));
     additionalScore += (commonHobbies.length / Math.max(hobbies1.length, hobbies2.length)) * 2;
     maxAdditionalScore += 2;
 
-    // Pet preference
     if (adv1.petPreference && adv2.petPreference) {
       maxAdditionalScore += 1;
       if (adv1.petPreference === adv2.petPreference) {
@@ -872,7 +862,6 @@ export default function AdvancedCompatibilityGame() {
       }
     }
 
-    // Relationship goals
     if (adv1.relationshipGoal && adv2.relationshipGoal) {
       maxAdditionalScore += 2;
       if (adv1.relationshipGoal === adv2.relationshipGoal) {
@@ -886,7 +875,6 @@ export default function AdvancedCompatibilityGame() {
     const additionalFactorScore = maxAdditionalScore > 0 ? (additionalScore / maxAdditionalScore) * 20 : 0;
     const finalScore = Math.round(questionScore + advancedFactorScore + additionalFactorScore);
 
-    // Enhanced insights based on all factors
     if (finalScore >= 95) {
       insights.push("💖 Cosmic Soulmates! Perfect alignment in all areas");
       insights.push("✨ Exceptional harmony in values, personality, and lifestyle");
@@ -907,7 +895,6 @@ export default function AdvancedCompatibilityGame() {
       insights.push("⚡ Your differences create unpredictable but interesting dynamics");
     }
 
-    // Add specific insights based on matches
     if (commonTraits.length > 2) {
       insights.push(`🧠 Strong personality alignment with ${commonTraits.length} shared traits`);
     }
@@ -969,7 +956,7 @@ export default function AdvancedCompatibilityGame() {
     return "from-purple-400 to-pink-500";
   };
 
-  // NEW: Exit game function
+  // Exit game function
   const exitGame = () => {
     if (window.confirm("Are you sure you want to exit the game?")) {
       localStorage.removeItem('compatibilityGameState');
@@ -977,7 +964,7 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // NEW: Back to home function
+  // Back to home function
   const backToHome = () => {
     if (window.confirm("Return to home screen? Your current progress will be saved.")) {
       setJoined(false);
@@ -1020,7 +1007,6 @@ export default function AdvancedCompatibilityGame() {
           </div>
         )}
 
-        {/* NEW: Submission status indicator */}
         {waitingForPartner && submissionStatus[player.name] && (
           <Badge className="bg-green-500 text-white">
             <Check className="w-3 h-3 mr-1" />
@@ -1105,7 +1091,7 @@ export default function AdvancedCompatibilityGame() {
     </Card>
   );
 
-  // NEW: Advanced Questions Component for additional compatibility factors
+  // Advanced Questions Component for additional compatibility factors
   const AdvancedQuestions = () => {
     const [selectedTraits, setSelectedTraits] = useState<string[]>(advancedAnswers.personalityTraits);
     const [selectedValues, setSelectedValues] = useState<string[]>(advancedAnswers.values);
@@ -1135,7 +1121,6 @@ export default function AdvancedCompatibilityGame() {
       );
     };
 
-    // Save advanced answers when component unmounts or when selections change
     useEffect(() => {
       setAdvancedAnswers(prev => ({
         ...prev,
@@ -1147,7 +1132,6 @@ export default function AdvancedCompatibilityGame() {
 
     return (
       <div className="space-y-6">
-        {/* Personality Traits */}
         <div>
           <h4 className="text-lg font-semibold mb-3 flex items-center">
             <Brain className="w-5 h-5 mr-2 text-purple-500" />
@@ -1172,7 +1156,6 @@ export default function AdvancedCompatibilityGame() {
           </div>
         </div>
 
-        {/* Core Values */}
         <div>
           <h4 className="text-lg font-semibold mb-3 flex items-center">
             <Heart className="w-5 h-5 mr-2 text-red-500" />
@@ -1197,7 +1180,6 @@ export default function AdvancedCompatibilityGame() {
           </div>
         </div>
 
-        {/* Hobbies */}
         <div>
           <h4 className="text-lg font-semibold mb-3 flex items-center">
             <Gamepad2 className="w-5 h-5 mr-2 text-blue-500" />
@@ -1222,7 +1204,6 @@ export default function AdvancedCompatibilityGame() {
           </div>
         </div>
 
-        {/* Pet Preference */}
         <div>
           <h4 className="text-lg font-semibold mb-3 flex items-center">
             <Heart className="w-5 h-5 mr-2 text-green-500" />
@@ -1247,7 +1228,6 @@ export default function AdvancedCompatibilityGame() {
           </div>
         </div>
 
-        {/* Relationship Goals */}
         <div>
           <h4 className="text-lg font-semibold mb-3 flex items-center">
             <Target className="w-5 h-5 mr-2 text-orange-500" />
@@ -1275,7 +1255,7 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // FIXED: Enhanced ResultsScreen with comprehensive error handling
+  // Enhanced ResultsScreen with comprehensive error handling
   const ResultsScreen = () => {
     const compatibility = calculateCompatibility();
     const { score, breakdown, insights, advancedAnalysis, advancedFactors, additionalFactors } = compatibility;
@@ -1322,7 +1302,6 @@ export default function AdvancedCompatibilityGame() {
       >
         <ConnectionStatus />
         
-        {/* NEW: Exit and Back Buttons */}
         <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
           <Button
             variant="ghost"
@@ -1342,12 +1321,10 @@ export default function AdvancedCompatibilityGame() {
           </Button>
         </div>
 
-        {/* Screenshot capture area */}
         <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-6xl">
           <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
             darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
           }`}>
-            {/* Header with share button */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4">
               <div>
                 <h2 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
@@ -1372,7 +1349,6 @@ export default function AdvancedCompatibilityGame() {
               </Button>
             </div>
 
-            {/* Main Score */}
             <div className="text-center mb-6 md:mb-8">
               <div className={`text-5xl md:text-7xl font-black mb-3 md:mb-4 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
                 {score}%
@@ -1380,7 +1356,6 @@ export default function AdvancedCompatibilityGame() {
               <h3 className="text-xl md:text-3xl font-bold mb-1 md:mb-2">{getCompatibilityMessage(score)}</h3>
             </div>
 
-            {/* Advanced Factors Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
               {Object.entries(advancedFactors).map(([key, value]) => (
                 <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
@@ -1402,7 +1377,6 @@ export default function AdvancedCompatibilityGame() {
               ))}
             </div>
 
-            {/* NEW: Additional Factors Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
               {Object.entries(additionalFactors).map(([key, value]) => (
                 <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
@@ -1424,7 +1398,6 @@ export default function AdvancedCompatibilityGame() {
               ))}
             </div>
 
-            {/* Category Breakdown */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
               {Object.entries(breakdown).map(([category, catScore]) => (
                 <div key={category} className={`p-3 md:p-4 rounded-xl border ${
@@ -1442,7 +1415,6 @@ export default function AdvancedCompatibilityGame() {
               ))}
             </div>
 
-            {/* Insights */}
             <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
               darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
             }`}>
@@ -1462,7 +1434,6 @@ export default function AdvancedCompatibilityGame() {
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex gap-3 md:gap-4 flex-col sm:flex-row">
               <Button 
                 onClick={() => window.location.reload()} 
@@ -1566,7 +1537,7 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // NEW: Waiting for Partner Screen for final question
+  // Waiting for Partner Screen for final question
   const WaitingForPartnerScreen = () => (
     <div className={`min-h-screen flex flex-col items-center justify-center p-6 ${
       darkMode ? 'bg-slate-900' : 'bg-gray-100'
@@ -1628,7 +1599,6 @@ export default function AdvancedCompatibilityGame() {
     >
       <ConnectionStatus />
       
-      {/* NEW: Exit and Back Buttons */}
       <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
         <Button
           variant="ghost"
@@ -1648,12 +1618,10 @@ export default function AdvancedCompatibilityGame() {
         </Button>
       </div>
 
-      {/* Screenshot capture area */}
       <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-2xl">
         <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
           darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
         }`}>
-          {/* Header */}
           <div className="text-center mb-6 md:mb-8">
             <div className="flex justify-center mb-4 md:mb-6">
               <div className="relative">
@@ -1670,14 +1638,12 @@ export default function AdvancedCompatibilityGame() {
             </p>
           </div>
 
-          {/* Players */}
           <div className="grid grid-cols-1 gap-3 md:gap-4 mb-6 md:mb-8">
             {players.map((player, index) => (
               <PlayerCard key={player.name || index} player={player} index={index} />
             ))}
           </div>
 
-          {/* Status Message */}
           {players.length === 1 && (
             <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 text-center ${
               darkMode ? 'bg-yellow-500/20 border-yellow-400/30' : 'bg-yellow-100 border-yellow-200'
@@ -1691,7 +1657,6 @@ export default function AdvancedCompatibilityGame() {
             </div>
           )}
 
-          {/* Action Button */}
           {isHost ? (
             <Button 
               onClick={startGame} 
@@ -1715,7 +1680,6 @@ export default function AdvancedCompatibilityGame() {
             </div>
           )}
 
-          {/* Quick Copy */}
           <div className="mt-4 md:mt-6 text-center">
             <Button
               onClick={() => navigator.clipboard?.writeText(roomId)}
@@ -1734,7 +1698,7 @@ export default function AdvancedCompatibilityGame() {
     </div>
   );
 
-  // FIXED: Enhanced Game Screen with mobile scroll handling and advanced questions
+  // Enhanced Game Screen with mobile scroll handling and advanced questions
   const GameScreen = () => {
     const currentQ = questions[currentQuestion];
     
@@ -1746,7 +1710,6 @@ export default function AdvancedCompatibilityGame() {
       submitAnswer();
     };
 
-    // NEW: Check if we're on the final question to show advanced questions
     const isFinalQuestion = currentQuestion === questions.length - 1;
 
     return (
@@ -1760,7 +1723,6 @@ export default function AdvancedCompatibilityGame() {
       >
         <ConnectionStatus />
         
-        {/* NEW: Exit and Back Buttons */}
         <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
           <Button
             variant="ghost"
@@ -1780,9 +1742,7 @@ export default function AdvancedCompatibilityGame() {
           </Button>
         </div>
 
-        {/* Screenshot capture area */}
         <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
-          {/* Header */}
           <div className="mb-4 md:mb-6">
             <div className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 md:p-6 rounded-xl border backdrop-blur-sm gap-3 md:gap-0 ${
               darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
@@ -1796,7 +1756,6 @@ export default function AdvancedCompatibilityGame() {
               </div>
               
               <div className="flex items-center space-x-4 md:space-x-6 w-full md:w-auto justify-between md:justify-normal">
-                {/* Progress */}
                 <div className="text-right md:text-left">
                   <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Progress</div>
                   <div className="text-base md:text-lg font-bold">
@@ -1804,7 +1763,6 @@ export default function AdvancedCompatibilityGame() {
                   </div>
                 </div>
                 
-                {/* Timer */}
                 {timeLeft !== null && (
                   <div className="text-right md:text-left">
                     <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Time Left</div>
@@ -1820,7 +1778,6 @@ export default function AdvancedCompatibilityGame() {
             </div>
           </div>
 
-          {/* Player Progress */}
           <div className="grid grid-cols-1 gap-3 md:gap-4 mb-4 md:mb-6">
             {players.map((player) => (
               <div key={player.name} className={`p-3 md:p-4 rounded-xl border backdrop-blur-sm ${
@@ -1847,7 +1804,6 @@ export default function AdvancedCompatibilityGame() {
             ))}
           </div>
 
-          {/* Question Card */}
           <Card 
             ref={questionContainerRef}
             className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 mb-4 md:mb-6 ${
@@ -1866,7 +1822,6 @@ export default function AdvancedCompatibilityGame() {
               </p>
             </div>
 
-            {/* Options */}
             <div 
               ref={optionsContainerRef}
               className="space-y-3 md:space-y-4 mb-6 md:mb-8"
@@ -1897,7 +1852,6 @@ export default function AdvancedCompatibilityGame() {
               ))}
             </div>
 
-            {/* NEW: Advanced Questions Section for final question */}
             {isFinalQuestion && (
               <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
                 darkMode ? 'bg-blue-500/10 border-blue-400/30' : 'bg-blue-50 border-blue-200'
@@ -1913,7 +1867,6 @@ export default function AdvancedCompatibilityGame() {
               </div>
             )}
 
-            {/* Personality Insight */}
             {currentAnswer && currentQ.insights && (
               <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 ${
                 darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
@@ -1927,7 +1880,6 @@ export default function AdvancedCompatibilityGame() {
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="flex justify-between items-center">
               <Button
                 variant="outline"
@@ -1964,7 +1916,6 @@ export default function AdvancedCompatibilityGame() {
             </div>
           </Card>
 
-          {/* Quick Reactions */}
           <div className="flex justify-center space-x-1 md:space-x-2">
             {['❤️', '😂', '😮', '👏', '🎉'].map(reaction => (
               <Button
@@ -1987,7 +1938,7 @@ export default function AdvancedCompatibilityGame() {
     );
   };
 
-  // FIXED: Completely redesigned Join/Create Screen with enhanced inputs
+  // Completely redesigned Join/Create Screen with enhanced inputs
   const JoinCreateScreen = () => {
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       setPlayerName(e.target.value);
@@ -2027,7 +1978,6 @@ export default function AdvancedCompatibilityGame() {
       >
         <ConnectionStatus />
         
-        {/* Settings Button */}
         <div className="absolute top-4 left-4">
           <Button
             variant="ghost"
@@ -2043,7 +1993,6 @@ export default function AdvancedCompatibilityGame() {
           <Card className={`p-6 md:p-8 backdrop-blur-sm border-0 shadow-2xl transition-all duration-300 ${
             darkMode ? 'bg-slate-800/40' : 'bg-white/80'
           }`}>
-            {/* Header */}
             <div className="text-center mb-8">
               <div className="flex justify-center mb-6">
                 <div className="relative">
@@ -2062,7 +2011,6 @@ export default function AdvancedCompatibilityGame() {
               </p>
             </div>
 
-            {/* Enhanced Input Fields */}
             <div className="space-y-6 mb-8">
               <EnhancedInput
                 label="Your Name"
@@ -2088,7 +2036,6 @@ export default function AdvancedCompatibilityGame() {
               />
             </div>
 
-            {/* Action Buttons */}
             <div className="space-y-4">
               <Button
                 onClick={createRoom}
@@ -2111,7 +2058,6 @@ export default function AdvancedCompatibilityGame() {
               </Button>
             </div>
 
-            {/* Features List */}
             <div className={`mt-8 p-4 rounded-xl border ${
               darkMode ? 'bg-slate-700/30 border-slate-600' : 'bg-white/50 border-gray-200'
             }`}>
@@ -2139,7 +2085,6 @@ export default function AdvancedCompatibilityGame() {
               </div>
             </div>
 
-            {/* Device Indicator */}
             <div className="mt-4 text-center">
               <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs ${
                 darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
@@ -2161,26 +2106,6 @@ export default function AdvancedCompatibilityGame() {
         </div>
 
         {showAdvancedSettings && <SettingsPanel />}
-
-        {/* Mobile-optimized CSS */}
-        <style jsx>{`
-          @media (max-width: 768px) {
-            .mobile-optimized-container {
-              padding-left: env(safe-area-inset-left);
-              padding-right: env(safe-area-inset-right);
-              padding-bottom: env(safe-area-inset-bottom);
-            }
-            
-            input {
-              font-size: 16px !important;
-              min-height: 44px;
-            }
-            
-            button {
-              min-height: 44px;
-            }
-          }
-        `}</style>
       </div>
     );
   };
@@ -2212,31 +2137,26 @@ export default function AdvancedCompatibilityGame() {
           padding-bottom: env(safe-area-inset-bottom);
         }
         
-        /* Better touch targets for mobile */
         button, [role="button"] {
           min-height: 44px;
           min-width: 44px;
         }
         
-        /* Improved input handling */
         input, textarea {
           font-size: 16px !important;
           min-height: 44px;
         }
         
-        /* Prevent zoom on iOS */
         @media screen and (max-width: 768px) {
           input, select, textarea {
             font-size: 16px !important;
           }
         }
         
-        /* Smooth scrolling */
         * {
           -webkit-overflow-scrolling: touch;
         }
         
-        /* Enhanced scrollbar */
         ::-webkit-scrollbar {
           width: 4px;
         }
@@ -2251,12 +2171,10 @@ export default function AdvancedCompatibilityGame() {
         }
       }
       
-      /* Smooth transitions for all interactive elements */
       * {
         transition: all 0.2s ease-in-out;
       }
       
-      /* Focus styles for accessibility */
       button:focus-visible,
       input:focus-visible {
         outline: 2px solid #8b5cf6;
