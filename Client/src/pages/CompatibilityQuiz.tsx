@@ -22,7 +22,7 @@ import {
   Coffee, Film, BookOpen, Utensils, Mountain, Palette,
   Zap as Lightning, Moon, Sun, Wifi, WifiOff,
   BarChart3, GitBranch, Eye, EyeOff, RotateCcw,
-  Smartphone, Monitor, ArrowDown, X, Home
+  Smartphone, Monitor, ArrowDown
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
@@ -111,15 +111,6 @@ const advancedCompatibilityFactors = {
   socialPreferences: ["Large Groups", "Small Circles", "One-on-One", "Mixed"]
 };
 
-// NEW: Additional compatibility parameters for enhanced matching
-const additionalCompatibilityFactors = {
-  personalityTraits: ["Adventurous", "Cautious", "Spontaneous", "Planner", "Creative", "Logical", "Empathetic", "Independent"],
-  values: ["Honesty", "Loyalty", "Freedom", "Security", "Growth", "Tradition", "Innovation", "Community"],
-  hobbies: ["Sports", "Arts", "Reading", "Gaming", "Travel", "Cooking", "Music", "Technology"],
-  petPreferences: ["Dog Person", "Cat Person", "Both", "Neither", "Other Pets"],
-  relationshipGoals: ["Long-term", "Casual", "Marriage", "Exploratory", "Friendship"]
-};
-
 export default function AdvancedCompatibilityGame() {
   // Core states
   const [roomId, setRoomId] = useState("");
@@ -131,7 +122,7 @@ export default function AdvancedCompatibilityGame() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Game states
+  // Game states - FIXED: Initialize bothAnswers as empty object
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [currentAnswer, setCurrentAnswer] = useState("");
   const [answers, setAnswers] = useState<any[]>([]);
@@ -150,11 +141,7 @@ export default function AdvancedCompatibilityGame() {
     futureGoal: "",
     energyLevel: "",
     socialPreference: "",
-    personalityTraits: [] as string[],
-    values: [] as string[],
-    hobbies: [] as string[],
-    petPreference: "",
-    relationshipGoal: ""
+    personalityTraits: [] as string[]
   });
 
   // UI/UX states
@@ -172,11 +159,7 @@ export default function AdvancedCompatibilityGame() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  // NEW: Waiting state for final question
-  const [waitingForPartner, setWaitingForPartner] = useState(false);
-  const [submissionStatus, setSubmissionStatus] = useState<{[key: string]: boolean}>({});
-
-  // Input focus states
+  // Input focus states - NEW: Track which input is focused
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
 
   // Refs
@@ -189,19 +172,41 @@ export default function AdvancedCompatibilityGame() {
   const optionsContainerRef = useRef<HTMLDivElement>(null);
   const questionContainerRef = useRef<HTMLDivElement>(null);
 
-  // FIXED: Enhanced mobile detection
+  // FIXED: Enhanced mobile detection and scroll handling
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
+      
+      if (mobile) {
+        document.body.classList.add('mobile-device');
+        // FIX: Better mobile viewport handling
+        document.body.style.overflowX = 'hidden';
+        document.body.style.position = 'relative';
+        document.documentElement.style.overflowX = 'hidden';
+      } else {
+        document.body.classList.remove('mobile-device');
+        document.body.style.overflowX = 'auto';
+        document.body.style.position = 'static';
+        document.documentElement.style.overflowX = 'auto';
+      }
     };
 
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    window.addEventListener('orientationchange', checkMobile);
+
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+      window.removeEventListener('orientationchange', checkMobile);
+      document.body.classList.remove('mobile-device');
+      document.body.style.overflowX = 'auto';
+      document.body.style.position = 'static';
+      document.documentElement.style.overflowX = 'auto';
+    };
   }, []);
 
-  // FIXED: Enhanced state persistence
+  // FIXED: Enhanced state persistence with proper error handling
   useEffect(() => {
     const savedState = localStorage.getItem('compatibilityGameState');
     if (savedState) {
@@ -210,6 +215,17 @@ export default function AdvancedCompatibilityGame() {
         setPlayerName(state.playerName || '');
         setRoomId(state.roomId || '');
         setDarkMode(state.darkMode !== undefined ? state.darkMode : true);
+        
+        if (state.roomId && state.playerName && state.joined) {
+          setTimeout(() => {
+            if (socket.connected) {
+              socket.emit("rejoin-room", {
+                roomId: state.roomId,
+                playerName: state.playerName
+              });
+            }
+          }, 1000);
+        }
       } catch (error) {
         console.error('Error loading saved state:', error);
         localStorage.removeItem('compatibilityGameState');
@@ -217,7 +233,7 @@ export default function AdvancedCompatibilityGame() {
     }
   }, []);
 
-  // FIXED: Enhanced auto-save
+  // FIXED: Enhanced auto-save with error handling
   useEffect(() => {
     try {
       const state = {
@@ -269,7 +285,7 @@ export default function AdvancedCompatibilityGame() {
     };
   }, [joined, roomId, playerName]);
 
-  // FIXED: Enhanced socket event handlers
+  // FIXED: Enhanced socket event handlers with comprehensive error handling
   useEffect(() => {
     const handleRoomCreated = (room: any) => {
       if (!room) return;
@@ -345,11 +361,7 @@ export default function AdvancedCompatibilityGame() {
         futureGoal: "",
         energyLevel: "",
         socialPreference: "",
-        personalityTraits: [],
-        values: [],
-        hobbies: [],
-        petPreference: "",
-        relationshipGoal: ""
+        personalityTraits: []
       });
       setGameState(gameState || null);
       playSound("success");
@@ -362,13 +374,17 @@ export default function AdvancedCompatibilityGame() {
       setGameState(data.gameState || null);
     };
 
-    // FIXED: Enhanced show-results handler with waiting state management
+    // FIXED: Critical fix for show-results handler
     const handleShowResults = (data: any) => {
       console.log("Show results data received:", data);
       
+      // Ensure data is always an object
       const safeData = data || {};
+      
+      // FIXED: Ensure results is always an object, never null or undefined
       const results = safeData.results || safeData || {};
       
+      // Validate that results is actually an object
       if (typeof results !== 'object' || results === null) {
         console.error("Results is not an object, setting empty object:", results);
         setBothAnswers({});
@@ -379,19 +395,9 @@ export default function AdvancedCompatibilityGame() {
       
       setShowResults(true);
       setIsSubmitting(false);
-      setWaitingForPartner(false);
       setGameState(safeData.gameState || null);
       playSound("victory");
       triggerConfetti();
-    };
-
-    // NEW: Handle submission status updates
-    const handleSubmissionStatus = (data: {player: string, submitted: boolean}) => {
-      if (!data || !data.player) return;
-      setSubmissionStatus(prev => ({
-        ...prev,
-        [data.player]: data.submitted
-      }));
     };
 
     const handlePlayerReaction = (data: {player: string, reaction: string}) => {
@@ -428,7 +434,6 @@ export default function AdvancedCompatibilityGame() {
     socket.on("game-started", handleGameStarted);
     socket.on("question-changed", handleQuestionChanged);
     socket.on("show-results", handleShowResults);
-    socket.on("submission-status", handleSubmissionStatus);
     socket.on("player-reaction", handlePlayerReaction);
     socket.on("game-state-update", handleGameStateUpdate);
     socket.on("connect_error", handleConnectionError);
@@ -442,7 +447,6 @@ export default function AdvancedCompatibilityGame() {
       socket.off("game-started", handleGameStarted);
       socket.off("question-changed", handleQuestionChanged);
       socket.off("show-results", handleShowResults);
-      socket.off("submission-status", handleSubmissionStatus);
       socket.off("player-reaction", handlePlayerReaction);
       socket.off("game-state-update", handleGameStateUpdate);
       socket.off("connect_error", handleConnectionError);
@@ -465,14 +469,23 @@ export default function AdvancedCompatibilityGame() {
     return () => clearTimeout(timer);
   }, [timeLeft, gameStarted, showResults]);
 
-  // FIXED: Start timer when question changes
+  // FIXED: Start timer when question changes with better mobile scroll
   useEffect(() => {
     if (gameStarted && !showResults && currentQuestion < questions.length) {
       setTimeLeft(25);
+      
+      if (isMobile && questionContainerRef.current) {
+        setTimeout(() => {
+          questionContainerRef.current?.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+          });
+        }, 100);
+      }
     }
-  }, [currentQuestion, gameStarted, showResults]);
+  }, [currentQuestion, gameStarted, showResults, isMobile]);
 
-  // FIXED: Enhanced sound effects
+  // FIXED: Enhanced sound effects with fallback
   const playSound = (soundName: string) => {
     if (!soundEnabled) return;
     
@@ -540,7 +553,11 @@ export default function AdvancedCompatibilityGame() {
         backgroundColor: darkMode ? '#0f172a' : '#ffffff',
         scale: isMobile ? 1 : 1.2,
         useCORS: true,
-        logging: false
+        logging: false,
+        scrollX: 0,
+        scrollY: -window.scrollY,
+        windowWidth: document.documentElement.scrollWidth,
+        windowHeight: document.documentElement.scrollHeight
       });
       
       const imageDataUrl = canvas.toDataURL('image/png', 0.9);
@@ -622,7 +639,7 @@ export default function AdvancedCompatibilityGame() {
     socket.emit("start-game", { roomId });
   };
 
-  // FIXED: Enhanced answer submission with waiting state
+  // FIXED: Enhanced answer submission with proper validation
   const submitAnswer = () => {
     if (!currentAnswer || isSubmitting) return;
 
@@ -643,33 +660,28 @@ export default function AdvancedCompatibilityGame() {
     const progress = Math.round(((currentQuestion + 1) / questions.length) * 100);
     socket.emit("player-progress", { roomId, progress });
 
-    // NEW: Handle final question submission differently
-    if (currentQuestion < questions.length - 1) {
-      socket.emit("answer-submitted", {
-        roomId,
-        playerName,
-        questionIndex: currentQuestion,
-        answer: currentAnswer
-      });
-      
-      setTimeout(() => {
+    setTimeout(() => {
+      if (currentQuestion < questions.length - 1) {
+        socket.emit("answer-submitted", {
+          roomId,
+          playerName,
+          questionIndex: currentQuestion,
+          answer: currentAnswer,
+          advancedAnswers: currentQuestion === questions.length - 1 ? advancedAnswers : null
+        });
+        
         setCurrentQuestion(prev => prev + 1);
         setCurrentAnswer("");
         setIsSubmitting(false);
-      }, 400);
-    } else {
-      // This is the final question - submit all answers and advanced data
-      socket.emit("submit-answers", { 
-        roomId, 
-        player: { name: playerName }, 
-        answers: newAnswers,
-        advancedAnswers
-      });
-      
-      // NEW: Set waiting state for final question
-      setWaitingForPartner(true);
-      socket.emit("submission-status", { roomId, player: playerName, submitted: true });
-    }
+      } else {
+        socket.emit("submit-answers", { 
+          roomId, 
+          player: { name: playerName }, 
+          answers: newAnswers,
+          advancedAnswers
+        });
+      }
+    }, 400);
   };
 
   const sendReaction = (reaction: string) => {
@@ -704,16 +716,29 @@ export default function AdvancedCompatibilityGame() {
     }
   };
 
-  // FIXED: Enhanced mobile option selection
+  // FIXED: Enhanced mobile option selection with better scroll
   const handleOptionSelect = (option: string) => {
     setCurrentAnswer(option);
     playSound("select");
+    
+    if (isMobile) {
+      setTimeout(() => {
+        const submitButton = document.querySelector('button[type="button"]');
+        if (submitButton) {
+          submitButton.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+        }
+      }, 300);
+    }
   };
 
-  // NEW: Enhanced compatibility calculation with additional factors
+  // FIXED: Enhanced compatibility calculation with comprehensive null checks
   const calculateCompatibility = () => {
     console.log("Calculating compatibility with bothAnswers:", bothAnswers);
     
+    // FIXED: Comprehensive check for bothAnswers to prevent TypeError
     if (!bothAnswers || typeof bothAnswers !== 'object' || bothAnswers === null) {
       console.error("bothAnswers is invalid, returning default:", bothAnswers);
       return { 
@@ -721,8 +746,7 @@ export default function AdvancedCompatibilityGame() {
         breakdown: {}, 
         insights: ["No results available yet"], 
         advancedAnalysis: {}, 
-        advancedFactors: {},
-        additionalFactors: {}
+        advancedFactors: {} 
       };
     }
 
@@ -735,8 +759,7 @@ export default function AdvancedCompatibilityGame() {
         breakdown: {}, 
         insights: ["Waiting for both players to complete the test"], 
         advancedAnalysis: {}, 
-        advancedFactors: {},
-        additionalFactors: {}
+        advancedFactors: {} 
       };
     }
 
@@ -750,7 +773,6 @@ export default function AdvancedCompatibilityGame() {
     const insights: string[] = [];
     const advancedAnalysis: any = {};
 
-    // Calculate basic question compatibility
     questions.forEach((question, i) => {
       const weight = question.weight || 1;
       maxPossibleScore += weight;
@@ -765,7 +787,6 @@ export default function AdvancedCompatibilityGame() {
       }
     });
 
-    // Calculate advanced compatibility
     let advancedScore = 0;
     let maxAdvancedScore = 0;
     const advancedMatches: string[] = [];
@@ -783,103 +804,35 @@ export default function AdvancedCompatibilityGame() {
       }
     });
 
-    // NEW: Calculate additional compatibility factors
-    let additionalScore = 0;
-    let maxAdditionalScore = 0;
-    const additionalMatches: string[] = [];
+    const questionScore = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 60 : 0;
+    const advancedFactorScore = maxAdvancedScore > 0 ? (advancedScore / maxAdvancedScore) * 40 : 0;
+    const finalScore = Math.round(questionScore + advancedFactorScore);
 
-    // Personality traits matching (common traits)
-    const traits1 = adv1.personalityTraits || [];
-    const traits2 = adv2.personalityTraits || [];
-    const commonTraits = traits1.filter((trait: string) => traits2.includes(trait));
-    additionalScore += (commonTraits.length / Math.max(traits1.length, traits2.length)) * 2;
-    maxAdditionalScore += 2;
-
-    // Values matching
-    const values1 = adv1.values || [];
-    const values2 = adv2.values || [];
-    const commonValues = values1.filter((value: string) => values2.includes(value));
-    additionalScore += (commonValues.length / Math.max(values1.length, values2.length)) * 3;
-    maxAdditionalScore += 3;
-
-    // Hobbies matching
-    const hobbies1 = adv1.hobbies || [];
-    const hobbies2 = adv2.hobbies || [];
-    const commonHobbies = hobbies1.filter((hobby: string) => hobbies2.includes(hobby));
-    additionalScore += (commonHobbies.length / Math.max(hobbies1.length, hobbies2.length)) * 2;
-    maxAdditionalScore += 2;
-
-    // Pet preference
-    if (adv1.petPreference && adv2.petPreference) {
-      maxAdditionalScore += 1;
-      if (adv1.petPreference === adv2.petPreference) {
-        additionalScore += 1;
-        additionalMatches.push("Pet Preference");
-      }
-    }
-
-    // Relationship goals
-    if (adv1.relationshipGoal && adv2.relationshipGoal) {
-      maxAdditionalScore += 2;
-      if (adv1.relationshipGoal === adv2.relationshipGoal) {
-        additionalScore += 2;
-        additionalMatches.push("Relationship Goals");
-      }
-    }
-
-    const questionScore = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 50 : 0;
-    const advancedFactorScore = maxAdvancedScore > 0 ? (advancedScore / maxAdvancedScore) * 30 : 0;
-    const additionalFactorScore = maxAdditionalScore > 0 ? (additionalScore / maxAdditionalScore) * 20 : 0;
-    const finalScore = Math.round(questionScore + advancedFactorScore + additionalFactorScore);
-
-    // Enhanced insights based on all factors
     if (finalScore >= 95) {
-      insights.push("💖 Cosmic Soulmates! Perfect alignment in all areas");
-      insights.push("✨ Exceptional harmony in values, personality, and lifestyle");
+      insights.push("💖 Cosmic Connection! You're practically soulmates");
+      insights.push("✨ Perfect harmony in values, communication, and lifestyle");
     } else if (finalScore >= 85) {
-      insights.push("🌟 Extraordinary Match! Deep connection and strong compatibility");
-      insights.push("⭐ Excellent alignment in core values and life vision");
+      insights.push("🌟 Exceptional Match! Your connection is deep and natural");
+      insights.push("⭐ Strong alignment in core values and life goals");
     } else if (finalScore >= 75) {
-      insights.push("💫 Great Chemistry! Strong foundation with beautiful potential");
-      insights.push("🎯 Good balance of shared interests and complementary differences");
+      insights.push("💫 Great Chemistry! You complement each other beautifully");
+      insights.push("🎯 Good balance of similarities and complementary differences");
     } else if (finalScore >= 65) {
-      insights.push("🌈 Strong Potential! Unique connection with room for growth");
-      insights.push("💡 Your differences create opportunities for mutual learning");
+      insights.push("🌈 Strong Potential! With understanding, this could flourish");
+      insights.push("💡 Your differences create opportunities for growth");
     } else if (finalScore >= 50) {
       insights.push("🎭 Interesting Dynamic! You challenge and inspire each other");
-      insights.push("🌱 Unique combination with potential for beautiful development");
+      insights.push("🌱 Unique combination with room for beautiful development");
     } else {
-      insights.push("🌀 Unconventional Match! Fresh perspectives and exciting chemistry");
-      insights.push("⚡ Your differences create unpredictable but interesting dynamics");
-    }
-
-    // Add specific insights based on matches
-    if (commonTraits.length > 2) {
-      insights.push(`🧠 Strong personality alignment with ${commonTraits.length} shared traits`);
-    }
-    if (commonValues.length > 1) {
-      insights.push(`💝 Shared core values: ${commonValues.slice(0, 3).join(', ')}`);
-    }
-    if (commonHobbies.length > 0) {
-      insights.push(`🎯 ${commonHobbies.length} shared interests for quality time`);
+      insights.push("🌀 Unconventional Match! You bring fresh perspectives");
+      insights.push("⚡ Your differences create exciting, unpredictable chemistry");
     }
 
     advancedAnalysis.matches = advancedMatches;
-    advancedAnalysis.commonTraits = commonTraits;
-    advancedAnalysis.commonValues = commonValues;
-    advancedAnalysis.commonHobbies = commonHobbies;
     advancedAnalysis.communicationMatch = adv1.communicationStyle === adv2.communicationStyle;
     advancedAnalysis.loveLanguageMatch = adv1.loveLanguage === adv2.loveLanguage;
     advancedAnalysis.energyCompatibility = adv1.energyLevel === adv2.energyLevel;
     advancedAnalysis.socialCompatibility = adv1.socialPreference === adv2.socialPreference;
-
-    const additionalFactors = {
-      personalityAlignment: `${commonTraits.length} shared traits`,
-      valueAlignment: `${commonValues.length} shared values`,
-      hobbyAlignment: `${commonHobbies.length} shared hobbies`,
-      petCompatibility: adv1.petPreference === adv2.petPreference ? "Perfect match" : "Different preferences",
-      goalAlignment: adv1.relationshipGoal === adv2.relationshipGoal ? "Aligned goals" : "Different goals"
-    };
 
     const result = {
       score: finalScore,
@@ -891,8 +844,7 @@ export default function AdvancedCompatibilityGame() {
         loveLanguages: adv1.loveLanguage === adv2.loveLanguage ? "Same love language" : "Different love languages",
         energy: adv1.energyLevel === adv2.energyLevel ? "Synced energy" : "Different rhythms",
         social: adv1.socialPreference === adv2.socialPreference ? "Social harmony" : "Different preferences"
-      },
-      additionalFactors
+      }
     };
 
     console.log("Final compatibility result:", result);
@@ -913,24 +865,6 @@ export default function AdvancedCompatibilityGame() {
     if (score >= 70) return "from-blue-400 to-cyan-500";
     if (score >= 55) return "from-yellow-400 to-orange-500";
     return "from-purple-400 to-pink-500";
-  };
-
-  // NEW: Exit game function
-  const exitGame = () => {
-    if (window.confirm("Are you sure you want to exit the game?")) {
-      localStorage.removeItem('compatibilityGameState');
-      window.location.reload();
-    }
-  };
-
-  // NEW: Back to home function
-  const backToHome = () => {
-    if (window.confirm("Return to home screen? Your current progress will be saved.")) {
-      setJoined(false);
-      setGameStarted(false);
-      setShowResults(false);
-      setWaitingForPartner(false);
-    }
   };
 
   // Enhanced Player Card Component
@@ -964,14 +898,6 @@ export default function AdvancedCompatibilityGame() {
           }`}>
             {playerReactions[player.name]}
           </div>
-        )}
-
-        {/* NEW: Submission status indicator */}
-        {waitingForPartner && submissionStatus[player.name] && (
-          <Badge className="bg-green-500 text-white">
-            <Check className="w-3 h-3 mr-1" />
-            Submitted
-          </Badge>
         )}
       </div>
     </div>
@@ -1051,181 +977,12 @@ export default function AdvancedCompatibilityGame() {
     </Card>
   );
 
-  // NEW: Advanced Questions Component for additional compatibility factors
-  const AdvancedQuestions = () => {
-    const [selectedTraits, setSelectedTraits] = useState<string[]>(advancedAnswers.personalityTraits);
-    const [selectedValues, setSelectedValues] = useState<string[]>(advancedAnswers.values);
-    const [selectedHobbies, setSelectedHobbies] = useState<string[]>(advancedAnswers.hobbies);
-
-    const toggleTrait = (trait: string) => {
-      setSelectedTraits(prev => 
-        prev.includes(trait) 
-          ? prev.filter(t => t !== trait)
-          : [...prev, trait]
-      );
-    };
-
-    const toggleValue = (value: string) => {
-      setSelectedValues(prev => 
-        prev.includes(value) 
-          ? prev.filter(v => v !== value)
-          : [...prev, value]
-      );
-    };
-
-    const toggleHobby = (hobby: string) => {
-      setSelectedHobbies(prev => 
-        prev.includes(hobby) 
-          ? prev.filter(h => h !== hobby)
-          : [...prev, hobby]
-      );
-    };
-
-    // Save advanced answers when component unmounts or when selections change
-    useEffect(() => {
-      setAdvancedAnswers(prev => ({
-        ...prev,
-        personalityTraits: selectedTraits,
-        values: selectedValues,
-        hobbies: selectedHobbies
-      }));
-    }, [selectedTraits, selectedValues, selectedHobbies]);
-
-    return (
-      <div className="space-y-6">
-        {/* Personality Traits */}
-        <div>
-          <h4 className="text-lg font-semibold mb-3 flex items-center">
-            <Brain className="w-5 h-5 mr-2 text-purple-500" />
-            Which traits describe you best? (Select 3-5)
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {additionalCompatibilityFactors.personalityTraits.map(trait => (
-              <div
-                key={trait}
-                className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                  selectedTraits.includes(trait)
-                    ? 'bg-purple-500/20 border-purple-400'
-                    : darkMode 
-                      ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-600/50'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-                onClick={() => toggleTrait(trait)}
-              >
-                <div className="text-center text-sm font-medium">{trait}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Core Values */}
-        <div>
-          <h4 className="text-lg font-semibold mb-3 flex items-center">
-            <Heart className="w-5 h-5 mr-2 text-red-500" />
-            What are your core values? (Select 2-4)
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {additionalCompatibilityFactors.values.map(value => (
-              <div
-                key={value}
-                className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                  selectedValues.includes(value)
-                    ? 'bg-red-500/20 border-red-400'
-                    : darkMode 
-                      ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-600/50'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-                onClick={() => toggleValue(value)}
-              >
-                <div className="text-center text-sm font-medium">{value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Hobbies */}
-        <div>
-          <h4 className="text-lg font-semibold mb-3 flex items-center">
-            <Gamepad2 className="w-5 h-5 mr-2 text-blue-500" />
-            What are your favorite hobbies? (Select 3-5)
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {additionalCompatibilityFactors.hobbies.map(hobby => (
-              <div
-                key={hobby}
-                className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                  selectedHobbies.includes(hobby)
-                    ? 'bg-blue-500/20 border-blue-400'
-                    : darkMode 
-                      ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-600/50'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-                onClick={() => toggleHobby(hobby)}
-              >
-                <div className="text-center text-sm font-medium">{hobby}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Pet Preference */}
-        <div>
-          <h4 className="text-lg font-semibold mb-3 flex items-center">
-            <Heart className="w-5 h-5 mr-2 text-green-500" />
-            What's your pet preference?
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            {additionalCompatibilityFactors.petPreferences.map(pref => (
-              <div
-                key={pref}
-                className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                  advancedAnswers.petPreference === pref
-                    ? 'bg-green-500/20 border-green-400'
-                    : darkMode 
-                      ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-600/50'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-                onClick={() => setAdvancedAnswers(prev => ({ ...prev, petPreference: pref }))}
-              >
-                <div className="text-center text-sm font-medium">{pref}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Relationship Goals */}
-        <div>
-          <h4 className="text-lg font-semibold mb-3 flex items-center">
-            <Target className="w-5 h-5 mr-2 text-orange-500" />
-            What are your relationship goals?
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {additionalCompatibilityFactors.relationshipGoals.map(goal => (
-              <div
-                key={goal}
-                className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                  advancedAnswers.relationshipGoal === goal
-                    ? 'bg-orange-500/20 border-orange-400'
-                    : darkMode 
-                      ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-600/50'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-                onClick={() => setAdvancedAnswers(prev => ({ ...prev, relationshipGoal: goal }))}
-              >
-                <div className="text-center text-sm font-medium">{goal}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // FIXED: Enhanced ResultsScreen with comprehensive error handling
   const ResultsScreen = () => {
     const compatibility = calculateCompatibility();
-    const { score, breakdown, insights, advancedAnalysis, advancedFactors, additionalFactors } = compatibility;
+    const { score, breakdown, insights, advancedAnalysis, advancedFactors } = compatibility;
 
+    // FIXED: Check if we have valid results to display
     const hasValidResults = bothAnswers && 
                            typeof bothAnswers === 'object' && 
                            bothAnswers !== null && 
@@ -1268,16 +1025,8 @@ export default function AdvancedCompatibilityGame() {
       >
         <ConnectionStatus />
         
-        {/* NEW: Exit and Back Buttons */}
-        <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={backToHome}
-            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-          >
-            <Home className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
+        {/* Settings Button */}
+        <div className="absolute top-2 md:top-4 left-2 md:left-4">
           <Button
             variant="ghost"
             size={isMobile ? "sm" : "default"}
@@ -1337,28 +1086,6 @@ export default function AdvancedCompatibilityGame() {
                   </div>
                   <div className={`text-base md:text-lg font-semibold ${
                     typeof value === 'string' && value.includes('match') 
-                      ? 'text-green-500' 
-                      : typeof value === 'string' && value.includes('Different')
-                      ? 'text-orange-500'
-                      : darkMode ? 'text-white' : 'text-gray-800'
-                  }`}>
-                    {value}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* NEW: Additional Factors Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
-              {Object.entries(additionalFactors).map(([key, value]) => (
-                <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
-                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-                }`}>
-                  <div className="text-xs md:text-sm font-medium capitalize mb-1">
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
-                  </div>
-                  <div className={`text-base md:text-lg font-semibold ${
-                    typeof value === 'string' && (value.includes('shared') || value.includes('Aligned') || value.includes('match'))
                       ? 'text-green-500' 
                       : typeof value === 'string' && value.includes('Different')
                       ? 'text-orange-500'
@@ -1431,15 +1158,6 @@ export default function AdvancedCompatibilityGame() {
                 )}
                 {isCapturing ? 'Capturing...' : 'Share Results'}
               </Button>
-              <Button 
-                onClick={exitGame}
-                size={isMobile ? "sm" : "lg"}
-                variant="outline"
-                className="flex-1 py-4 md:py-6 text-base md:text-lg"
-              >
-                <X className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                Exit Game
-              </Button>
             </div>
           </Card>
         </div>
@@ -1459,7 +1177,7 @@ export default function AdvancedCompatibilityGame() {
                     size={isMobile ? "sm" : "default"}
                     onClick={() => setShowShareModal(false)}
                   >
-                    <X className="w-5 h-5" />
+                    ✕
                   </Button>
                 </div>
                 
@@ -1493,16 +1211,6 @@ export default function AdvancedCompatibilityGame() {
                       Copy Text
                     </Button>
                   </div>
-
-                  <div className="pt-4 border-t">
-                    <Button
-                      onClick={() => setShowShareModal(false)}
-                      className="w-full"
-                      variant="outline"
-                    >
-                      Close
-                    </Button>
-                  </div>
                 </div>
               </div>
             </Card>
@@ -1511,56 +1219,6 @@ export default function AdvancedCompatibilityGame() {
       </div>
     );
   };
-
-  // NEW: Waiting for Partner Screen for final question
-  const WaitingForPartnerScreen = () => (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-6 ${
-      darkMode ? 'bg-slate-900' : 'bg-gray-100'
-    }`}>
-      <Card className={`p-8 max-w-2xl w-full text-center ${
-        darkMode ? 'bg-slate-800' : 'bg-white'
-      }`}>
-        <div className="flex justify-center mb-6">
-          <Loader2 className="w-16 h-16 animate-spin text-purple-500" />
-        </div>
-        <h2 className="text-2xl font-bold mb-4">Waiting for Partner...</h2>
-        <p className={`mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-          You've completed all questions! Waiting for your partner to finish.
-        </p>
-        
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-3">Submission Status:</h3>
-          <div className="space-y-2">
-            {players.map((player, index) => (
-              <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50">
-                <span className="font-medium">{player.name}</span>
-                {submissionStatus[player.name] ? (
-                  <Badge className="bg-green-500">
-                    <Check className="w-3 h-3 mr-1" />
-                    Submitted
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-yellow-500 border-yellow-500">
-                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                    Waiting...
-                  </Badge>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <Button 
-          onClick={backToHome}
-          variant="outline"
-          className="mr-2"
-        >
-          <Home className="w-4 h-4 mr-2" />
-          Back to Home
-        </Button>
-      </Card>
-    </div>
-  );
 
   // Waiting Screen Component
   const WaitingScreen = () => (
@@ -1574,16 +1232,8 @@ export default function AdvancedCompatibilityGame() {
     >
       <ConnectionStatus />
       
-      {/* NEW: Exit and Back Buttons */}
-      <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
-        <Button
-          variant="ghost"
-          size={isMobile ? "sm" : "default"}
-          onClick={backToHome}
-          className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-        >
-          <Home className="w-4 h-4 md:w-5 md:h-5" />
-        </Button>
+      {/* Settings Button */}
+      <div className="absolute top-2 md:top-4 left-2 md:left-4">
         <Button
           variant="ghost"
           size={isMobile ? "sm" : "default"}
@@ -1680,7 +1330,7 @@ export default function AdvancedCompatibilityGame() {
     </div>
   );
 
-  // FIXED: Enhanced Game Screen with mobile scroll handling and advanced questions
+  // FIXED: Enhanced Game Screen with mobile scroll handling
   const GameScreen = () => {
     const currentQ = questions[currentQuestion];
     
@@ -1691,9 +1341,6 @@ export default function AdvancedCompatibilityGame() {
       }
       submitAnswer();
     };
-
-    // NEW: Check if we're on the final question to show advanced questions
-    const isFinalQuestion = currentQuestion === questions.length - 1;
 
     return (
       <div 
@@ -1706,16 +1353,8 @@ export default function AdvancedCompatibilityGame() {
       >
         <ConnectionStatus />
         
-        {/* NEW: Exit and Back Buttons */}
-        <div className="absolute top-2 md:top-4 left-2 md:left-4 flex space-x-2">
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={backToHome}
-            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-          >
-            <Home className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
+        {/* Settings Button */}
+        <div className="absolute top-2 md:top-4 left-2 md:left-4">
           <Button
             variant="ghost"
             size={isMobile ? "sm" : "default"}
@@ -1843,22 +1482,6 @@ export default function AdvancedCompatibilityGame() {
               ))}
             </div>
 
-            {/* NEW: Advanced Questions Section for final question */}
-            {isFinalQuestion && (
-              <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
-                darkMode ? 'bg-blue-500/10 border-blue-400/30' : 'bg-blue-50 border-blue-200'
-              }`}>
-                <h3 className="text-lg md:text-xl font-bold mb-4 flex items-center">
-                  <Sparkles className="w-5 h-5 mr-2 text-blue-500" />
-                  Additional Compatibility Factors
-                </h3>
-                <p className={`mb-4 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  These additional questions will help us calculate a more accurate compatibility score.
-                </p>
-                <AdvancedQuestions />
-              </div>
-            )}
-
             {/* Personality Insight */}
             {currentAnswer && currentQ.insights && (
               <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 ${
@@ -1895,7 +1518,7 @@ export default function AdvancedCompatibilityGame() {
                     <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2 animate-spin" />
                     Submitting...
                   </>
-                ) : isFinalQuestion ? (
+                ) : currentQuestion === questions.length - 1 ? (
                   <>
                     <CheckCircle className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
                     Finish Test
@@ -1926,6 +1549,23 @@ export default function AdvancedCompatibilityGame() {
               </Button>
             ))}
           </div>
+
+          {/* Mobile Scroll Helper */}
+          {isMobile && (
+            <div className="fixed bottom-4 right-4 z-30">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const submitButton = document.querySelector('button[type="button"]');
+                  submitButton?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                className="rounded-full bg-black/50 text-white border-white/20 backdrop-blur-sm"
+              >
+                <ArrowDown className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
         </div>
 
         {showAdvancedSettings && <SettingsPanel />}
@@ -1935,21 +1575,31 @@ export default function AdvancedCompatibilityGame() {
 
   // FIXED: Enhanced Join/Create Screen with proper input handling
   const JoinCreateScreen = () => {
-    // FIXED: Handle input changes properly without re-render issues
+    // FIXED: Handle input focus properly
+    const handleNameFocus = () => {
+      setFocusedInput('name');
+      if (isMobile) {
+        setTimeout(() => {
+          nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+    };
+
+    const handleRoomFocus = () => {
+      setFocusedInput('room');
+      if (isMobile) {
+        setTimeout(() => {
+          roomInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+    };
+
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       setPlayerName(e.target.value);
     };
 
     const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       setRoomId(e.target.value.toUpperCase());
-    };
-
-    const handleNameFocus = () => {
-      setFocusedInput('name');
-    };
-
-    const handleRoomFocus = () => {
-      setFocusedInput('room');
     };
 
     return (
@@ -2017,7 +1667,7 @@ export default function AdvancedCompatibilityGame() {
                   focusedInput === 'name' ? 'ring-2 ring-purple-500' : ''
                 }`}
                 autoComplete="name"
-                autoFocus={!isMobile}
+                autoFocus={!isMobile} // Don't auto-focus on mobile to prevent keyboard issues
               />
             </div>
             
@@ -2075,12 +1725,12 @@ export default function AdvancedCompatibilityGame() {
               Advanced Features
             </h4>
             <ul className="text-xs md:text-sm space-y-0.5 md:space-y-1 text-left">
-              <li>• Enhanced personality-based matching</li>
+              <li>• Personality-based matching algorithm</li>
               <li>• Advanced compatibility factors</li>
-              <li>• Values and hobbies alignment</li>
               <li>• Real-time progress tracking</li>
               <li>• Interactive results with insights</li>
               <li>• Dark/Light mode support</li>
+              <li>• Mobile & Desktop optimized</li>
             </ul>
           </div>
 
@@ -2136,29 +1786,87 @@ export default function AdvancedCompatibilityGame() {
           margin-top: 0.5rem;
         }
         
-        /* Better touch targets for mobile */
+        /* FIXED: Better mobile viewport handling */
+        body.mobile-device {
+          overflow-x: hidden !important;
+          position: relative !important;
+          width: 100% !important;
+          height: 100% !important;
+          -webkit-overflow-scrolling: touch;
+        }
+        
+        html {
+          overflow-x: hidden;
+          height: 100%;
+        }
+        
+        /* FIXED: Prevent horizontal scroll */
+        .overflow-x-hidden {
+          overflow-x: hidden !important;
+        }
+        
+        /* FIXED: Better scrolling for all screens */
+        .min-h-screen {
+          min-height: 100vh;
+          min-height: 100dvh; /* Dynamic viewport height for mobile */
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        
+        /* FIXED: Better touch targets for mobile */
         button, [role="button"] {
           min-height: 44px;
           min-width: 44px;
         }
         
-        /* Improved input handling */
+        /* FIXED: Improved input handling */
         input {
-          font-size: 16px !important;
+          font-size: 16px !important; /* Prevent zoom on iOS */
           min-height: 44px;
         }
         
-        /* Ensure options are easily tappable */
+        /* FIXED: Ensure options are easily tappable */
         .option-item {
           min-height: 60px;
           display: flex;
           align-items: center;
+        }
+        
+        /* FIXED: Better text sizing for mobile */
+        .mobile-text-lg {
+          font-size: 1.125rem;
+        }
+        
+        .mobile-text-xl {
+          font-size: 1.25rem;
+        }
+        
+        /* FIXED: Prevent content shift when keyboard appears */
+        @media (max-height: 500px) {
+          .min-h-screen {
+            min-height: auto;
+            padding: 1rem 0;
+          }
+        }
+      }
+      
+      /* Desktop enhancements */
+      @media (min-width: 769px) {
+        .game-container {
+          min-height: 100vh;
+          overflow-y: auto;
         }
       }
       
       /* Smooth transitions for all interactive elements */
       * {
         transition: all 0.2s ease-in-out;
+      }
+      
+      /* FIXED: Better focus states for accessibility */
+      input:focus {
+        outline: none;
+        ring: 2px;
       }
     `;
     document.head.appendChild(style);
@@ -2187,10 +1895,6 @@ export default function AdvancedCompatibilityGame() {
   // Main render logic
   if (showResults) {
     return <ResultsScreen />;
-  }
-
-  if (waitingForPartner) {
-    return <WaitingForPartnerScreen />;
   }
 
   if (gameStarted) {
