@@ -408,40 +408,8 @@ const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   }
 };
   // KEEP ALL YOUR EXISTING STATE PERSISTENCE AND SOCKET CODE
-  useEffect(() => {
-    const savedState = localStorage.getItem('compatibilityGameState');
-    if (savedState) {
-      try {
-        const state = JSON.parse(savedState);
-        setPlayerName(state.playerName || '');
-        setRoomId(state.roomId || '');
-        setDarkMode(state.darkMode !== undefined ? state.darkMode : true);
-      } catch (error) {
-        console.error('Error loading saved state:', error);
-        localStorage.removeItem('compatibilityGameState');
-      }
-    }
-  }, []);
 
-  // Enhanced auto-save
-  useEffect(() => {
-    try {
-      const state = {
-        playerName,
-        roomId,
-        darkMode,
-        joined,
-        gameStarted,
-        currentQuestion,
-        answers,
-        advancedAnswers,
-        gameState
-      };
-      localStorage.setItem('compatibilityGameState', JSON.stringify(state));
-    } catch (error) {
-      console.error('Error saving state:', error);
-    }
-  }, [playerName, roomId, darkMode, joined, gameStarted, currentQuestion, answers, advancedAnswers, gameState]);
+
 
   // KEEP ALL YOUR EXISTING SOCKET EVENT HANDLERS
   useEffect(() => {
