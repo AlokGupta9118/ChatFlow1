@@ -89,7 +89,7 @@ const EnhancedInputField = ({
   );
 };
 
-// Updated ChatInput component with colorful design
+// Updated ChatInput component with FIXED typing indicators
 const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef(null);
@@ -177,6 +177,7 @@ const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
   );
 };
 
+// ADD THE MISSING ChatPanel COMPONENT HERE:
 // Updated ChatPanel component with colorful design
 const ChatPanel = React.memo(({ 
   chatMessages, 
@@ -691,10 +692,25 @@ const WhosMostLikely = () => {
   }, [roomId, playerName]);
 
   // Typing handler
+  // FIXED: Handle typing with proper parameters
   const handleTyping = useCallback((isTyping) => {
     if (!socket) return;
-    socket.emit("typing", { roomId, isTyping });
-  }, [roomId]);
+    
+    if (isTyping) {
+      console.log("⌨️ Starting typing indicator");
+      socket.emit("typing", { 
+        roomId, 
+        userId: playerName, 
+        userName: playerName 
+      });
+    } else {
+      console.log("⌨️ Stopping typing indicator");
+      socket.emit("chat-typing-stop", { 
+        roomId, 
+        userId: playerName 
+      });
+    }
+  }, [roomId, playerName, socket]);
 
   // Socket event handlers
   useEffect(() => {

@@ -136,6 +136,7 @@ export default function gameSocket(io) {
 
 
    // ✅ CHAT: Typing indicators for chat
+// ✅ CHAT: Typing indicators for chat - CONSISTENT across all games
 socket.on("typing", ({ roomId, userId, userName }) => {
   console.log(`⌨️ ${userName} is typing in room ${roomId}`);
   socket.to(roomId).emit("user-typing", { 
@@ -147,7 +148,7 @@ socket.on("typing", ({ roomId, userId, userName }) => {
 socket.on("chat-typing-stop", ({ roomId, userId }) => {
   console.log(`⌨️ ${userId} stopped typing in room ${roomId}`);
   socket.to(roomId).emit("user-typing", { 
-    userName: userId, // Using userId as userName for simplicity
+    userName: userId,
     isTyping: false 
   });
 });
