@@ -177,174 +177,14 @@ const ChatInput = ({ onSendMessage, disabled, onTyping }) => {
   );
 };
 
-// ADD THE MISSING ChatPanel COMPONENT HERE:
-// Updated ChatPanel component with colorful design
-const ChatPanel = React.memo(({ 
-  chatMessages, 
-  playerName, 
-  typingUsers, 
-  onSendMessage,
-  isConnected,
-  onTyping
-}) => {
-  const chatContainerRef = useRef(null);
-
-  const formatChatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
-  // Get user color based on name for consistent coloring
-  const getUserColor = (username) => {
-    const colors = [
-      'from-purple-500 to-pink-500',
-      'from-blue-500 to-cyan-500',
-      'from-green-500 to-emerald-500',
-      'from-orange-500 to-red-500',
-      'from-indigo-500 to-purple-500',
-      'from-teal-500 to-blue-500',
-      'from-yellow-500 to-orange-500',
-      'from-pink-500 to-rose-500'
-    ];
-    const index = username.charCodeAt(0) % colors.length;
-    return colors[index];
-  };
-
-  // Improved scroll to bottom function
-  const scrollToBottom = useCallback(() => {
-    if (chatContainerRef.current) {
-      const container = chatContainerRef.current;
-      requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [chatMessages, scrollToBottom]);
-
-  return (
-    <Card className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 backdrop-blur-sm shadow-2xl rounded-xl border-2 border-purple-500/30">
-      {/* Chat Header */}
-      <div className="p-4 border-b border-purple-500/30 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="relative">
-              <MessageCircle className="w-6 h-6 text-white" />
-              <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
-                isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'
-              }`} />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white">Game Chat</h3>
-              <p className="text-blue-100 text-xs">
-                {isConnected ? "Live with players" : "Connecting..."}
-              </p>
-            </div>
-          </div>
-          <Badge className={`${
-            isConnected 
-              ? "bg-green-500 hover:bg-green-600 text-white" 
-              : "bg-red-500 hover:bg-red-600 text-white"
-          } shadow-lg`}>
-            {isConnected ? "🟢 Online" : "🔴 Offline"}
-          </Badge>
-        </div>
-        
-        {/* Typing indicators */}
-        {typingUsers.size > 0 && (
-          <div className="flex items-center mt-3 p-2 bg-white/10 rounded-lg border border-white/20">
-            <div className="flex space-x-1 mr-2">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
-            <span className="text-green-300 text-sm font-medium">
-              {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Chat Messages */}
-      <div 
-        ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scroll-smooth bg-gradient-to-b from-gray-800/50 to-gray-900/50 custom-scrollbar"
-        style={{ 
-          WebkitOverflowScrolling: 'touch',
-          overflowY: 'auto'
-        }}
-      >
-        {chatMessages.length === 0 ? (
-          <div className="text-center text-gray-300 py-12">
-            <div className="bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <MessageCircle className="w-8 h-8 text-purple-300" />
-            </div>
-            <p className="text-lg font-semibold text-white mb-2">No messages yet</p>
-            <p className="text-purple-200 text-sm">Start the conversation!</p>
-          </div>
-        ) : (
-          chatMessages.map((message, index) => {
-            const isOwnMessage = message.sender === playerName;
-            const userColor = getUserColor(message.sender);
-            
-            return (
-              <div
-                key={message.id}
-                className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
-              >
-                <div className={`max-w-[85%] rounded-2xl p-4 shadow-lg ${
-                  isOwnMessage
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-br-md'
-                    : 'bg-gradient-to-r from-gray-700 to-gray-800 border border-gray-600 text-white rounded-bl-md'
-                }`}>
-                  {/* Sender name for others' messages */}
-                  {!isOwnMessage && (
-                    <div className="flex items-center space-x-2 mb-2">
-                      <div className={`w-6 h-6 rounded-full bg-gradient-to-r ${userColor} flex items-center justify-center text-xs font-bold text-white`}>
-                        {message.sender.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-bold text-sm text-gray-200">
-                        {message.sender}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {/* Message content */}
-                  <div className="text-sm break-words leading-relaxed">
-                    {message.content}
-                  </div>
-                  
-                  {/* Message time */}
-                  <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mt-2`}>
-                    <div className={`text-xs ${
-                      isOwnMessage ? 'text-blue-200' : 'text-gray-400'
-                    }`}>
-                      {formatChatTime(message.timestamp)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Chat Input */}
-      <div className="border-t border-purple-500/30 bg-gradient-to-r from-gray-800 to-gray-900 rounded-b-xl">
-        <ChatInput 
-          onSendMessage={onSendMessage} 
-          disabled={!isConnected}
-          onTyping={onTyping}
-        />
-      </div>
-    </Card>
-  );
-});
-
+<ChatPanel 
+  chatMessages={chatMessages}
+  playerName={playerName}
+  typingUsers={typingUsers}
+  onSendMessage={handleSendChatMessage}
+  isConnected={connectionStatus === "connected"}
+  onTyping={handleTyping}
+/>
 const WhosMostLikely = () => {
   const navigate = useNavigate();
   
@@ -692,25 +532,25 @@ const WhosMostLikely = () => {
   }, [roomId, playerName]);
 
   // Typing handler
-  // FIXED: Handle typing with proper parameters
-  const handleTyping = useCallback((isTyping) => {
-    if (!socket) return;
-    
-    if (isTyping) {
-      console.log("⌨️ Starting typing indicator");
-      socket.emit("typing", { 
-        roomId, 
-        userId: playerName, 
-        userName: playerName 
-      });
-    } else {
-      console.log("⌨️ Stopping typing indicator");
-      socket.emit("chat-typing-stop", { 
-        roomId, 
-        userId: playerName 
-      });
-    }
-  }, [roomId, playerName, socket]);
+ // FIXED: Handle typing with proper parameters
+const handleTyping = useCallback((isTyping) => {
+  if (!socket) return;
+  
+  if (isTyping) {
+    console.log("⌨️ Starting typing indicator");
+    socket.emit("typing", { 
+      roomId, 
+      userId: playerName, 
+      userName: playerName 
+    });
+  } else {
+    console.log("⌨️ Stopping typing indicator");
+    socket.emit("chat-typing-stop", { 
+      roomId, 
+      userId: playerName 
+    });
+  }
+}, [roomId, playerName, socket]);
 
   // Socket event handlers
   useEffect(() => {
