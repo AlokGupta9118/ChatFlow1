@@ -11,7 +11,7 @@ export const getChatRooms = async (req, res) => {
 
     const chatRooms = await ChatRoom.find({
       "participants.user": userId,
-      isActive: true
+    
     })
     .populate("participants.user", "name profilePicture status lastSeen")
     .populate("lastMessage")
@@ -47,7 +47,7 @@ export const getOrCreateDirectChat = async (req, res) => {
     let chatRoom = await ChatRoom.findOne({
       type: "direct",
       "participants.user": { $all: [userId, targetUserId] },
-      isActive: true
+    
     })
     .populate("participants.user", "name profilePicture status lastSeen")
     .populate("lastMessage");
