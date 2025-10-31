@@ -589,7 +589,7 @@ export const rejectRequest = async (req, res) => {
   }
 };
 
-
+// Add to chatController.js
 export const deleteMessage = async (req, res) => {
   try {
     const { messageId } = req.params;
@@ -624,8 +624,9 @@ export const deleteMessage = async (req, res) => {
       p => p.user.toString() === userId
     );
 
-    const canDelete = message.sender.toString() === userId || 
-                     ["admin", "owner"].includes(userParticipant?.role);
+    const isOwner = message.sender.toString() === userId;
+    const isAdmin = userParticipant && ["admin", "owner"].includes(userParticipant.role);
+    const canDelete = isOwner || isAdmin;
 
     if (!canDelete) {
       return res.status(403).json({
@@ -642,6 +643,9 @@ export const deleteMessage = async (req, res) => {
     // Keep media info but clear content
     if (message.type === "text") {
       message.content = "This message was deleted";
+    } else {
+      // For media messages, keep the media but change content
+      message.content = `This ${message.type} was deleted`;
     }
     
     await message.save();
@@ -658,7 +662,8 @@ export const deleteMessage = async (req, res) => {
         messageId: message._id,
         chatRoomId: message.chatRoom,
         deletedBy: userId,
-        deletedAt: new Date()
+        deletedAt: new Date(),
+        message: populatedMessage
       });
     }
 
