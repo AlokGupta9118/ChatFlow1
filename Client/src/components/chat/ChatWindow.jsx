@@ -202,7 +202,7 @@ const ChatWindow = ({
       }
     };
 
-    // Typing events
+    // Typing events - FIXED: Corrected the prev reference error
     const handleUserTyping = (data) => {
       console.log('⌨️ User typing:', data);
       if (data.chatRoomId === selectedChat._id && data.userId !== userId) {
@@ -217,10 +217,14 @@ const ChatWindow = ({
     const handleUserStopTyping = (data) => {
       console.log('💤 User stopped typing:', data);
       if (data.chatRoomId === selectedChat._id) {
-        setTypingUsers(prev => prev.filter(user => user.userId !== data.userId));
-        if (prev.length <= 1) {
-          setIsTyping(false);
-        }
+        setTypingUsers(prev => {
+          const filtered = prev.filter(user => user.userId !== data.userId);
+          // Check if no more typing users
+          if (filtered.length === 0) {
+            setIsTyping(false);
+          }
+          return filtered;
+        });
       }
     };
 
@@ -535,7 +539,7 @@ const ChatWindow = ({
     }
   };
 
-  // Upload media file
+  // Upload media file - FIXED: Better error handling for 500 errors
   const uploadMediaFile = async (file) => {
     if (!selectedChat || !userId) {
       toast.error("Please select a chat first");
@@ -569,13 +573,19 @@ const ChatWindow = ({
         }
       );
 
-      const result = await response.json();
-      
       if (!response.ok) {
-        console.error("❌ Upload failed:", result);
-        throw new Error(result.message || `Upload failed with status ${response.status}`);
+        let errorMessage = `Upload failed with status ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // If response is not JSON, use default message
+        }
+        throw new Error(errorMessage);
       }
 
+      const result = await response.json();
+      
       if (result.success) {
         console.log("✅ Media uploaded successfully:", result);
         setMediaPreview(null);
@@ -586,7 +596,7 @@ const ChatWindow = ({
       
     } catch (error) {
       console.error("❌ Error uploading media:", error);
-      toast.error(error.message || "Failed to upload file");
+      toast.error(error.message || "Failed to upload file. Please try again.");
     } finally {
       setUploadingMedia(false);
       if (fileInputRef.current) {
@@ -606,7 +616,7 @@ const ChatWindow = ({
     }
   };
 
-  // Delete message functionality
+  // Delete message functionality - FIXED: Better error handling for 500 errors
   const handleDeleteMessage = async (messageId) => {
     if (!messageId || !token) {
       toast.error("Cannot delete message");
@@ -624,6 +634,17 @@ const ChatWindow = ({
         }
       );
 
+      if (!response.ok) {
+        let errorMessage = `Delete failed with status ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // If response is not JSON, use default message
+        }
+        throw new Error(errorMessage);
+      }
+
       const result = await response.json();
 
       if (result.success) {
@@ -634,7 +655,7 @@ const ChatWindow = ({
       }
     } catch (error) {
       console.error("❌ Error deleting message:", error);
-      toast.error(error.message || "Failed to delete message");
+      toast.error(error.message || "Failed to delete message. Please try again.");
     }
   };
 
@@ -669,21 +690,25 @@ const ChatWindow = ({
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const handleTyping = () => {
+  // FIXED: Improved typing handler with debouncing
+  const handleTyping = useCallback(() => {
     if (!selectedChat || !socket || !isConnected) return;
 
-    socket.emit("typing_start", selectedChat._id);
-
+    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
+    // Emit typing start
+    socket.emit("typing_start", selectedChat._id);
+
+    // Set timeout to stop typing
     typingTimeoutRef.current = setTimeout(() => {
       if (socket && isConnected) {
         socket.emit("typing_stop", selectedChat._id);
       }
     }, 3000);
-  };
+  }, [selectedChat, socket, isConnected]);
 
   const markMessageAsRead = (messageId) => {
     if (!selectedChat || !userId || !socket || !isConnected) return;
