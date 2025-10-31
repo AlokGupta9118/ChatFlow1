@@ -407,7 +407,28 @@ const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     }
   }
 };
-  // KEEP ALL YOUR EXISTING STATE PERSISTENCE AND SOCKET CODE
+ 
+  // SIMPLE FIX: Only save important state changes, not input changes
+useEffect(() => {
+  try {
+    const state = {
+      // Don't save playerName and roomId during typing
+      darkMode,
+      joined,
+      gameStarted,
+      currentQuestion,
+      answers,
+      advancedAnswers,
+      gameState
+    };
+    localStorage.setItem('compatibilityGameState', JSON.stringify(state));
+  } catch (error) {
+    console.error('Error saving state:', error);
+  }
+}, [
+  // Remove playerName and roomId from dependencies
+  darkMode, joined, gameStarted, currentQuestion, answers, advancedAnswers, gameState
+]);
 
 
 
