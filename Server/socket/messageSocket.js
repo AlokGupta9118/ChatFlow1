@@ -86,7 +86,7 @@ class SocketService {
       const chatRoom = await ChatRoom.findOne({
         _id: chatRoomId,
         "participants.user": userId,
-        isActive: true
+        
       }).populate("participants.user", "name profilePicture status");
 
       if (!chatRoom) {
@@ -123,6 +123,19 @@ class SocketService {
         lastMessage: message._id,
         updatedAt: new Date()
       });
+      // In SocketService.js - Add to handleSendMessage method
+
+// After saving the message and before emitting
+// Update last message for all participants
+const participants = chatRoom.participants.map(p => p.user._id.toString());
+
+// Emit to update chat lists for all participants
+participants.forEach(participantId => {
+  if (participantId !== userId) {
+    this.sendToUser(participantId, "receive_message", populatedMessage);
+  }
+});
+
 
       // Emit to all participants in the chat room
       this.io.to(chatRoomId).emit("new_message", populatedMessage);
@@ -153,15 +166,14 @@ class SocketService {
       // Update user status
       await User.findByIdAndUpdate(userId, {
         status: "online",
-        isActive: true,
         socketId: socket.id,
         lastActive: new Date()
       });
 
       // Join user's chat rooms
       const chatRooms = await ChatRoom.find({
-        "participants.user": userId,
-        isActive: true
+        "participants.user": userId
+        
       });
 
       chatRooms.forEach(room => {

@@ -5,7 +5,7 @@ import {getAllGroups,getMessages,sendMessage,requestToJoinGroup,getMyPendingRequ
   getPendingRequests,
   approveRequest,
   rejectRequest,deleteMessage,  getOrCreatePrivateChat, 
-  getPrivateChatRoom } from "../controllers/chatController.js";
+  getPrivateChatRoom ,getChatPreviews,markChatAsRead } from "../controllers/chatController.js";
   import { uploadMedia } from '../controllers/mediaController.js';
 import multer from 'multer';
 
@@ -37,6 +37,12 @@ router.get("/my-join-requests", protect, getMyPendingRequests);
 // For admin things 
 // routes/chatRoutes.js
 
+
+// Add to your existing routes in chatRoutes.js
+
+// Chat previews and unread counts
+router.get("/chat-previews", protect, getChatPreviews);
+router.post("/:chatRoomId/mark-as-read", protect, markChatAsRead);
 // Request join
 
 

@@ -16,6 +16,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [unreadCounts, setUnreadCounts] = useState({});
+  const [lastMessages, setLastMessages] = useState({});
   const [activeCategory, setActiveCategory] = useState("all");
   const [showAdminPanel, setShowAdminPanel] = useState(null);
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -51,20 +52,119 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     }
   };
 
+  // Fetch chat previews with last messages and unread counts
+  const fetchChatPreviews = async () => {
+    const token = getToken();
+    if (!token || !currentUser?._id) return;
+
+    try {
+      const res = await axios.get(
+        `${import.meta.env.VITE_API_URL}/chatroom/chat-previews`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (res.data.success) {
+        const { lastMessages: newLastMessages, unreadCounts: newUnreadCounts } = res.data;
+        
+        setLastMessages(prev => ({ ...prev, ...newLastMessages }));
+        setUnreadCounts(prev => ({ ...prev, ...newUnreadCounts }));
+      }
+    } catch (error) {
+      console.error("Error fetching chat previews:", error);
+    }
+  };
+
+  // Mark chat as read
+  const markChatAsRead = async (chatRoomId) => {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      await axios.post(
+        `${import.meta.env.VITE_API_URL}/chatroom/${chatRoomId}/mark-as-read`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      
+      // Update local state immediately
+      setUnreadCounts(prev => ({ ...prev, [chatRoomId]: 0 }));
+    } catch (error) {
+      console.error("Error marking chat as read:", error);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
-    (async () => {
+    
+    const initializeData = async () => {
       setLoading(true);
-      await Promise.all([fetchFriends(), fetchGroups()]);
+      await Promise.all([fetchFriends(), fetchGroups(), fetchChatPreviews()]);
       if (mounted) setLoading(false);
-    })();
+    };
 
-    socket.on("receive_message", (msg) => {
+    initializeData();
+
+    // Socket event for new messages
+    socket.on("new_message", (msg) => {
       if (!currentUser?._id) return;
+      
       const senderId = msg.sender?._id || msg.senderId;
+      const chatRoomId = msg.chatRoom?._id || msg.chatRoom;
+      
+      // Don't count your own messages as unread
       if (senderId === currentUser._id) return;
-      const key = msg.chatRoom?._id || senderId;
-      setUnreadCounts((prev) => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
+
+      const key = chatRoomId;
+
+      // Update unread count
+      setUnreadCounts((prev) => ({ 
+        ...prev, 
+        [key]: (prev[key] || 0) + 1 
+      }));
+
+      // Update last message preview
+      setLastMessages((prev) => ({
+        ...prev,
+        [key]: {
+          content: msg.content,
+          type: msg.type,
+          timestamp: msg.createdAt || new Date(),
+          senderName: msg.sender?.name || "Unknown",
+          senderId: msg.sender?._id
+        }
+      }));
+
+      // If this is a private chat, also update under friend ID
+      const chatRoom = msg.chatRoom;
+      if (chatRoom && !chatRoom.isGroup && chatRoom.type === "direct") {
+        const otherParticipant = chatRoom.participants?.find(
+          p => p.user?._id !== currentUser._id
+        );
+        if (otherParticipant?.user?._id) {
+          setLastMessages((prev) => ({
+            ...prev,
+            [otherParticipant.user._id]: {
+              content: msg.content,
+              type: msg.type,
+              timestamp: msg.createdAt || new Date(),
+              senderName: msg.sender?.name || "Unknown",
+              senderId: msg.sender?._id
+            }
+          }));
+        }
+      }
+    });
+
+    // Listen for message read events
+    socket.on("messages_read", ({ chatRoomId, count }) => {
+      setUnreadCounts((prev) => ({ 
+        ...prev, 
+        [chatRoomId]: Math.max(0, (prev[chatRoomId] || 0) - count) 
+      }));
     });
 
     socket.on("update_status", ({ userId, status }) => {
@@ -75,7 +175,8 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
 
     return () => {
       mounted = false;
-      socket.off("receive_message");
+      socket.off("new_message");
+      socket.off("messages_read");
       socket.off("update_status");
     };
   }, []);
@@ -90,52 +191,53 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     normalize(g?.name).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
- // In ChatList.jsx - Updated handleSelect function
-const handleSelect = async (chat, isGroup = false) => {
-  console.log("🎯 ChatList: handleSelect called", {
-    chat: chat?.name,
-    isGroup,
-    chatType: isGroup ? "GROUP" : "PRIVATE"
-  });
+  const handleSelect = async (chat, isGroup = false) => {
+    console.log("🎯 ChatList: handleSelect called", {
+      chat: chat?.name,
+      isGroup,
+      chatType: isGroup ? "GROUP" : "PRIVATE"
+    });
 
-  const key = chat._id;
-  setUnreadCounts((prev) => ({ ...prev, [key]: 0 }));
-
-  if (isGroup) {
-    // For groups, we already have the chat room object
-    if (onSelectChat) {
-      onSelectChat(chat, isGroup);
+    const key = chat._id;
+    
+    // Clear unread count when chat is selected
+    if (unreadCounts[key] > 0) {
+      await markChatAsRead(key);
     }
-  } else {
-    // For private chats, we need to get or create the chat room
-    try {
-      const token = getToken();
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/chatroom/private/${chat._id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
 
-      const data = await response.json();
-
-      if (data.success && data.chatRoom) {
-        console.log("✅ Found/Created chat room:", data.chatRoom);
-        if (onSelectChat) {
-          onSelectChat(data.chatRoom, isGroup);
-        }
-      } else {
-        console.error("❌ Failed to get/create chat room:", data.message);
-        toast.error("Failed to start chat");
+    if (isGroup) {
+      if (onSelectChat) {
+        onSelectChat(chat, isGroup);
       }
-    } catch (error) {
-      console.error("❌ Error getting chat room:", error);
-      toast.error("Failed to load chat");
+    } else {
+      try {
+        const token = getToken();
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/chatroom/private/${chat._id}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        if (data.success && data.chatRoom) {
+          console.log("✅ Found/Created chat room:", data.chatRoom);
+          if (onSelectChat) {
+            onSelectChat(data.chatRoom, isGroup);
+          }
+        } else {
+          console.error("❌ Failed to get/create chat room:", data.message);
+          toast.error("Failed to start chat");
+        }
+      } catch (error) {
+        console.error("❌ Error getting chat room:", error);
+        toast.error("Failed to load chat");
+      }
     }
-  }
-};
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -152,6 +254,45 @@ const handleSelect = async (chat, isGroup = false) => {
       case "away": return "Away";
       case "busy": return "Busy";
       default: return "Offline";
+    }
+  };
+
+  const getLastMessagePreview = (chatId, isGroup = false) => {
+    const lastMessage = lastMessages[chatId];
+    if (!lastMessage) return "No messages yet";
+    
+    const isCurrentUserSender = lastMessage.senderId === currentUser._id;
+    const prefix = isGroup && !isCurrentUserSender && lastMessage.senderName 
+      ? `${lastMessage.senderName}: ` 
+      : isCurrentUserSender ? "You: " : "";
+    
+    if (lastMessage.type === "image") {
+      return `${prefix}📷 Image`;
+    } else if (lastMessage.type === "file") {
+      return `${prefix}📎 File`;
+    } else if (lastMessage.type === "voice") {
+      return `${prefix}🎤 Voice message`;
+    } else {
+      // Truncate long messages
+      const content = lastMessage.content || "";
+      return `${prefix}${content.length > 40 ? content.substring(0, 40) + '...' : content}`;
+    }
+  };
+
+  const getMessageTime = (chatId) => {
+    const lastMessage = lastMessages[chatId];
+    if (!lastMessage?.timestamp) return "";
+    
+    const messageTime = new Date(lastMessage.timestamp);
+    const now = new Date();
+    const diffInHours = (now - messageTime) / (1000 * 60 * 60);
+    
+    if (diffInHours < 24) {
+      return messageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diffInHours < 48) {
+      return 'Yesterday';
+    } else {
+      return messageTime.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
   };
 
@@ -241,10 +382,12 @@ const handleSelect = async (chat, isGroup = false) => {
         ) : displayedItems.length > 0 ? (
           <AnimatePresence mode="popLayout">
             {displayedItems.map((item, index) => {
-              const isGroup = item.participants;
+              const isGroup = item.participants && item.type === "group";
               const itemName = item?.name || "Unnamed";
               const isSelected = selectedChat?._id === item._id;
               const unread = unreadCounts[item._id] || 0;
+              const lastMessagePreview = getLastMessagePreview(item._id, isGroup);
+              const messageTime = getMessageTime(item._id);
 
               if (isGroup) {
                 const participant = item.participants.find(
@@ -270,10 +413,7 @@ const handleSelect = async (chat, isGroup = false) => {
                     className="px-2"
                   >
                     <div
-                      onClick={() => {
-                        console.log("🎯 Clicked on GROUP:", itemName);
-                        handleSelect(item, true); // Explicitly pass true for groups
-                      }}
+                      onClick={() => handleSelect(item, true)}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
@@ -295,11 +435,16 @@ const handleSelect = async (chat, isGroup = false) => {
                         </div>
                         
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center justify-between mb-1">
                             <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm lg:text-base">
                               {itemName}
                             </h3>
                             <div className="flex items-center gap-2">
+                              {messageTime && (
+                                <span className="text-xs text-gray-400 dark:text-gray-500">
+                                  {messageTime}
+                                </span>
+                              )}
                               {unread > 0 && (
                                 <motion.span
                                   initial={{ scale: 0 }}
@@ -320,6 +465,15 @@ const handleSelect = async (chat, isGroup = false) => {
                             </div>
                           </div>
                           
+                          {/* Last Message Preview */}
+                          <p className={`text-sm truncate mb-2 ${
+                            unread > 0 
+                              ? "text-gray-900 dark:text-gray-100 font-medium" 
+                              : "text-gray-600 dark:text-gray-400"
+                          }`}>
+                            {lastMessagePreview}
+                          </p>
+                          
                           <div className="flex items-center gap-2 text-xs lg:text-sm">
                             <span className={`px-2 py-1 rounded-full font-medium ${
                               role === "owner" 
@@ -337,53 +491,11 @@ const handleSelect = async (chat, isGroup = false) => {
                           </div>
                         </div>
                       </div>
-
-                      {/* Admin Panel Dropdown */}
-                      {isAdmin && activeCategory === "groups" && showAdminPanel === item._id && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-4 bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-gray-200 dark:border-gray-700"
-                        >
-                          <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-                            <Settings className="w-4 h-4" />
-                            Group Administration
-                          </h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            <button
-                              onClick={() => handleAdminAction("manage_members", item._id)}
-                              className="p-2 text-sm bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                            >
-                              Manage Members
-                            </button>
-                            <button
-                              onClick={() => handleAdminAction("edit_group", item._id)}
-                              className="p-2 text-sm bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors"
-                            >
-                              Edit Group
-                            </button>
-                            <button
-                              onClick={() => handleAdminAction("group_settings", item._id)}
-                              className="p-2 text-sm bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
-                            >
-                              Settings
-                            </button>
-                            {role === "owner" && (
-                              <button
-                                onClick={() => handleAdminAction("delete_group", item._id)}
-                                className="p-2 text-sm bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
-                              >
-                                Delete Group
-                              </button>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
                     </div>
                   </motion.div>
                 );
               } else {
+                // Private chat (friend)
                 return (
                   <motion.div
                     key={item._id}
@@ -400,10 +512,7 @@ const handleSelect = async (chat, isGroup = false) => {
                     className="px-2"
                   >
                     <div
-                      onClick={() => {
-                        console.log("🎯 Clicked on PRIVATE CHAT:", itemName);
-                        handleSelect(item, false); // Explicitly pass false for private chats
-                      }}
+                      onClick={() => handleSelect(item, false)}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
@@ -423,20 +532,36 @@ const handleSelect = async (chat, isGroup = false) => {
                         </div>
                         
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center justify-between mb-1">
                             <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm lg:text-base">
                               {itemName}
                             </h3>
-                            {unread > 0 && (
-                              <motion.span
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg min-w-6 text-center"
-                              >
-                                {unread}
-                              </motion.span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {messageTime && (
+                                <span className="text-xs text-gray-400 dark:text-gray-500">
+                                  {messageTime}
+                                </span>
+                              )}
+                              {unread > 0 && (
+                                <motion.span
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg min-w-6 text-center"
+                                >
+                                  {unread}
+                                </motion.span>
+                              )}
+                            </div>
                           </div>
+                          
+                          {/* Last Message Preview */}
+                          <p className={`text-sm truncate mb-2 ${
+                            unread > 0 
+                              ? "text-gray-900 dark:text-gray-100 font-medium" 
+                              : "text-gray-600 dark:text-gray-400"
+                          }`}>
+                            {lastMessagePreview}
+                          </p>
                           
                           <div className="flex items-center gap-2 text-xs lg:text-sm">
                             <span className={`w-2 h-2 rounded-full ${getStatusColor(item.status)}`} />
