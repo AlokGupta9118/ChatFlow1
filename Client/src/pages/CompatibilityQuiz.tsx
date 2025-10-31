@@ -390,16 +390,22 @@ export default function AdvancedCompatibilityGame() {
 
   
   // FIXED: Input handlers without useCallback to prevent stale closures
+
+
+  // FIXED: Input handlers with proper state management
 const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  setPlayerName(e.target.value);
+  const value = e.target.value;
+  setPlayerName(value);
 };
 
 const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  setRoomId(e.target.value.toUpperCase());
+  const value = e.target.value.toUpperCase();
+  setRoomId(value);
 };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
   if (e.key === 'Enter') {
+    e.preventDefault();
     if (playerName.trim() && !roomId.trim()) {
       createRoom();
     } else if (playerName.trim() && roomId.trim()) {
@@ -407,7 +413,6 @@ const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     }
   }
 };
- 
   // SIMPLE FIX: Only save important state changes, not input changes
 useEffect(() => {
   try {
@@ -2002,16 +2007,17 @@ useEffect(() => {
               Your Name
             </Label>
             <Input
-              id="playerName"
-              ref={nameInputRef}
-              type="text"
-              placeholder="Enter your name"
-              value={playerName}
-              onChange={handleNameChange}
-              onKeyPress={handleKeyPress}
-              className="w-full"
-              maxLength={20}
-            />
+  id="playerName"
+  ref={nameInputRef}
+  type="text"
+  placeholder="Enter your name"
+  value={playerName}
+  onChange={handleNameChange}
+  onKeyDown={handleKeyDown} // Changed to onKeyDown
+  className="w-full"
+  maxLength={20}
+/>
+           
           </div>
 
           <div>
@@ -2019,17 +2025,17 @@ useEffect(() => {
               <Key className="w-4 h-4 mr-2" />
               Room Code (Optional)
             </Label>
-            <Input
-              id="roomId"
-              ref={roomInputRef}
-              type="text"
-              placeholder="Enter room code to join"
-              value={roomId}
-              onChange={handleRoomChange}
-              onKeyPress={handleKeyPress}
-              className="w-full font-mono uppercase"
-              maxLength={6}
-            />
+          <Input
+  id="roomId"
+  ref={roomInputRef}
+  type="text"
+  placeholder="Enter room code to join"
+  value={roomId}
+  onChange={handleRoomChange}
+  onKeyDown={handleKeyDown} // Changed to onKeyDown
+  className="w-full font-mono uppercase"
+  maxLength={6}
+/>
             <p className="text-xs text-gray-500 mt-1">
               Leave empty to create a new room
             </p>
