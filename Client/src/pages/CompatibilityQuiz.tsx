@@ -121,7 +121,7 @@ const additionalCompatibilityFactors = {
   relationshipGoals: ["Long-term", "Casual", "Marriage", "Exploratory", "Friendship"]
 };
 
-// NEW: FIXED Input Component with proper mobile handling
+// NEW: IMPROVED Input Component with better mobile handling and auto-focus
 const FixedInput = React.forwardRef(({ 
   label, 
   icon: Icon, 
@@ -136,12 +136,24 @@ const FixedInput = React.forwardRef(({
   ...props 
 }, ref) => {
   const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef(null);
   
+  // Combine refs
+  React.useImperativeHandle(ref, () => inputRef.current);
+  
+  useEffect(() => {
+    if (autoFocus && inputRef.current && !isMobile) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 300);
+    }
+  }, [autoFocus]);
+
   const handleFocus = (e) => {
     setIsFocused(true);
     if (onFocus) onFocus(e);
     
-    // Prevent zoom on iOS
+    // Enhanced mobile handling
     if (window.innerWidth <= 768) {
       const target = e.target;
       setTimeout(() => {
@@ -154,6 +166,9 @@ const FixedInput = React.forwardRef(({
     setIsFocused(false);
   };
 
+  // Check if mobile
+  const isMobile = window.innerWidth < 768;
+
   return (
     <div className="space-y-2">
       <Label htmlFor={label.toLowerCase()} className="font-semibold text-sm text-white/90 flex items-center">
@@ -162,7 +177,7 @@ const FixedInput = React.forwardRef(({
       </Label>
       <div className="relative">
         <Input
-          ref={ref}
+          ref={inputRef}
           id={label.toLowerCase()}
           type={type}
           placeholder={placeholder}
@@ -171,7 +186,7 @@ const FixedInput = React.forwardRef(({
           onFocus={handleFocus}
           onBlur={handleBlur}
           onKeyPress={onKeyPress}
-          autoFocus={autoFocus}
+          autoFocus={autoFocus && !isMobile}
           className={`
             w-full h-12 px-4 bg-white/10 border-2 rounded-xl
             text-white placeholder-white/60 text-base
@@ -267,7 +282,7 @@ export default function AdvancedCompatibilityGame() {
   const optionsContainerRef = useRef<HTMLDivElement>(null);
   const questionContainerRef = useRef<HTMLDivElement>(null);
 
-  // NEW: Improved mobile detection with better viewport handling
+  // NEW: Enhanced mobile detection with better viewport handling
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
@@ -326,6 +341,36 @@ export default function AdvancedCompatibilityGame() {
       }
     }
   }, [playerName, roomId]);
+
+  // NEW: Enhanced scrolling fix for mobile
+  useEffect(() => {
+    const preventScroll = (e: TouchEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      e.preventDefault();
+    };
+
+    // Improved scroll handling for mobile
+    if (isMobile) {
+      document.body.style.overflow = 'auto';
+      document.body.style.height = 'auto';
+      document.addEventListener('touchmove', preventScroll, { passive: false });
+    } else {
+      document.body.style.overflow = 'auto';
+      document.removeEventListener('touchmove', preventScroll);
+    }
+
+    return () => {
+      document.body.style.overflow = 'auto';
+      document.removeEventListener('touchmove', preventScroll);
+    };
+  }, [isMobile]);
+
+  // NEW: Auto-scroll to top when changing screens
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [joined, gameStarted, showResults, waitingForPartner]);
 
   // KEEP ALL YOUR EXISTING STATE PERSISTENCE AND SOCKET CODE
   useEffect(() => {
@@ -985,8 +1030,6 @@ export default function AdvancedCompatibilityGame() {
       setWaitingForPartner(false);
     }
   };
-
-  // KEEP ALL YOUR EXISTING COMPONENTS BUT ADD BACK BUTTONS
 
   // Enhanced Player Card Component
   const PlayerCard = ({ player, index }: { player: any, index: number }) => (
@@ -2072,7 +2115,7 @@ export default function AdvancedCompatibilityGame() {
               onChange={handleNameChange}
               onFocus={handleNameFocus}
               onKeyPress={handleKeyPress}
-              autoFocus={!isMobile}
+              autoFocus={true}
             />
             
             <FixedInput
@@ -2254,6 +2297,25 @@ export default function AdvancedCompatibilityGame() {
       /* Prevent blue highlight on tap */
       * {
         -webkit-tap-highlight-color: transparent;
+      }
+      
+      /* NEW: Enhanced scrolling fixes */
+      html, body {
+        overflow-x: hidden;
+        position: relative;
+        width: 100%;
+      }
+      
+      body {
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* NEW: Improved mobile viewport handling */
+      @media (max-width: 768px) {
+        .mobile-viewport-fix {
+          height: calc(var(--vh, 1vh) * 100);
+          overflow-y: auto;
+        }
       }
     `;
     document.head.appendChild(style);
