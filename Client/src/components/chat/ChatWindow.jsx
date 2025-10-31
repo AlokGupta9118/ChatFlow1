@@ -617,47 +617,60 @@ const ChatWindow = ({
   };
 
   // Delete message functionality - FIXED: Better error handling for 500 errors
-  const handleDeleteMessage = async (messageId) => {
-    if (!messageId || !token) {
-      toast.error("Cannot delete message");
-      return;
+// Replace the handleDeleteMessage function with this improved version
+const handleDeleteMessage = async (messageId) => {
+  if (!messageId || !token) {
+    toast.error("Cannot delete message");
+    return;
+  }
+
+  try {
+    console.log(`🗑️ Attempting to delete message: ${messageId}`);
+    
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/chatroom/messages/${messageId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      }
+    );
+
+    // Handle different response statuses
+    if (response.status === 404) {
+      throw new Error("Message not found");
+    } else if (response.status === 403) {
+      throw new Error("You don't have permission to delete this message");
+    } else if (response.status === 500) {
+      throw new Error("Server error - please try again later");
+    } else if (!response.ok) {
+      throw new Error(`Delete failed with status ${response.status}`);
     }
 
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/chatroom/messages/${messageId}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
+    const result = await response.json();
 
-      if (!response.ok) {
-        let errorMessage = `Delete failed with status ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.message || errorMessage;
-        } catch (e) {
-          // If response is not JSON, use default message
-        }
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        // Message will be updated via socket event
-        console.log("✅ Message deletion initiated");
-      } else {
-        throw new Error(result.message);
-      }
-    } catch (error) {
-      console.error("❌ Error deleting message:", error);
-      toast.error(error.message || "Failed to delete message. Please try again.");
+    if (result.success) {
+      console.log("✅ Message deletion initiated");
+      // The socket event will update the message in real-time
+    } else {
+      throw new Error(result.message || "Delete failed");
     }
-  };
+  } catch (error) {
+    console.error("❌ Error deleting message:", error);
+    
+    // Show specific error messages based on error type
+    if (error.message.includes("permission")) {
+      toast.error("You don't have permission to delete this message");
+    } else if (error.message.includes("not found")) {
+      toast.error("Message not found");
+    } else if (error.message.includes("Server error")) {
+      toast.error("Server error - please try again later");
+    } else {
+      toast.error(error.message || "Failed to delete message");
+    }
+  }
+};
 
   // Message context menu
   const handleMessageRightClick = (e, message) => {

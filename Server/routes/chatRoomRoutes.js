@@ -51,8 +51,9 @@ router.post("/:groupId/join-request/reject", protect,rejectRequest);
 router.get("/my-join-requests", protect, getMyJoinRequests);
 
 
-// Add this route after your existing message routes
+
 router.delete("/messages/:messageId", protect, deleteMessage);
+
 
 // Groups
 router.get('/groups/my', getMyGroups);
