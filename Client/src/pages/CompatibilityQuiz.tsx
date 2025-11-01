@@ -118,8 +118,85 @@ const Compatibility: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isHost, setIsHost] = useState<boolean>(false);
   const [currentQuestion, setCurrentQuestion] = useState<number>(0);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [advancedQuestions, setAdvancedQuestions] = useState<AdvancedQuestions | null>(null);
+  
+  // Questions (now defined locally)
+  const [questions] = useState<Question[]>([
+    {
+      id: 1,
+      text: "How important is personal space and alone time in a relationship?",
+      type: "scale",
+      options: ["Not important", "Slightly important", "Moderately important", "Very important", "Extremely important"]
+    },
+    {
+      id: 2,
+      text: "How do you handle conflicts or disagreements?",
+      type: "scale",
+      options: ["Avoid them", "Discuss calmly", "Need time to think", "Express emotions openly", "Seek immediate resolution"]
+    },
+    {
+      id: 3,
+      text: "What's your ideal weekend activity?",
+      type: "scale",
+      options: ["Staying home", "Social gatherings", "Outdoor adventures", "Cultural activities", "Trying new restaurants"]
+    },
+    {
+      id: 4,
+      text: "How important is career ambition in a partner?",
+      type: "scale",
+      options: ["Not important", "Slightly important", "Moderately important", "Very important", "Extremely important"]
+    },
+    {
+      id: 5,
+      text: "What's your love language?",
+      type: "scale",
+      options: ["Words of affirmation", "Quality time", "Receiving gifts", "Acts of service", "Physical touch"]
+    }
+  ]);
+
+  const [advancedQuestions] = useState<AdvancedQuestions>({
+    personalityTraits: {
+      question: "Select your dominant personality traits",
+      type: "multi-select",
+      options: ["Adventurous", "Analytical", "Creative", "Empathetic", "Organized", "Spontaneous", "Practical", "Emotional"]
+    },
+    lifestyle: {
+      sleepSchedule: {
+        question: "Your typical sleep schedule",
+        options: ["Early bird", "Night owl", "Flexible", "Strict routine"]
+      },
+      socialActivity: {
+        question: "Your social activity level",
+        options: ["Homebody", "Occasionally social", "Very social", "Social butterfly"]
+      }
+    },
+    communication: {
+      style: {
+        question: "Your communication style",
+        options: ["Direct", "Diplomatic", "Emotional", "Logical"]
+      },
+      conflictResolution: {
+        question: "How you handle conflicts",
+        options: ["Address immediately", "Take time to cool off", "Seek mediation", "Avoid confrontation"]
+      }
+    },
+    interests: {
+      hobbies: {
+        question: "Your favorite hobbies",
+        options: ["Reading", "Sports", "Music", "Travel", "Cooking", "Gaming", "Arts", "Technology"]
+      }
+    },
+    values: {
+      family: {
+        question: "Importance of family",
+        options: ["Not important", "Somewhat important", "Important", "Very important"]
+      },
+      career: {
+        question: "Career focus",
+        options: ["Work to live", "Balanced", "Career-driven", "Ambitious"]
+      }
+    }
+  });
+
   const [hasAnsweredCurrent, setHasAnsweredCurrent] = useState<boolean>(false);
   
   // Enhanced local state management
@@ -149,7 +226,7 @@ const Compatibility: React.FC = () => {
   // Track result submissions
   const [resultSubmissions, setResultSubmissions] = useState<{[key: string]: boolean}>({});
 
-  // FIXED: Enhanced result calculation with better synchronization
+  // Calculate results independently on frontend
   const calculateResultsIndependently = useCallback((): CompatibilityResults => {
     console.log('🎯 Calculating results independently based on local data');
     console.log('My answers:', myAnswers);
@@ -348,7 +425,7 @@ const Compatibility: React.FC = () => {
     };
   };
 
-  // FIXED: Enhanced show results with better synchronization
+  // Show results based on local calculation
   const showResults = useCallback(() => {
     console.log('🚀 Showing results based on local data');
     const calculatedResults = calculateResultsIndependently();
@@ -356,7 +433,7 @@ const Compatibility: React.FC = () => {
     setGameStatus('results');
   }, [calculateResultsIndependently]);
 
-  // FIXED: Effect to handle when both players are ready for results
+  // Effect to handle when both players are ready for results
   useEffect(() => {
     if (players.length === 2 && gameStatus === 'waiting-for-players') {
       const allReadyForResults = players.every(player => resultSubmissions[player.name]);
@@ -371,7 +448,7 @@ const Compatibility: React.FC = () => {
     }
   }, [resultSubmissions, players, gameStatus, showResults]);
 
-  // FIXED: Effect to handle when we have both players' data
+  // Effect to handle when we have both players' data
   useEffect(() => {
     if (gameStatus === 'waiting-for-players' && otherPlayerAnswers) {
       const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
@@ -383,7 +460,7 @@ const Compatibility: React.FC = () => {
     }
   }, [gameStatus, otherPlayerAnswers, localSubmissionStatus, players, playerName, resultSubmissions]);
 
-  // FIXED: Separate function for requesting results
+  // Separate function for requesting results
   const requestResults = () => {
     console.log('🎯 Requesting results calculation');
     
@@ -402,7 +479,7 @@ const Compatibility: React.FC = () => {
     console.log('✅ Result request emitted');
   };
 
-  // FIXED: Enhanced final submission with proper event flow
+  // Enhanced final submission with proper event flow
   const submitFinal = () => {
     console.log('🚀 Submitting final answers with local data:', myAnswers);
     setIsSubmittingFinal(true);
@@ -438,7 +515,7 @@ const Compatibility: React.FC = () => {
     };
   }, []);
 
-  // FIXED: Enhanced socket event listeners with all required events
+  // Enhanced socket event listeners
   useEffect(() => {
     if (!socket) return;
 
@@ -447,8 +524,6 @@ const Compatibility: React.FC = () => {
       setRoomId(room.roomId);
       setPlayers(room.players);
       setIsHost(true);
-      setQuestions(room.questions || []);
-      setAdvancedQuestions(room.advancedQuestions || null);
       
       // Initialize local submission status
       const initialSubmissionStatus: {[key: string]: boolean} = {};
@@ -460,9 +535,9 @@ const Compatibility: React.FC = () => {
       setLocalSubmissionStatus(initialSubmissionStatus);
       setResultSubmissions(initialResultSubmissions);
       
-      // Initialize my answers
+      // Initialize my answers with empty array for all questions
       setMyAnswers({
-        regularAnswers: Array(room.questions?.length || 0).fill(undefined),
+        regularAnswers: Array(questions.length).fill(undefined),
         advancedAnswers: {}
       });
       
@@ -475,8 +550,6 @@ const Compatibility: React.FC = () => {
       setRoomId(room.roomId);
       setPlayers(room.players);
       setIsHost(room.players.find((p: Player) => p.socketId === socket.id)?.isHost || false);
-      setQuestions(room.questions || []);
-      setAdvancedQuestions(room.advancedQuestions || null);
       
       // Initialize local submission status
       const initialSubmissionStatus: {[key: string]: boolean} = {};
@@ -488,9 +561,9 @@ const Compatibility: React.FC = () => {
       setLocalSubmissionStatus(initialSubmissionStatus);
       setResultSubmissions(initialResultSubmissions);
       
-      // Initialize my answers
+      // Initialize my answers with empty array for all questions
       setMyAnswers({
-        regularAnswers: Array(room.questions?.length || 0).fill(undefined),
+        regularAnswers: Array(questions.length).fill(undefined),
         advancedAnswers: {}
       });
       
@@ -528,8 +601,8 @@ const Compatibility: React.FC = () => {
     // Game events
     const handleGameStarted = (data: any) => {
       setGameStatus('playing');
-      setCurrentQuestion(data.currentQuestion || 0);
-      setTimeLeft(data.timeLeft || 30);
+      setCurrentQuestion(0);
+      setTimeLeft(30);
       setHasAnsweredCurrent(false);
       
       // Reset submission tracking when game starts
@@ -558,23 +631,6 @@ const Compatibility: React.FC = () => {
       setOtherPlayerAnswers(null);
     };
 
-    const handleNextQuestion = (data: any) => {
-      setCurrentQuestion(data.questionIndex);
-      setTimeLeft(data.timeLeft);
-      setHasAnsweredCurrent(false);
-    };
-
-    const handleAllAnswered = (data: any) => {
-      setCurrentQuestion(data.nextQuestionIndex);
-      setTimeLeft(data.timeLeft);
-      setHasAnsweredCurrent(false);
-    };
-
-    const handleRegularCompleted = (data: any) => {
-      setAdvancedQuestions(data.advancedQuestions);
-      setGameStatus('advanced');
-    };
-
     const handlePlayerProgress = (data: any) => {
       setPlayerProgress(prev => ({
         ...prev,
@@ -589,7 +645,7 @@ const Compatibility: React.FC = () => {
       setIsSubmittingFinal(false);
     };
 
-    // FIXED: Handle other player's answers with enhanced logic
+    // Handle other player's answers
     const handleOtherPlayerAnswers = (data: any) => {
       console.log('📨 Received other player answers:', data);
       setOtherPlayerAnswers(data.answers);
@@ -605,7 +661,7 @@ const Compatibility: React.FC = () => {
       }));
     };
 
-    // FIXED: Handle result submission updates
+    // Handle result submission updates
     const handleResultSubmissionUpdate = (data: any) => {
       console.log(`📊 Result submission update: ${data.playerName} - ${data.submitted}`);
       
@@ -615,25 +671,14 @@ const Compatibility: React.FC = () => {
       }));
     };
 
-    // FIXED: Handle when server confirms both are ready for results
+    // Handle when server confirms both are ready for results
     const handleBothReadyForResults = () => {
       console.log('🎯 Server confirms both players ready for results');
       showResults();
     };
 
-    // NEW: Handle server-calculated results
-    const handleShowResults = (data: any) => {
-      console.log('📊 Server is showing results', data);
-      if (data.serverCalculated) {
-        setResults(data.serverCalculated);
-      } else {
-        showResults();
-      }
-      setGameStatus('results');
-    };
-
-    // NEW: Handle when all players have submitted
-    const handleAllSubmitted = (data: any) => {
+    // Handle when all players have submitted
+    const handleAllSubmitted = () => {
       console.log('🎉 All players have submitted, preparing results...');
       // Automatically request results when all have submitted
       if (!resultSubmissions[playerName]) {
@@ -658,16 +703,12 @@ const Compatibility: React.FC = () => {
     socket.on('compatibility-room-joined', handleRoomJoined);
     socket.on('compatibility-update-players', handleUpdatePlayers);
     socket.on('compatibility-game-started', handleGameStarted);
-    socket.on('compatibility-next-question', handleNextQuestion);
-    socket.on('compatibility-all-answered', handleAllAnswered);
-    socket.on('compatibility-regular-completed', handleRegularCompleted);
     socket.on('compatibility-player-progress', handlePlayerProgress);
     socket.on('compatibility-waiting-for-players', handleWaitingForPlayers);
     socket.on('compatibility-other-player-answers', handleOtherPlayerAnswers);
     socket.on('compatibility-submission-update', handleSubmissionUpdate);
     socket.on('compatibility-result-submitted', handleResultSubmissionUpdate);
     socket.on('compatibility-both-ready-for-results', handleBothReadyForResults);
-    socket.on('compatibility-show-results', handleShowResults);
     socket.on('compatibility-all-submitted', handleAllSubmitted);
     socket.on('join-error', handleJoinError);
     socket.on('start-error', handleStartError);
@@ -678,16 +719,12 @@ const Compatibility: React.FC = () => {
       socket.off('compatibility-room-joined', handleRoomJoined);
       socket.off('compatibility-update-players', handleUpdatePlayers);
       socket.off('compatibility-game-started', handleGameStarted);
-      socket.off('compatibility-next-question', handleNextQuestion);
-      socket.off('compatibility-all-answered', handleAllAnswered);
-      socket.off('compatibility-regular-completed', handleRegularCompleted);
       socket.off('compatibility-player-progress', handlePlayerProgress);
       socket.off('compatibility-waiting-for-players', handleWaitingForPlayers);
       socket.off('compatibility-other-player-answers', handleOtherPlayerAnswers);
       socket.off('compatibility-submission-update', handleSubmissionUpdate);
       socket.off('compatibility-result-submitted', handleResultSubmissionUpdate);
       socket.off('compatibility-both-ready-for-results', handleBothReadyForResults);
-      socket.off('compatibility-show-results', handleShowResults);
       socket.off('compatibility-all-submitted', handleAllSubmitted);
       socket.off('join-error', handleJoinError);
       socket.off('start-error', handleStartError);
@@ -718,8 +755,6 @@ const Compatibility: React.FC = () => {
     setIsHost(false);
     setGameStatus('lobby');
     setCurrentQuestion(0);
-    setQuestions([]);
-    setAdvancedQuestions(null);
     setPlayerProgress({});
     setResults(null);
     setWaitingForPlayers([]);
@@ -809,6 +844,18 @@ const Compatibility: React.FC = () => {
       questionIndex: currentQuestion,
       answer: answerIndex
     });
+
+    // Auto-advance to next question after 1 second
+    setTimeout(() => {
+      if (currentQuestion < questions.length - 1) {
+        setCurrentQuestion(prev => prev + 1);
+        setTimeLeft(30);
+        setHasAnsweredCurrent(false);
+      } else {
+        // All regular questions completed
+        setGameStatus('advanced');
+      }
+    }, 1000);
   };
 
   const submitAdvancedAnswer = (category: string, answers: any) => {
@@ -832,7 +879,7 @@ const Compatibility: React.FC = () => {
     });
   };
 
-  // FIXED: Enhanced screenshot capture with better error handling
+  // Enhanced screenshot capture with better error handling
   const captureScreenshot = async () => {
     if (!resultsRef.current) {
       alert('Results not available for capture');
@@ -849,13 +896,7 @@ const Compatibility: React.FC = () => {
         scale: 2,
         useCORS: true,
         allowTaint: false,
-        logging: false,
-        onclone: (clonedDoc) => {
-          // Ensure all styles are applied in the clone
-          const clonedElement = clonedDoc.querySelector('[data-html2canvas-container]') || clonedDoc.body;
-          clonedElement.style.width = '100%';
-          clonedElement.style.height = 'auto';
-        }
+        logging: false
       });
 
       // Convert canvas to blob and create download
@@ -885,7 +926,7 @@ const Compatibility: React.FC = () => {
     }
   };
 
-  // FIXED: Enhanced share to clipboard with fallback
+  // Enhanced share to clipboard with fallback
   const shareToClipboard = async () => {
     if (!resultsRef.current) {
       alert('Results not available for sharing');
@@ -1221,7 +1262,10 @@ const Compatibility: React.FC = () => {
                 <span className="font-semibold">Answer Submitted!</span>
               </div>
               <p className="text-white/70 text-sm">
-                Waiting for {players.find(p => p.name !== playerName)?.name} to answer...
+                {currentQuestion < questions.length - 1 
+                  ? 'Moving to next question...' 
+                  : 'Moving to advanced section...'
+                }
               </p>
             </div>
           )}
@@ -1283,7 +1327,7 @@ const Compatibility: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            {advancedQuestions && Object.entries(advancedQuestions).map(([section, data]) => (
+            {Object.entries(advancedQuestions).map(([section, data]) => (
               <button
                 key={section}
                 onClick={() => setCurrentAdvancedSection(section)}
@@ -1405,15 +1449,6 @@ const Compatibility: React.FC = () => {
                 ))}
               </div>
             </div>
-            
-            {/* Debug info */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
-                <div>My Answers: {myAnswers.regularAnswers.filter(Boolean).length}/{questions.length} regular, {Object.keys(myAnswers.advancedAnswers).length}/5 advanced</div>
-                <div>Other Player: {otherPlayerAnswers ? 'Data received' : 'Waiting for data'}</div>
-                <div>Result Submissions: {JSON.stringify(resultSubmissions)}</div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -1424,7 +1459,7 @@ const Compatibility: React.FC = () => {
           <ArrowLeft className="w-5 h-5" />
         </button>
 
-        {currentAdvancedSection && advancedQuestions && (
+        {currentAdvancedSection && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
               <div className="p-4 border-b border-white/20">
@@ -1448,7 +1483,7 @@ const Compatibility: React.FC = () => {
               </div>
               
               <div className="p-4">
-                {renderAdvancedQuestions(currentAdvancedSection, advancedQuestions[currentAdvancedSection])}
+                {renderAdvancedQuestions(currentAdvancedSection, advancedQuestions[currentAdvancedSection as keyof AdvancedQuestions])}
               </div>
             </div>
           </div>
@@ -1525,7 +1560,6 @@ const Compatibility: React.FC = () => {
     );
   };
 
-  // FIXED: Enhanced waiting for players with proper synchronization
   const renderWaitingForPlayers = () => {
     const waitingPlayers = getWaitingStatus();
     const hasOtherPlayerData = !!otherPlayerAnswers;
@@ -1605,24 +1639,6 @@ const Compatibility: React.FC = () => {
                 <CheckCircle className="w-5 h-5" />
                 <span className="font-semibold">Both players ready! Showing results...</span>
               </div>
-            </div>
-          )}
-
-          {/* Debug info */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
-              <div>Both Submitted: {bothSubmitted ? 'Yes' : 'No'}</div>
-              <div>Other Player Data: {otherPlayerAnswers ? 'Available' : 'Not available'}</div>
-              <div>Can Show Results: {canShowResults ? 'Yes' : 'No'}</div>
-              <div>All Ready For Results: {allReadyForResults ? 'Yes' : 'No'}</div>
-              <div>Result Submissions: {JSON.stringify(resultSubmissions)}</div>
-              <div>Local Submission Status: {JSON.stringify(localSubmissionStatus)}</div>
-              <button 
-                onClick={showResults}
-                className="mt-2 px-3 py-1 bg-blue-500/50 rounded text-white text-xs"
-              >
-                Force Show Results
-              </button>
             </div>
           )}
 
