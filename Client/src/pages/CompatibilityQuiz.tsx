@@ -146,6 +146,9 @@ const Compatibility: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
+  // Track result submissions
+  const [resultSubmissions, setResultSubmissions] = useState<{[key: string]: boolean}>({});
+
   // FIXED: Enhanced result calculation with better synchronization
   const calculateResultsIndependently = useCallback((): CompatibilityResults => {
     console.log('🎯 Calculating results independently based on local data');
@@ -165,6 +168,7 @@ const Compatibility: React.FC = () => {
       const otherAnswer = otherPlayerAnswers.regularAnswers[index];
       if (myAnswer !== undefined && otherAnswer !== undefined) {
         const diff = Math.abs(myAnswer - otherAnswer);
+        // More generous scoring: 0-100 based on difference, but with minimum of 40
         const questionScore = Math.max(40, 100 - (diff * 15));
         totalScore += questionScore;
         maxScore += 100;
@@ -251,6 +255,7 @@ const Compatibility: React.FC = () => {
 
   // Generate score breakdown
   const generateBreakdown = (finalScore: number, baseScore: number, advancedScore: number) => {
+    // Ensure scores are reasonably high and balanced
     return {
       values: Math.min(95, baseScore + Math.floor(Math.random() * 15)),
       personality: Math.min(95, advancedScore + Math.floor(Math.random() * 20)),
@@ -282,10 +287,11 @@ const Compatibility: React.FC = () => {
       insights.push("🌅 Every connection has its own special magic");
     }
 
+    // Add some positive insights regardless of score
     insights.push("❤️ Remember that compatibility scores are just one perspective");
     insights.push("🌈 Your unique connection goes beyond any test score");
 
-    return insights.slice(0, 4);
+    return insights.slice(0, 4); // Return top 4 insights
   };
 
   // Get match level with positive framing
@@ -320,12 +326,12 @@ const Compatibility: React.FC = () => {
     recommendations.push("Always communicate with kindness and respect");
     recommendations.push("Celebrate the unique qualities you each bring to the connection");
 
-    return recommendations.slice(0, 4);
+    return recommendations.slice(0, 4); // Return top 4 recommendations
   };
 
   // Generate mock results when other player data isn't available
   const generateMockResults = (): CompatibilityResults => {
-    const mockScore = Math.floor(Math.random() * 20) + 70;
+    const mockScore = Math.floor(Math.random() * 20) + 70; // 70-90 range
     
     return {
       score: mockScore,
@@ -349,6 +355,75 @@ const Compatibility: React.FC = () => {
     setResults(calculatedResults);
     setGameStatus('results');
   }, [calculateResultsIndependently]);
+
+  // FIXED: Effect to handle when both players are ready for results
+  useEffect(() => {
+    if (players.length === 2 && gameStatus === 'waiting-for-players') {
+      const allReadyForResults = players.every(player => resultSubmissions[player.name]);
+      
+      if (allReadyForResults) {
+        console.log('🎉 Both players ready for results - showing results');
+        // Small delay to ensure all data is synchronized
+        setTimeout(() => {
+          showResults();
+        }, 1000);
+      }
+    }
+  }, [resultSubmissions, players, gameStatus, showResults]);
+
+  // NEW: Effect to handle when we have both players' data
+  useEffect(() => {
+    if (gameStatus === 'waiting-for-players' && otherPlayerAnswers) {
+      const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
+      
+      if (bothSubmitted && !resultSubmissions[playerName]) {
+        console.log('📊 Both players submitted, we have all data - auto-requesting results');
+        requestResults();
+      }
+    }
+  }, [gameStatus, otherPlayerAnswers, localSubmissionStatus, players, playerName, resultSubmissions]);
+
+  // NEW: Separate function for requesting results
+  const requestResults = () => {
+    console.log('🎯 Requesting results calculation');
+    
+    // Update local result submission status
+    setResultSubmissions(prev => ({
+      ...prev,
+      [playerName]: true
+    }));
+
+    // Emit result request
+    socket?.emit('compatibility-submit-result', { 
+      roomId,
+      playerName 
+    });
+
+    console.log('✅ Result request emitted');
+  };
+
+  // FIXED: Enhanced final submission with proper event flow
+  const submitFinal = () => {
+    console.log('🚀 Submitting final answers with local data:', myAnswers);
+    setIsSubmittingFinal(true);
+    
+    // Update local submission status immediately
+    setLocalSubmissionStatus(prev => ({
+      ...prev,
+      [playerName]: true
+    }));
+
+    // Share my answers with other player FIRST
+    socket?.emit('compatibility-share-answers', {
+      roomId,
+      answers: myAnswers
+    });
+
+    // Then submit final answers - this will trigger the waiting screen
+    socket?.emit('compatibility-submit-final', { roomId });
+
+    console.log('✅ Final submission events emitted');
+  };
 
   // Initialize socket connection
   useEffect(() => {
@@ -377,10 +452,13 @@ const Compatibility: React.FC = () => {
       
       // Initialize local submission status
       const initialSubmissionStatus: {[key: string]: boolean} = {};
+      const initialResultSubmissions: {[key: string]: boolean} = {};
       room.players.forEach((player: Player) => {
         initialSubmissionStatus[player.name] = false;
+        initialResultSubmissions[player.name] = false;
       });
       setLocalSubmissionStatus(initialSubmissionStatus);
+      setResultSubmissions(initialResultSubmissions);
       
       // Initialize my answers
       setMyAnswers({
@@ -402,10 +480,13 @@ const Compatibility: React.FC = () => {
       
       // Initialize local submission status
       const initialSubmissionStatus: {[key: string]: boolean} = {};
+      const initialResultSubmissions: {[key: string]: boolean} = {};
       room.players.forEach((player: Player) => {
         initialSubmissionStatus[player.name] = false;
+        initialResultSubmissions[player.name] = false;
       });
       setLocalSubmissionStatus(initialSubmissionStatus);
+      setResultSubmissions(initialResultSubmissions);
       
       // Initialize my answers
       setMyAnswers({
@@ -431,6 +512,17 @@ const Compatibility: React.FC = () => {
         });
         return updated;
       });
+
+      // Update result submissions for new players
+      setResultSubmissions(prev => {
+        const updated = {...prev};
+        updatedPlayers.forEach(player => {
+          if (!(player.name in updated)) {
+            updated[player.name] = false;
+          }
+        });
+        return updated;
+      });
     };
 
     // Game events
@@ -442,6 +534,15 @@ const Compatibility: React.FC = () => {
       
       // Reset submission tracking when game starts
       setLocalSubmissionStatus(prev => {
+        const reset: {[key: string]: boolean} = {};
+        Object.keys(prev).forEach(key => {
+          reset[key] = false;
+        });
+        return reset;
+      });
+
+      // Reset result submissions
+      setResultSubmissions(prev => {
         const reset: {[key: string]: boolean} = {};
         Object.keys(prev).forEach(key => {
           reset[key] = false;
@@ -481,7 +582,6 @@ const Compatibility: React.FC = () => {
       }));
     };
 
-    // FIXED: Handle waiting for players - always update waiting list
     const handleWaitingForPlayers = (data: any) => {
       console.log('🔄 Waiting for players:', data.waitingFor);
       setWaitingForPlayers(data.waitingFor || []);
@@ -489,7 +589,7 @@ const Compatibility: React.FC = () => {
       setIsSubmittingFinal(false);
     };
 
-    // Handle other player's answers
+    // FIXED: Handle other player's answers with enhanced logic
     const handleOtherPlayerAnswers = (data: any) => {
       console.log('📨 Received other player answers:', data);
       setOtherPlayerAnswers(data.answers);
@@ -505,23 +605,19 @@ const Compatibility: React.FC = () => {
       }));
     };
 
-    // FIXED: Handle when server sends results - show results to both players
-    const handleShowResults = (data: any) => {
-      console.log('📊 Server is showing results to both players');
+    // NEW: Handle result submission updates
+    const handleResultSubmissionUpdate = (data: any) => {
+      console.log(`📊 Result submission update: ${data.playerName} - ${data.submitted}`);
       
-      // Use server-calculated results if available, otherwise calculate locally
-      if (data.serverCalculated) {
-        setResults(data.serverCalculated);
-      } else {
-        const calculatedResults = calculateResultsIndependently();
-        setResults(calculatedResults);
-      }
-      setGameStatus('results');
+      setResultSubmissions(prev => ({
+        ...prev,
+        [data.playerName]: data.submitted
+      }));
     };
 
-    // NEW: Handle when both players are ready for results
+    // NEW: Handle when server confirms both are ready for results
     const handleBothReadyForResults = () => {
-      console.log('🎯 Both players ready for results - showing results');
+      console.log('🎯 Server confirms both players ready for results');
       showResults();
     };
 
@@ -547,7 +643,7 @@ const Compatibility: React.FC = () => {
     socket.on('compatibility-waiting-for-players', handleWaitingForPlayers);
     socket.on('compatibility-other-player-answers', handleOtherPlayerAnswers);
     socket.on('compatibility-submission-update', handleSubmissionUpdate);
-    socket.on('compatibility-show-results', handleShowResults);
+    socket.on('compatibility-result-submitted', handleResultSubmissionUpdate);
     socket.on('compatibility-both-ready-for-results', handleBothReadyForResults);
     socket.on('join-error', handleJoinError);
     socket.on('start-error', handleStartError);
@@ -565,12 +661,12 @@ const Compatibility: React.FC = () => {
       socket.off('compatibility-waiting-for-players', handleWaitingForPlayers);
       socket.off('compatibility-other-player-answers', handleOtherPlayerAnswers);
       socket.off('compatibility-submission-update', handleSubmissionUpdate);
-      socket.off('compatibility-show-results', handleShowResults);
+      socket.off('compatibility-result-submitted', handleResultSubmissionUpdate);
       socket.off('compatibility-both-ready-for-results', handleBothReadyForResults);
       socket.off('join-error', handleJoinError);
       socket.off('start-error', handleStartError);
     };
-  }, [socket, questions.length, calculateResultsIndependently, showResults]);
+  }, [socket, questions.length, showResults]);
 
   // Timer effect
   useEffect(() => {
@@ -587,17 +683,6 @@ const Compatibility: React.FC = () => {
   useEffect(() => {
     containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [gameStatus, currentQuestion, currentAdvancedSection]);
-
-  // FIXED: Effect to auto-advance when both players have submitted
-  useEffect(() => {
-    if (gameStatus === 'advanced') {
-      const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
-      if (bothSubmitted) {
-        console.log('🔄 Both players submitted - auto-advancing to waiting screen');
-        setGameStatus('waiting-for-players');
-      }
-    }
-  }, [gameStatus, players, localSubmissionStatus]);
 
   // Enhanced reset function
   const resetGame = () => {
@@ -621,6 +706,7 @@ const Compatibility: React.FC = () => {
     setMyAnswers({ regularAnswers: [], advancedAnswers: {} });
     setOtherPlayerAnswers(null);
     setLocalSubmissionStatus({});
+    setResultSubmissions({});
   };
 
   // Room management
@@ -720,29 +806,6 @@ const Compatibility: React.FC = () => {
     });
   };
 
-  // FIXED: Enhanced final submission - ensures both players get results
-  const submitFinal = () => {
-    console.log('🚀 Submitting final answers with local data:', myAnswers);
-    setIsSubmittingFinal(true);
-    
-    // Update local submission status immediately
-    setLocalSubmissionStatus(prev => ({
-      ...prev,
-      [playerName]: true
-    }));
-
-    // Share my answers with other player
-    socket?.emit('compatibility-share-answers', {
-      roomId,
-      answers: myAnswers
-    });
-
-    // Submit final answers - this will trigger the waiting screen
-    socket?.emit('compatibility-submit-final', { roomId });
-
-    console.log('✅ Final submission events emitted');
-  };
-
   // FIXED: Enhanced screenshot capture with better error handling
   const captureScreenshot = async () => {
     if (!resultsRef.current) {
@@ -752,6 +815,7 @@ const Compatibility: React.FC = () => {
     
     setIsSharing(true);
     try {
+      // Add a small delay to ensure the component is fully rendered
       await new Promise(resolve => setTimeout(resolve, 500));
 
       const canvas = await html2canvas(resultsRef.current, {
@@ -760,10 +824,18 @@ const Compatibility: React.FC = () => {
         useCORS: true,
         allowTaint: false,
         logging: false,
+        onclone: (clonedDoc) => {
+          // Ensure all styles are applied in the clone
+          const clonedElement = clonedDoc.querySelector('[data-html2canvas-container]') || clonedDoc.body;
+          clonedElement.style.width = '100%';
+          clonedElement.style.height = 'auto';
+        }
       });
 
+      // Convert canvas to blob and create download
       canvas.toBlob((blob) => {
         if (blob) {
+          // Create download link
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.download = `compatibility-${roomId}-${results?.score}percent.png`;
@@ -773,6 +845,7 @@ const Compatibility: React.FC = () => {
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
           
+          // Show success message
           setCopied(true);
           setTimeout(() => setCopied(false), 3000);
         }
@@ -795,19 +868,22 @@ const Compatibility: React.FC = () => {
     
     setIsSharing(true);
     try {
+      // Add a small delay to ensure the component is fully rendered
       await new Promise(resolve => setTimeout(resolve, 500));
 
       const canvas = await html2canvas(resultsRef.current, {
         backgroundColor: '#7c3aed',
-        scale: 1,
+        scale: 1, // Lower scale for clipboard to improve performance
         useCORS: true,
         allowTaint: false,
         logging: false
       });
 
+      // Convert canvas to blob for clipboard
       canvas.toBlob(async (blob) => {
         if (blob) {
           try {
+            // Check if clipboard API is available and has write permission
             if (navigator.clipboard && navigator.clipboard.write) {
               try {
                 await navigator.clipboard.write([
@@ -823,6 +899,8 @@ const Compatibility: React.FC = () => {
               }
             }
             
+            // Fallback: Download the image
+            console.log('Clipboard API not available, falling back to download');
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.download = `compatibility-${roomId}-${results?.score}percent.png`;
@@ -1133,6 +1211,7 @@ const Compatibility: React.FC = () => {
                     </div>
                     <span className="text-white font-medium">{player.name}</span>
                   </div>
+                  <div className="w-20 bg-white/20 rounded-full h-2">
                     <div 
                       className="bg-green-400 h-2 rounded-full transition-all duration-500"
                       style={{ width: `${playerProgress[player.name] || 0}%` }}
@@ -1154,186 +1233,203 @@ const Compatibility: React.FC = () => {
     </div>
   );
 
-  const renderAdvancedSection = () => {
-    const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
+  const renderAdvancedSection = () => (
+    <div className="min-h-screen bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-4">
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-6 mb-6 border border-white/20">
+          <div className="text-center mb-6">
+            <Sparkles className="w-12 h-12 text-white mx-auto mb-3" />
+            <h1 className="text-2xl font-bold text-white mb-2">Advanced Compatibility</h1>
+            <p className="text-white/80">Dive deeper into your personality and preferences</p>
+          </div>
 
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-6 mb-6 border border-white/20">
-            <div className="text-center mb-6">
-              <Sparkles className="w-12 h-12 text-white mx-auto mb-3" />
-              <h1 className="text-2xl font-bold text-white mb-2">Advanced Compatibility</h1>
-              <p className="text-white/80">Dive deeper into your personality and preferences</p>
+          <div className="max-w-2xl mx-auto mb-6">
+            <div className="flex justify-between text-white font-semibold mb-2 text-sm">
+              <span>Advanced Section Progress</span>
+              <span>{advancedProgress}%</span>
             </div>
-
-            <div className="max-w-2xl mx-auto mb-6">
-              <div className="flex justify-between text-white font-semibold mb-2 text-sm">
-                <span>Advanced Section Progress</span>
-                <span>{advancedProgress}%</span>
-              </div>
-              <div className="w-full bg-white/20 rounded-full h-3">
-                <div 
-                  className="bg-gradient-to-r from-teal-400 to-cyan-400 h-3 rounded-full transition-all duration-500"
-                  style={{ width: `${advancedProgress}%` }}
-                />
-              </div>
+            <div className="w-full bg-white/20 rounded-full h-3">
+              <div 
+                className="bg-gradient-to-r from-teal-400 to-cyan-400 h-3 rounded-full transition-all duration-500"
+                style={{ width: `${advancedProgress}%` }}
+              />
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-              {advancedQuestions && Object.entries(advancedQuestions).map(([section, data]) => (
-                <button
-                  key={section}
-                  onClick={() => setCurrentAdvancedSection(section)}
-                  className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${
-                    currentAdvancedSection === section
-                      ? 'border-white bg-white/20'
-                      : 'border-white/20 bg-white/10 hover:border-white/40'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      currentAdvancedSection === section 
-                        ? 'bg-white text-cyan-600' 
-                        : 'bg-white/10 text-white'
-                    }`}>
-                      {getSectionIcon(section)}
-                    </div>
-                    <h3 className="text-base font-bold text-white capitalize flex-1">
-                      {section.replace(/([A-Z])/g, ' $1').trim()}
-                    </h3>
-                  </div>
-                  <p className={`text-xs ${
-                    currentAdvancedSection === section ? 'text-white/90' : 'text-white/70'
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            {advancedQuestions && Object.entries(advancedQuestions).map(([section, data]) => (
+              <button
+                key={section}
+                onClick={() => setCurrentAdvancedSection(section)}
+                className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${
+                  currentAdvancedSection === section
+                    ? 'border-white bg-white/20'
+                    : 'border-white/20 bg-white/10 hover:border-white/40'
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    currentAdvancedSection === section 
+                      ? 'bg-white text-cyan-600' 
+                      : 'bg-white/10 text-white'
                   }`}>
-                    {myAnswers.advancedAnswers[section] ? '✓ Completed' : 'Click to answer'}
-                  </p>
-                </button>
+                    {getSectionIcon(section)}
+                  </div>
+                  <h3 className="text-base font-bold text-white capitalize flex-1">
+                    {section.replace(/([A-Z])/g, ' $1').trim()}
+                  </h3>
+                </div>
+                <p className={`text-xs ${
+                  currentAdvancedSection === section ? 'text-white/90' : 'text-white/70'
+                }`}>
+                  {myAnswers.advancedAnswers[section] ? '✓ Completed' : 'Click to answer'}
+                </p>
+              </button>
+            ))}
+          </div>
+
+          <div className="text-center">
+            <button
+              onClick={submitFinal}
+              disabled={isSubmittingFinal || localSubmissionStatus[playerName]}
+              className={`py-3 px-8 rounded-xl font-bold text-lg transition-all duration-200 flex items-center gap-2 mx-auto ${
+                isSubmittingFinal || localSubmissionStatus[playerName]
+                  ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
+              }`}
+            >
+              {isSubmittingFinal ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Submitting...
+                </>
+              ) : localSubmissionStatus[playerName] ? (
+                <>
+                  <CheckCircle className="w-5 h-5 text-green-400" />
+                  Submitted - Waiting for Partner
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-5 h-5" />
+                  Complete Compatibility Test
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Enhanced submission status display */}
+          <div className="mt-6 p-4 bg-white/5 border border-white/20 rounded-xl">
+            <h3 className="text-base font-semibold text-white mb-3 text-center">Submission Status</h3>
+            <div className="space-y-2">
+              {players.map(player => (
+                <div key={player.name} className="flex items-center justify-between p-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-semibold text-sm">
+                      {player.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-white font-medium">{player.name}</span>
+                  </div>
+                  <div className={`flex items-center gap-2 ${
+                    localSubmissionStatus[player.name] ? 'text-green-400' : 'text-amber-400'
+                  }`}>
+                    {localSubmissionStatus[player.name] ? (
+                      <>
+                        <CheckCircle className="w-5 h-5" />
+                        <span className="text-sm font-semibold">Submitted</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-5 h-5 animate-pulse" />
+                        <span className="text-sm font-semibold">Waiting...</span>
+                      </>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
 
-            <div className="text-center">
-              <button
-                onClick={submitFinal}
-                disabled={isSubmittingFinal || localSubmissionStatus[playerName]}
-                className={`py-3 px-8 rounded-xl font-bold text-lg transition-all duration-200 flex items-center gap-2 mx-auto ${
-                  isSubmittingFinal || localSubmissionStatus[playerName]
-                    ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
-                }`}
-              >
-                {isSubmittingFinal ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Submitting...
-                  </>
-                ) : localSubmissionStatus[playerName] ? (
-                  <>
-                    <CheckCircle className="w-5 h-5 text-green-400" />
-                    {bothSubmitted ? 'Both Submitted - Calculating...' : 'Submitted - Waiting for Partner'}
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-5 h-5" />
-                    Complete Compatibility Test
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Enhanced submission status display */}
-            <div className="mt-6 p-4 bg-white/5 border border-white/20 rounded-xl">
-              <h3 className="text-base font-semibold text-white mb-3 text-center">Submission Status</h3>
+            {/* Result submission status */}
+            <div className="mt-4 pt-4 border-t border-white/20">
+              <h4 className="text-sm font-semibold text-white mb-2 text-center">Results Ready Status</h4>
               <div className="space-y-2">
                 {players.map(player => (
                   <div key={player.name} className="flex items-center justify-between p-2">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-semibold text-sm">
+                      <div className="w-6 h-6 bg-gradient-to-r from-blue-400 to-purple-400 rounded-lg flex items-center justify-center text-white font-semibold text-xs">
                         {player.name.charAt(0).toUpperCase()}
                       </div>
-                      <span className="text-white font-medium">{player.name}</span>
+                      <span className="text-white text-sm">{player.name}</span>
                     </div>
                     <div className={`flex items-center gap-2 ${
-                      localSubmissionStatus[player.name] ? 'text-green-400' : 'text-amber-400'
+                      resultSubmissions[player.name] ? 'text-blue-400' : 'text-amber-400'
                     }`}>
-                      {localSubmissionStatus[player.name] ? (
+                      {resultSubmissions[player.name] ? (
                         <>
-                          <CheckCircle className="w-5 h-5" />
-                          <span className="text-sm font-semibold">Submitted</span>
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-xs font-semibold">Ready</span>
                         </>
                       ) : (
                         <>
-                          <Clock className="w-5 h-5 animate-pulse" />
-                          <span className="text-sm font-semibold">Waiting...</span>
+                          <Clock className="w-4 h-4 animate-pulse" />
+                          <span className="text-xs font-semibold">Waiting...</span>
                         </>
                       )}
                     </div>
                   </div>
                 ))}
               </div>
-
-              {/* Auto-advance notice */}
-              {bothSubmitted && (
-                <div className="mt-4 p-3 bg-blue-500/20 border border-blue-500/30 rounded-xl">
-                  <div className="flex items-center gap-2 justify-center text-blue-400">
-                    <Sparkles className="w-4 h-4" />
-                    <span className="text-sm font-semibold">Both players submitted! Calculating results...</span>
-                  </div>
-                </div>
-              )}
-              
-              {/* Debug info */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
-                  <div>My Answers: {myAnswers.regularAnswers.filter(Boolean).length}/{questions.length} regular, {Object.keys(myAnswers.advancedAnswers).length}/5 advanced</div>
-                  <div>Other Player: {otherPlayerAnswers ? 'Data received' : 'Waiting for data'}</div>
-                  <div>Both Submitted: {bothSubmitted ? 'Yes' : 'No'}</div>
-                  <div>Game Status: {gameStatus}</div>
-                </div>
-              )}
             </div>
+            
+            {/* Debug info */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
+                <div>My Answers: {myAnswers.regularAnswers.filter(Boolean).length}/{questions.length} regular, {Object.keys(myAnswers.advancedAnswers).length}/5 advanced</div>
+                <div>Other Player: {otherPlayerAnswers ? 'Data received' : 'Waiting for data'}</div>
+                <div>Result Submissions: {JSON.stringify(resultSubmissions)}</div>
+              </div>
+            )}
           </div>
+        </div>
 
-          <button 
-            onClick={leaveRoom}
-            className="fixed bottom-6 left-6 p-3 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+        <button 
+          onClick={leaveRoom}
+          className="fixed bottom-6 left-6 p-3 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
 
-          {currentAdvancedSection && advancedQuestions && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
-                <div className="p-4 border-b border-white/20">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setCurrentAdvancedSection('')}
-                      className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
-                    >
-                      <ArrowLeft className="w-4 h-4 text-white" />
-                    </button>
-                    <h2 className="text-lg font-bold text-white capitalize">
-                      {currentAdvancedSection.replace(/([A-Z])/g, ' $1').trim()}
-                    </h2>
-                    <button
-                      onClick={() => setCurrentAdvancedSection('')}
-                      className="ml-auto p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
-                    >
-                      <X className="w-4 h-4 text-white" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="p-4">
-                  {renderAdvancedQuestions(currentAdvancedSection, advancedQuestions[currentAdvancedSection])}
+        {currentAdvancedSection && advancedQuestions && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+              <div className="p-4 border-b border-white/20">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setCurrentAdvancedSection('')}
+                    className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-white" />
+                  </button>
+                  <h2 className="text-lg font-bold text-white capitalize">
+                    {currentAdvancedSection.replace(/([A-Z])/g, ' $1').trim()}
+                  </h2>
+                  <button
+                    onClick={() => setCurrentAdvancedSection('')}
+                    className="ml-auto p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
                 </div>
               </div>
+              
+              <div className="p-4">
+                {renderAdvancedQuestions(currentAdvancedSection, advancedQuestions[currentAdvancedSection])}
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-    );
-  };
+    </div>
+  );
 
   const renderAdvancedQuestions = (section: string, questions: any) => {
     if (section === 'personalityTraits') {
@@ -1408,6 +1504,8 @@ const Compatibility: React.FC = () => {
     const waitingPlayers = getWaitingStatus();
     const hasOtherPlayerData = !!otherPlayerAnswers;
     const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
+    const canShowResults = bothSubmitted && hasOtherPlayerData && !resultSubmissions[playerName];
+    const allReadyForResults = players.every(player => resultSubmissions[player.name]);
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center p-4">
@@ -1430,6 +1528,9 @@ const Compatibility: React.FC = () => {
                   ) : (
                     <Clock className="w-5 h-5 text-amber-400 animate-pulse" />
                   )}
+                  {resultSubmissions[player.name] && (
+                    <Star className="w-4 h-4 text-blue-400" />
+                  )}
                 </div>
               </div>
             ))}
@@ -1448,11 +1549,35 @@ const Compatibility: React.FC = () => {
             </p>
           )}
 
-          {bothSubmitted && hasOtherPlayerData && (
+          {canShowResults && (
+            <div className="mb-6">
+              <p className="text-white/80 mb-4">Ready to see your compatibility results?</p>
+              <button
+                onClick={requestResults}
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3 rounded-xl font-bold hover:from-green-600 hover:to-emerald-600 transition-all duration-200"
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <Sparkles className="w-5 h-5" />
+                  Show Results
+                </div>
+              </button>
+            </div>
+          )}
+
+          {resultSubmissions[playerName] && !allReadyForResults && (
+            <div className="p-4 bg-blue-500/20 border border-blue-500/30 rounded-xl mb-4">
+              <div className="flex items-center gap-2 justify-center text-blue-400">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-semibold">Results requested! Waiting for partner...</span>
+              </div>
+            </div>
+          )}
+
+          {allReadyForResults && (
             <div className="p-4 bg-green-500/20 border border-green-500/30 rounded-xl mb-4">
               <div className="flex items-center gap-2 justify-center text-green-400">
                 <CheckCircle className="w-5 h-5" />
-                <span className="font-semibold">Both players submitted! Calculating results...</span>
+                <span className="font-semibold">Both players ready! Showing results...</span>
               </div>
             </div>
           )}
@@ -1462,7 +1587,10 @@ const Compatibility: React.FC = () => {
             <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
               <div>Both Submitted: {bothSubmitted ? 'Yes' : 'No'}</div>
               <div>Other Player Data: {otherPlayerAnswers ? 'Available' : 'Not available'}</div>
-              <div>Waiting For: {waitingPlayers.join(', ')}</div>
+              <div>Can Show Results: {canShowResults ? 'Yes' : 'No'}</div>
+              <div>All Ready For Results: {allReadyForResults ? 'Yes' : 'No'}</div>
+              <div>Result Submissions: {JSON.stringify(resultSubmissions)}</div>
+              <div>Local Submission Status: {JSON.stringify(localSubmissionStatus)}</div>
               <button 
                 onClick={showResults}
                 className="mt-2 px-3 py-1 bg-blue-500/50 rounded text-white text-xs"
