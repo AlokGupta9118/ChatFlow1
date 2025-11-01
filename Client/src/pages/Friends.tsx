@@ -123,41 +123,60 @@ const fetchUserProfile = async (userId: string) => {
       axiosConfig
     );
     
+    console.log('Profile API Response:', res.data); // Debug log
+    
     const userData = res.data.user;
     
-    // Convert relative URLs to absolute URLs on frontend
-    const convertToAbsoluteUrl = (url: string) => {
-      if (!url) return url;
+    // Enhanced URL conversion with better error handling
+    const convertToAbsoluteUrl = (url: string | undefined) => {
+      if (!url) return '/default-avatar.png';
       if (url.startsWith('http')) return url;
-      return `${import.meta.env.VITE_API_URL}${url}`;
+      // Remove double slashes if any
+      const baseUrl = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+      const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+      return `${baseUrl}${cleanUrl}`;
     };
 
     const processedUser = {
       ...userData,
       profilePicture: convertToAbsoluteUrl(userData.profilePicture),
-      friends: userData.friends?.map((friend: any) => ({
+      friends: (userData.friends || []).map((friend: any) => ({
         ...friend,
         profilePicture: convertToAbsoluteUrl(friend.profilePicture)
-      })) || []
+      }))
     };
 
+    console.log('Processed User:', processedUser); // Debug log
     setSelectedUser(processedUser);
-  } catch (err) {
+  } catch (err: any) {
     console.error("❌ Error fetching user profile:", err);
-    // Fallback to basic user data if profile endpoint fails
-    const user = [...users, ...friendsData.friends, ...friendsData.incomingRequests, ...friendsData.outgoingRequests]
-      .find(u => u._id === userId);
+    console.error("Error details:", err.response?.data); // Debug log
+    
+    // Enhanced fallback with better error handling
+    const allUsers = [...users, ...friendsData.friends, ...friendsData.incomingRequests, ...friendsData.outgoingRequests];
+    const user = allUsers.find(u => u._id === userId);
+    
     if (user) {
-      setSelectedUser({
-        ...user,
-        email: user.email || "",
-        status: user.status || "offline",
+      const fallbackUser: IProfile = {
+        _id: user._id,
+        name: user.name,
+        email: user.email || "email@example.com",
+        profilePicture: user.profilePicture || '/default-avatar.png',
+        bio: user.bio || '',
+        phone: user.phone || '',
+        location: user.location || '',
+        birthday: user.birthday || '',
+        status: user.status || 'offline',
         lastSeen: user.lastSeen || new Date().toISOString(),
         friends: user.friends || [],
         stories: user.stories || [],
         isOnline: user.isOnline || false,
         joinedAt: user.joinedAt || new Date().toISOString()
-      } as IProfile);
+      };
+      setSelectedUser(fallbackUser);
+    } else {
+      // Show error message to user
+      alert('Failed to load user profile. Please try again.');
     }
   } finally {
     setProfileLoading(false);
@@ -400,6 +419,14 @@ const fetchUserProfile = async (userId: string) => {
                   />
                 </div>
               </div>
+            
+{selectedUser && (
+  <div className="bg-red-500/20 p-4 rounded-lg mt-4">
+    <p className="text-red-300 text-sm">Debug Info:</p>
+    <p className="text-red-300 text-xs">Profile Picture: {selectedUser.profilePicture}</p>
+    <p className="text-red-300 text-xs">Has Profile Picture: {!!selectedUser.profilePicture ? 'Yes' : 'No'}</p>
+  </div>
+)}
 
               {/* Content */}
               <div className="pt-16 p-8">

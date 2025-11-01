@@ -68,14 +68,14 @@ router.get('/profile/:userId', protect, async (req, res) => {
     const user = await User.findById(req.params.userId)
       .select('-password -refreshTokens -__v')
       .populate('friends', 'name profilePicture status')
-      .populate('stories', 'mediaUrl createdAt');
+      .lean(); // Use lean() for better performance
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
     // Check if the requesting user is blocked by the target user
-    if (user.blockedUsers.includes(req.user._id)) {
+    if (user.blockedUsers && user.blockedUsers.includes(req.user._id)) {
       return res.status(403).json({ message: 'You are blocked from viewing this profile' });
     }
 
@@ -86,8 +86,8 @@ router.get('/profile/:userId', protect, async (req, res) => {
     }
 
     // Also convert friends' profile pictures
-    const friendsWithAbsoluteUrls = user.friends.map(friend => ({
-      ...friend.toObject ? friend.toObject() : friend,
+    const friendsWithAbsoluteUrls = (user.friends || []).map(friend => ({
+      ...friend,
       profilePicture: friend.profilePicture && !friend.profilePicture.startsWith('http') 
         ? `${req.protocol}://${req.get('host')}${friend.profilePicture}`
         : friend.profilePicture
@@ -100,20 +100,21 @@ router.get('/profile/:userId', protect, async (req, res) => {
         name: user.name,
         email: user.email,
         profilePicture: profilePicture,
-        bio: user.bio,
-        phone: user.phone,
-        location: user.location,
-        birthday: user.birthday,
-        status: user.status,
-        lastSeen: user.lastSeen,
+        bio: user.bio || '',
+        phone: user.phone || '',
+        location: user.location || '',
+        birthday: user.birthday || '',
+        status: user.status || 'offline',
+        lastSeen: user.lastSeen || user.updatedAt,
         friends: friendsWithAbsoluteUrls,
+        stories: [], // Empty array since stories field doesn't exist in model
         isOnline: user.status === 'online',
         joinedAt: user.createdAt
       }
     });
   } catch (error) {
     console.error('Profile fetch error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 

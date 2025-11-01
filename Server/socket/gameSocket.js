@@ -1164,61 +1164,7 @@ export default function gameSocket(io) {
       console.log(`📊 ${player.name} advanced progress: ${room.playerProgress[player.name]}%`);
     });
 
-// ✅ FIXED: Submit final answers - ensures both players get results
-socket.on("compatibility-submit-final", ({ roomId }) => {
-  const room = rooms[roomId];
-  if (!room || room.gameType !== "compatibility") return;
 
-  const player = room.players.find(p => p.socketId === socket.id);
-  if (!player) return;
-
-  console.log(`✅ ${player.name} submitted final answers in ${roomId}`);
-  
-  // Mark this player as submitted
-  room.submissionStatus[player.name] = true;
-
-  // Notify all players about this submission
-  io.to(roomId).emit("compatibility-submission-update", {
-    player: player.name,
-    submitted: true
-  });
-
-  console.log(`📋 ${player.name} marked as completed`);
-
-  // Check if all players have submitted final answers
-  const allSubmitted = room.players.every(player => room.submissionStatus[player.name]);
-  
-  if (allSubmitted) {
-    console.log(`🎉 ALL players submitted final answers in ${roomId}`);
-    
-    // Calculate results
-    const results = calculateCompatibilityResults(room);
-    
-    // Show results to BOTH players immediately
-    io.to(roomId).emit("compatibility-show-results", {
-      serverCalculated: results
-    });
-    
-    console.log(`📊 Results sent to both players in ${roomId}`);
-    
-    // Reset for potential replay
-    room.players.forEach(player => {
-      room.submissionStatus[player.name] = false;
-    });
-  } else {
-    // Show waiting screen for remaining players
-    const waitingFor = room.players
-      .filter(player => !room.submissionStatus[player.name])
-      .map(player => player.name);
-    
-    io.to(roomId).emit("compatibility-waiting-for-players", {
-      waitingFor: waitingFor,
-      message: `Waiting for ${waitingFor.join(', ')} to submit...`
-    });
-    
-    console.log(`⏳ Still waiting for: ${waitingFor.join(', ')}`);
-  }
-});
 
 // ✅ FIXED: Share answers with other player
 socket.on("compatibility-share-answers", ({ roomId, answers }) => {
