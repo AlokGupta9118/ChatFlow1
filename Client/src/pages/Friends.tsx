@@ -115,36 +115,54 @@ const AddFriends: React.FC = () => {
       setLoading(false);
     }
   };
+const fetchUserProfile = async (userId: string) => {
+  setProfileLoading(true);
+  try {
+    const res = await axios.get(
+      `${import.meta.env.VITE_API_URL}/api/profile/${userId}`,
+      axiosConfig
+    );
+    
+    const userData = res.data.user;
+    
+    // Convert relative URLs to absolute URLs on frontend
+    const convertToAbsoluteUrl = (url: string) => {
+      if (!url) return url;
+      if (url.startsWith('http')) return url;
+      return `${import.meta.env.VITE_API_URL}${url}`;
+    };
 
-  const fetchUserProfile = async (userId: string) => {
-    setProfileLoading(true);
-    try {
-      const res = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/profile/${userId}`,
-        axiosConfig
-      );
-      setSelectedUser(res.data.user);
-    } catch (err) {
-      console.error("❌ Error fetching user profile:", err);
-      // Fallback to basic user data if profile endpoint fails
-      const user = [...users, ...friendsData.friends, ...friendsData.incomingRequests, ...friendsData.outgoingRequests]
-        .find(u => u._id === userId);
-      if (user) {
-        setSelectedUser({
-          ...user,
-          email: user.email || "",
-          status: user.status || "offline",
-          lastSeen: user.lastSeen || new Date().toISOString(),
-          friends: user.friends || [],
-          stories: user.stories || [],
-          isOnline: user.isOnline || false,
-          joinedAt: user.joinedAt || new Date().toISOString()
-        } as IProfile);
-      }
-    } finally {
-      setProfileLoading(false);
+    const processedUser = {
+      ...userData,
+      profilePicture: convertToAbsoluteUrl(userData.profilePicture),
+      friends: userData.friends?.map((friend: any) => ({
+        ...friend,
+        profilePicture: convertToAbsoluteUrl(friend.profilePicture)
+      })) || []
+    };
+
+    setSelectedUser(processedUser);
+  } catch (err) {
+    console.error("❌ Error fetching user profile:", err);
+    // Fallback to basic user data if profile endpoint fails
+    const user = [...users, ...friendsData.friends, ...friendsData.incomingRequests, ...friendsData.outgoingRequests]
+      .find(u => u._id === userId);
+    if (user) {
+      setSelectedUser({
+        ...user,
+        email: user.email || "",
+        status: user.status || "offline",
+        lastSeen: user.lastSeen || new Date().toISOString(),
+        friends: user.friends || [],
+        stories: user.stories || [],
+        isOnline: user.isOnline || false,
+        joinedAt: user.joinedAt || new Date().toISOString()
+      } as IProfile);
     }
-  };
+  } finally {
+    setProfileLoading(false);
+  }
+};
 
   useEffect(() => {
     if (!token) {
