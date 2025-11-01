@@ -5,199 +5,17 @@ export default function gameSocket(io) {
   const rooms = {};
   const chatMessages = new Map();
 
-  // ✅ FIXED: Enhanced compatibility game calculation
-  function calculateCompatibilityResults(room) {
-    console.log("🔍 Calculating advanced compatibility results...");
-    
-    const players = room.players.map(p => p.name);
-    
-    if (players.length !== 2) {
-      console.error("❌ Compatibility game requires exactly 2 players");
-      return { 
-        error: "Compatibility game requires exactly 2 players",
-        score: 0
-      };
-    }
+  // ✅ SIMPLIFIED: Remove server-side calculation functions
+  // All calculation will now happen on frontend
 
-    const [player1, player2] = players;
-    const answers1 = room.answers[player1] || {};
-    const answers2 = room.answers[player2] || {};
-
-    // Calculate base compatibility from regular answers
-    let totalScore = 0;
-    let maxScore = 0;
-    
-    const regularAnswers1 = answers1.regularAnswers || [];
-    const regularAnswers2 = answers2.regularAnswers || [];
-    
-    regularAnswers1.forEach((answer1, index) => {
-      const answer2 = regularAnswers2[index];
-      if (answer1 !== undefined && answer2 !== undefined) {
-        const diff = Math.abs(answer1 - answer2);
-        const questionScore = Math.max(40, 100 - (diff * 15));
-        totalScore += questionScore;
-        maxScore += 100;
-      }
-    });
-
-    // Calculate advanced compatibility factors
-    const advanced1 = answers1.advancedAnswers || {};
-    const advanced2 = answers2.advancedAnswers || {};
-    const advancedScore = calculateAdvancedCompatibility(advanced1, advanced2);
-    
-    // Combine scores (60% regular, 40% advanced) with bonus to avoid low scores
-    const baseScore = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 70;
-    const finalScore = Math.min(95, Math.max(65, Math.round((baseScore * 0.6) + (advancedScore * 0.4))));
-
-    // Generate insights based on scores
-    const insights = generateInsights(finalScore);
-    
-    // Compatibility breakdown
-    const breakdown = {
-      values: Math.min(95, baseScore + Math.floor(Math.random() * 15)),
-      personality: Math.min(95, advancedScore + Math.floor(Math.random() * 20)),
-      lifestyle: Math.min(95, Math.round((baseScore + advancedScore) / 2) + Math.floor(Math.random() * 10)),
-      communication: Math.min(95, advancedScore + Math.floor(Math.random() * 15)),
-      interests: Math.min(95, Math.round((baseScore * 0.7 + advancedScore * 0.3)) + Math.floor(Math.random() * 12))
-    };
-
-    const result = {
-      score: finalScore,
-      breakdown,
-      insights,
-      matchLevel: getMatchLevel(finalScore),
-      recommendations: generateRecommendations(finalScore)
-    };
-
-    console.log(`📊 Advanced compatibility calculated: ${finalScore}%`);
-    return result;
-  }
-
-  function calculateAdvancedCompatibility(adv1, adv2) {
-    if (!adv1 || !adv2) return 75;
-
-    let totalScore = 0;
-    let factorCount = 0;
-
-    // Personality traits compatibility
-    if (adv1.personalityTraits && adv2.personalityTraits) {
-      const traits1 = adv1.personalityTraits.traits || [];
-      const traits2 = adv2.personalityTraits.traits || [];
-      const commonTraits = traits1.filter(trait => traits2.includes(trait));
-      const traitScore = (commonTraits.length / Math.max(traits1.length, traits2.length, 1)) * 100;
-      totalScore += Math.max(60, traitScore);
-      factorCount++;
-    }
-
-    // Lifestyle compatibility
-    if (adv1.lifestyle && adv2.lifestyle) {
-      let lifestyleScore = 0;
-      if (adv1.lifestyle.sleepSchedule === adv2.lifestyle.sleepSchedule) lifestyleScore += 25;
-      if (adv1.lifestyle.socialActivity === adv2.lifestyle.socialActivity) lifestyleScore += 25;
-      totalScore += Math.max(50, lifestyleScore);
-      factorCount++;
-    }
-
-    // Communication compatibility
-    if (adv1.communication && adv2.communication) {
-      let communicationScore = 0;
-      if (adv1.communication.style === adv2.communication.style) communicationScore += 50;
-      if (adv1.communication.conflictResolution === adv2.communication.conflictResolution) communicationScore += 50;
-      totalScore += Math.max(60, communicationScore);
-      factorCount++;
-    }
-
-    // Interests compatibility
-    if (adv1.interests && adv2.interests) {
-      const hobbies1 = adv1.interests.hobbies || [];
-      const hobbies2 = adv2.interests.hobbies || [];
-      const commonHobbies = hobbies1.filter(hobby => hobbies2.includes(hobby));
-      const interestScore = (commonHobbies.length / Math.max(hobbies1.length, hobbies2.length, 1)) * 100;
-      totalScore += Math.max(55, interestScore);
-      factorCount++;
-    }
-
-    // Values compatibility
-    if (adv1.values && adv2.values) {
-      let valuesScore = 0;
-      if (adv1.values.family === adv2.values.family) valuesScore += 50;
-      if (adv1.values.career === adv2.values.career) valuesScore += 50;
-      totalScore += Math.max(65, valuesScore);
-      factorCount++;
-    }
-
-    return factorCount > 0 ? Math.round(totalScore / factorCount) : 75;
-  }
-
-  function generateInsights(score) {
-    const insights = [];
-    
-    if (score >= 85) {
-      insights.push("🌟 Exceptional connection! You two vibe incredibly well");
-      insights.push("💫 Strong alignment in core values and communication styles");
-      insights.push("🎯 Great potential for a meaningful relationship");
-    } else if (score >= 75) {
-      insights.push("✅ Solid compatibility with excellent foundation");
-      insights.push("🤝 Good balance of shared interests and individual uniqueness");
-      insights.push("💡 Great communication dynamics between you");
-    } else if (score >= 65) {
-      insights.push("📚 Good starting point with room to grow together");
-      insights.push("✨ Interesting differences that can complement each other");
-      insights.push("🌱 Potential for beautiful growth as you learn more about each other");
-    } else {
-      insights.push("🔄 An opportunity to explore new perspectives together");
-      insights.push("💫 Unique combination that can create beautiful dynamics");
-      insights.push("🌅 Every connection has its own special magic");
-    }
-
-    insights.push("❤️ Remember that compatibility scores are just one perspective");
-    insights.push("🌈 Your unique connection goes beyond any test score");
-
-    return insights.slice(0, 4);
-  }
-
-  function getMatchLevel(score) {
-    if (score >= 90) return "Soulmate Connection ✨";
-    if (score >= 85) return "Exceptional Match 🌟";
-    if (score >= 80) return "Amazing Compatibility 💫";
-    if (score >= 75) return "Great Connection 💕";
-    if (score >= 70) return "Strong Potential 🌈";
-    if (score >= 65) return "Good Match 🌻";
-    return "Interesting Connection 🔮";
-  }
-
-  function generateRecommendations(score) {
-    const recommendations = [];
-    
-    if (score >= 80) {
-      recommendations.push("Continue nurturing your strong connection with quality time together");
-      recommendations.push("Keep communicating openly and celebrating your similarities");
-      recommendations.push("Explore new adventures together to strengthen your bond even more");
-    } else if (score >= 70) {
-      recommendations.push("Schedule regular date nights to deepen your connection");
-      recommendations.push("Practice active listening to understand each other better");
-      recommendations.push("Celebrate your differences as opportunities for growth");
-    } else {
-      recommendations.push("Focus on finding common ground in activities you both enjoy");
-      recommendations.push("Be patient and give your connection time to develop naturally");
-      recommendations.push("Remember that every relationship grows at its own pace");
-    }
-
-    recommendations.push("Always communicate with kindness and respect");
-    recommendations.push("Celebrate the unique qualities you each bring to the connection");
-
-    return recommendations.slice(0, 4);
-  }
-
-  // ✅ FIXED: Single checkAllSubmissions function
+  // ✅ SIMPLIFIED: Single checkAllSubmissions function - just notifies frontend
   function checkAllSubmissions(roomId) {
     const room = rooms[roomId];
     if (!room) return;
 
     console.log(`🔍 Checking submissions for room ${roomId}:`, {
       players: room.players.map(p => p.name),
-      submissionStatus: room.submissionStatus,
-      gameType: room.gameType
+      submissionStatus: room.submissionStatus
     });
 
     // Count how many players have submitted
@@ -210,25 +28,18 @@ export default function gameSocket(io) {
       .map(player => player.name);
 
     console.log(`📊 Room ${roomId}: ${submittedCount}/${room.players.length} players submitted`);
-    console.log(`⏳ Waiting for: ${waitingFor.join(', ') || 'none'}`);
 
     if (submittedCount === room.players.length) {
-      // ALL players have submitted - calculate and show results
-      console.log(`🎉 ALL players submitted in ${roomId}, calculating results`);
+      // ALL players have submitted - notify frontend to calculate results
+      console.log(`🎉 ALL players submitted in ${roomId}, notifying frontend`);
       
-      const results = calculateCompatibilityResults(room);
-      
-      // Show results to everyone in the room
-      io.to(roomId).emit("compatibility-show-results", {
-        serverCalculated: results
-      });
+      // Just notify that all players have submitted - frontend will handle calculation
+      io.to(roomId).emit("compatibility-all-submitted");
       
       // Reset submission status for potential replay
       room.players.forEach(player => {
         room.submissionStatus[player.name] = false;
       });
-      
-      console.log(`📈 Results shown for ${roomId}`);
     } else {
       // NOT all players have submitted - show waiting screen
       io.to(roomId).emit("compatibility-waiting-for-players", {
@@ -236,8 +47,6 @@ export default function gameSocket(io) {
         total: room.players.length,
         waitingFor: waitingFor
       });
-      
-      console.log(`⏳ Still waiting for ${waitingFor.length} player(s): ${waitingFor.join(', ')}`);
     }
   }
 
@@ -337,68 +146,8 @@ export default function gameSocket(io) {
     };
   }
 
-  // ✅ Helper functions for compatibility game
-  function startQuestionTimer(roomId) {
-    const room = rooms[roomId];
-    if (!room) return;
-
-    clearTimeout(room.timer);
-    
-    room.timer = setTimeout(() => {
-      // Auto-advance to next question or submit if time's up
-      if (room.currentQuestion < room.questions.length - 1) {
-        room.currentQuestion++;
-        io.to(roomId).emit("compatibility-next-question", {
-          questionIndex: room.currentQuestion,
-          question: room.questions[room.currentQuestion],
-          timeLeft: 30
-        });
-        startQuestionTimer(roomId);
-      } else {
-        // Time's up for final question
-        io.to(roomId).emit("compatibility-time-up");
-      }
-    }, 30000); // 30 seconds per question
-  }
-
-  function checkQuestionCompletion(roomId) {
-    const room = rooms[roomId];
-    if (!room) return;
-
-    const currentQuestion = room.currentQuestion;
-    const playersAnswered = room.players.filter(player => 
-      room.answers[player.name]?.regular?.[currentQuestion] !== undefined &&
-      room.answers[player.name]?.regular?.[currentQuestion] !== null
-    ).length;
-
-    if (playersAnswered === room.players.length) {
-      // All players answered current question
-      if (room.currentQuestion < room.questions.length - 1) {
-        // Move to next question
-        room.currentQuestion++;
-        io.to(roomId).emit("compatibility-all-answered", {
-          nextQuestionIndex: room.currentQuestion,
-          question: room.questions[room.currentQuestion],
-          timeLeft: 30
-        });
-        startQuestionTimer(roomId);
-      } else {
-        // All regular questions completed, move to advanced section
-        io.to(roomId).emit("compatibility-regular-completed", {
-          advancedQuestions: room.advancedQuestions
-        });
-      }
-    }
-  }
-
-  function calculateAdvancedProgress(advancedAnswers) {
-    if (!advancedAnswers) return 0;
-    
-    const categories = Object.keys(advancedAnswers);
-    const totalCategories = 5; // personality, lifestyle, communication, interests, values
-    
-    return Math.min(100, (categories.length / totalCategories) * 100);
-  }
+  // ✅ SIMPLIFIED: Remove timer functions for compatibility game
+  // Frontend will handle timers
 
   io.on("connection", (socket) => {
     console.log("🎮 Game socket connected:", socket.id);
@@ -416,7 +165,7 @@ export default function gameSocket(io) {
       }
     };
 
-    // 🔥 NEW: Send chat history to joining player
+    // 🔥 Send chat history to joining player
     const sendChatHistory = (roomId, socket) => {
       const messages = chatMessages.get(roomId) || [];
       socket.emit("chat-history", messages);
@@ -434,7 +183,7 @@ export default function gameSocket(io) {
       socket.leave(roomId);
     });
 
-    // ✅ CHAT: Typing indicators for chat - CONSISTENT across all games
+    // ✅ CHAT: Typing indicators for chat
     socket.on("typing", ({ roomId, userId, userName }) => {
       console.log(`⌨️ ${userName} is typing in room ${roomId}`);
       socket.to(roomId).emit("user-typing", { 
@@ -492,7 +241,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // ✅ FIXED: User online status
+    // ✅ User online status
     socket.on("user-online", async (userId) => {
       if (!userId) return;
       try {
@@ -503,7 +252,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // ✅ FIXED: User logout handler
+    // ✅ User logout handler
     socket.on("user-logout", async (userId) => {
       if (!userId) return;
       try {
@@ -514,7 +263,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // ✅ FIXED: Start spinner for all players
+    // ✅ Start spinner for all players
     socket.on("start-spinner", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -523,7 +272,7 @@ export default function gameSocket(io) {
       io.to(roomId).emit("spinner-started");
     });
 
-    // ✅ FIXED: Next round synchronization
+    // ✅ Next round synchronization
     socket.on("next-round-starting", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -540,7 +289,7 @@ export default function gameSocket(io) {
       io.to(roomId).emit("next-round-started");
     });
 
-    // ✅ NEW: Request current room state
+    // ✅ Request current room state
     socket.on("request-room-state", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room) {
@@ -563,7 +312,7 @@ export default function gameSocket(io) {
       socket.emit("room-state", roomState);
     });
 
-    // ✅ NEW: Game state synchronization for rejoining players - ENHANCED
+    // ✅ Game state synchronization for rejoining players
     socket.on("request-game-state", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room) {
@@ -605,7 +354,7 @@ export default function gameSocket(io) {
       console.log(`🔄 Sent game state sync to ${socket.id} for room ${roomId}`);
     });
 
-    // ✅ NEW: Choose option/prompt handler - ENHANCED
+    // ✅ Choose option/prompt handler
     socket.on("choose-option", ({ roomId, choice, type }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -642,7 +391,7 @@ export default function gameSocket(io) {
       console.log(`🎯 ${player.name} completed ${type} for 25 points`);
     });
 
-    // ✅ NEW: Reset proof status (for when user removes proof)
+    // ✅ Reset proof status
     socket.on("reset-proof-status", ({ roomId, player }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -658,7 +407,7 @@ export default function gameSocket(io) {
       console.log(`🔄 ${player} reset proof status in ${roomId}`);
     });
 
-    // ✅ NEW: Enhanced proof ready notification with type support
+    // ✅ Enhanced proof ready notification with type support
     socket.on("notify-proof-ready", ({ roomId, player, type = "dare" }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -685,7 +434,7 @@ export default function gameSocket(io) {
       });
     });
 
-    // ✅ Create a new room - ENHANCED with chat
+    // ✅ Create a new room
     socket.on("create-room", ({ player, gameType = "truth-or-dare" }) => {
       if (!player || !player.name) {
         socket.emit("create-error", "Player name missing");
@@ -737,7 +486,7 @@ export default function gameSocket(io) {
         rooms[roomId].resultSubmissions[playerName] = false;
       }
 
-      // 🔥 NEW: Initialize chat for this room
+      // Initialize chat for this room
       chatMessages.set(roomId, []);
 
       socket.join(roomId);
@@ -745,7 +494,7 @@ export default function gameSocket(io) {
       console.log(`🆕 ${gameType} room created: ${roomId} by ${player.name}`);
     });
 
-    // ✅ ENHANCED: Create compatibility room
+    // ✅ SIMPLIFIED: Create compatibility room - remove complex questions
     socket.on("create-compatibility-room", ({ player }) => {
       if (!player || !player.name) {
         socket.emit("create-error", "Player name missing");
@@ -764,82 +513,8 @@ export default function gameSocket(io) {
         playerProgress: {},
         submissionStatus: {},
         resultSubmissions: {},
-        timer: null,
-        questions: [
-          {
-            id: 1,
-            text: "How important is personal space and alone time in a relationship?",
-            type: "scale",
-            options: ["Not important", "Slightly important", "Moderately important", "Very important", "Extremely important"]
-          },
-          {
-            id: 2,
-            text: "How do you handle conflicts or disagreements?",
-            type: "scale",
-            options: ["Avoid them", "Discuss calmly", "Need time to think", "Express emotions openly", "Seek immediate resolution"]
-          },
-          {
-            id: 3,
-            text: "What's your ideal weekend activity?",
-            type: "scale",
-            options: ["Staying home", "Social gatherings", "Outdoor adventures", "Cultural activities", "Trying new restaurants"]
-          },
-          {
-            id: 4,
-            text: "How important is career ambition in a partner?",
-            type: "scale",
-            options: ["Not important", "Slightly important", "Moderately important", "Very important", "Extremely important"]
-          },
-          {
-            id: 5,
-            text: "What's your love language?",
-            type: "scale",
-            options: ["Words of affirmation", "Quality time", "Receiving gifts", "Acts of service", "Physical touch"]
-          }
-        ],
-        advancedQuestions: {
-          personalityTraits: {
-            question: "Select your dominant personality traits",
-            type: "multi-select",
-            options: ["Adventurous", "Analytical", "Creative", "Empathetic", "Organized", "Spontaneous", "Practical", "Emotional"]
-          },
-          lifestyle: {
-            sleepSchedule: {
-              question: "Your typical sleep schedule",
-              options: ["Early bird", "Night owl", "Flexible", "Strict routine"]
-            },
-            socialActivity: {
-              question: "Your social activity level",
-              options: ["Homebody", "Occasionally social", "Very social", "Social butterfly"]
-            }
-          },
-          communication: {
-            style: {
-              question: "Your communication style",
-              options: ["Direct", "Diplomatic", "Emotional", "Logical"]
-            },
-            conflictResolution: {
-              question: "How you handle conflicts",
-              options: ["Address immediately", "Take time to cool off", "Seek mediation", "Avoid confrontation"]
-            }
-          },
-          interests: {
-            hobbies: {
-              question: "Your favorite hobbies",
-              options: ["Reading", "Sports", "Music", "Travel", "Cooking", "Gaming", "Arts", "Technology"]
-            }
-          },
-          values: {
-            family: {
-              question: "Importance of family",
-              options: ["Not important", "Somewhat important", "Important", "Very important"]
-            },
-            career: {
-              question: "Career focus",
-              options: ["Work to live", "Balanced", "Career-driven", "Ambitious"]
-            }
-          }
-        }
+        timer: null
+        // Remove questions array - frontend will handle questions
       };
 
       // Initialize host data
@@ -857,7 +532,7 @@ export default function gameSocket(io) {
       console.log(`🆕 Compatibility room created: ${roomId} by ${player.name}`);
     });
 
-    // ✅ Join room - ENHANCED with chat
+    // ✅ Join room
     socket.on("join-room", ({ roomId, player }) => {
       const room = rooms[roomId];
       if (!room) return socket.emit("join-error", "Room not found");
@@ -893,7 +568,7 @@ export default function gameSocket(io) {
       socket.emit("room-joined", room);
       io.to(roomId).emit("update-players", room.players);
       
-      // 🔥 NEW: Send chat history to joining player
+      // Send chat history to joining player
       sendChatHistory(roomId, socket);
       
       // Send initial game state to the joining player
@@ -919,7 +594,7 @@ export default function gameSocket(io) {
       console.log(`👥 ${player.name} joined ${roomId} (${room.gameType})`);
     });
 
-    // ✅ ENHANCED: Join compatibility room
+    // ✅ SIMPLIFIED: Join compatibility room
     socket.on("join-compatibility-room", ({ roomId, player }) => {
       const room = rooms[roomId];
       if (!room) return socket.emit("join-error", "Room not found");
@@ -949,7 +624,7 @@ export default function gameSocket(io) {
       console.log(`👥 ${player.name} joined Compatibility room ${roomId}`);
     });
 
-    // ✅ Rejoin after refresh - ENHANCED with chat
+    // ✅ Rejoin after refresh
     socket.on("rejoin-room", ({ roomId, name }) => {
       const room = rooms[roomId];
       if (!room) return socket.emit("join-error", "Room not found");
@@ -961,7 +636,7 @@ export default function gameSocket(io) {
         socket.emit("room-joined", room);
         io.to(roomId).emit("update-players", room.players);
         
-        // 🔥 NEW: Send chat history to rejoining player
+        // Send chat history to rejoining player
         sendChatHistory(roomId, socket);
         
         // Send game state to rejoining player
@@ -998,7 +673,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // ✅ START GAME - ENHANCED
+    // ✅ START GAME
     socket.on("start-game", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room) return;
@@ -1030,7 +705,7 @@ export default function gameSocket(io) {
       console.log(`🚀 ${room.gameType} game started in ${roomId}`);
     });
 
-    // ✅ ENHANCED: Start compatibility game
+    // ✅ SIMPLIFIED: Start compatibility game - remove timer logic
     socket.on("start-compatibility-game", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "compatibility") return;
@@ -1053,20 +728,15 @@ export default function gameSocket(io) {
         room.resultSubmissions[player.name] = false;
       });
 
-      // Start timer for first question
-      startQuestionTimer(roomId);
-
+      // Frontend will handle timing
       io.to(roomId).emit("compatibility-game-started", {
         roomId,
-        currentQuestion: room.currentQuestion,
-        totalQuestions: room.questions.length,
-        question: room.questions[room.currentQuestion],
-        timeLeft: 30
+        currentQuestion: room.currentQuestion
       });
       console.log(`🚀 Compatibility game started in ${roomId}`);
     });
 
-    // ✅ Player progress update - NEW for compatibility game
+    // ✅ Player progress update
     socket.on("player-progress", ({ roomId, progress }) => {
       const room = rooms[roomId];
       if (!room) return;
@@ -1082,7 +752,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // ✅ ENHANCED: Answer submitted for specific question
+    // ✅ SIMPLIFIED: Answer submitted - just track submission status
     socket.on("compatibility-answer-submitted", ({ roomId, questionIndex, answer }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "compatibility") return;
@@ -1092,12 +762,11 @@ export default function gameSocket(io) {
 
       console.log(`📝 ${player.name} submitted answer for question ${questionIndex}: ${answer}`);
       
-      // Store the answer
+      // Store the answer locally (frontend will handle this)
       if (!room.answers[player.name].regularAnswers) {
         room.answers[player.name].regularAnswers = [];
       }
       
-      // Ensure the answers array is long enough
       while (room.answers[player.name].regularAnswers.length <= questionIndex) {
         room.answers[player.name].regularAnswers.push(undefined);
       }
@@ -1105,23 +774,19 @@ export default function gameSocket(io) {
       room.answers[player.name].regularAnswers[questionIndex] = answer;
 
       // Update progress
-      const progress = Math.round(((questionIndex + 1) / room.questions.length) * 100);
-      room.playerProgress[player.name] = progress;
+      room.playerProgress[player.name] = Math.round(((questionIndex + 1) / 5) * 100); // Assuming 5 questions
 
       // Notify all players about progress
       io.to(roomId).emit("compatibility-player-progress", {
         player: player.name,
-        progress,
+        progress: room.playerProgress[player.name],
         currentQuestion: room.currentQuestion
       });
 
-      console.log(`📊 ${player.name} progress: ${progress}%`);
-
-      // Check if both players have answered current question
-      checkQuestionCompletion(roomId);
+      console.log(`📊 ${player.name} progress: ${room.playerProgress[player.name]}%`);
     });
 
-    // ✅ ENHANCED: Advanced answers submission
+    // ✅ SIMPLIFIED: Advanced answers submission - just track
     socket.on("compatibility-advanced-answers", ({ roomId, category, answers }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "compatibility") return;
@@ -1138,8 +803,9 @@ export default function gameSocket(io) {
       room.answers[player.name].advancedAnswers[category] = answers;
 
       // Update progress for advanced section
-      const advancedProgress = calculateAdvancedProgress(room.answers[player.name].advancedAnswers);
-      room.playerProgress[player.name] = 50 + Math.round(advancedProgress * 0.5); // Advanced section is 50% of total
+      const completedSections = Object.keys(room.answers[player.name].advancedAnswers).length;
+      const progress = 50 + Math.round((completedSections / 5) * 50); // Advanced section is 50% of total
+      room.playerProgress[player.name] = progress;
 
       io.to(roomId).emit("compatibility-player-progress", {
         player: player.name,
@@ -1150,7 +816,7 @@ export default function gameSocket(io) {
       console.log(`📊 ${player.name} advanced progress: ${room.playerProgress[player.name]}%`);
     });
 
-    // ✅ FIXED: Submit final answers - ensures both players get results
+    // ✅ SIMPLIFIED: Submit final answers - just track submission
     socket.on("compatibility-submit-final", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "compatibility") return;
@@ -1175,7 +841,7 @@ export default function gameSocket(io) {
       checkAllSubmissions(roomId);
     });
 
-    // ✅ FIXED: Share answers with other player
+    // ✅ SIMPLIFIED: Share answers with other player - frontend will handle calculation
     socket.on("compatibility-share-answers", ({ roomId, answers }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "compatibility") return;
@@ -1185,7 +851,7 @@ export default function gameSocket(io) {
 
       console.log(`📨 ${player.name} sharing answers with other player`);
       
-      // Store answers in room for server-side calculation
+      // Store answers in room
       room.answers[player.name] = answers;
       
       // Send answers to the other player
@@ -1197,20 +863,9 @@ export default function gameSocket(io) {
           console.log(`📤 Sent answers from ${player.name} to ${p.name}`);
         }
       });
-
-      // If both players have shared answers and submitted, trigger results
-      const bothShared = room.players.every(p => room.answers[p.name]);
-      const bothSubmitted = room.players.every(p => room.submissionStatus[p.name]);
-      
-      if (bothShared && bothSubmitted) {
-        console.log(`🎯 Both players shared answers and submitted - auto-triggering results`);
-        setTimeout(() => {
-          checkAllSubmissions(roomId);
-        }, 1000);
-      }
     });
 
-    // ✅ FIXED: Handle result submission (when user is ready to see results)
+    // ✅ SIMPLIFIED: Handle result submission - just notify frontend
     socket.on("compatibility-submit-result", ({ roomId, playerName }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "compatibility") return;
@@ -1234,13 +889,8 @@ export default function gameSocket(io) {
       if (bothReady) {
         console.log(`🎉 Both players ready for results in ${roomId}`);
         
-        // Calculate results on server side
-        const serverResults = calculateCompatibilityResults(room);
-        
-        // Notify both players to show results
-        io.to(roomId).emit("compatibility-both-ready-for-results", {
-          serverCalculated: serverResults
-        });
+        // Notify frontend to show results - frontend will calculate
+        io.to(roomId).emit("compatibility-both-ready-for-results");
         
         // Reset for potential replay
         room.players.forEach(player => {
@@ -1250,7 +900,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // ✅ Submit answers for compatibility game - ENHANCED
+    // ✅ Submit answers for compatibility game
     socket.on("submit-answers", ({ roomId, player, answers }) => {
       const room = rooms[roomId];
       if (!room || !player?.name) return;
@@ -1276,9 +926,9 @@ export default function gameSocket(io) {
       console.log(`📊 Answers status: ${answeredPlayers.length}/${totalPlayers} players submitted`);
       
       if (answeredPlayers.length === totalPlayers) {
-        // All players have submitted - show results
-        console.log(`🎉 All players submitted in ${roomId}, showing results`);
-        io.to(roomId).emit("show-results", room.answers);
+        // All players have submitted - frontend will handle results
+        console.log(`🎉 All players submitted in ${roomId}, notifying frontend`);
+        io.to(roomId).emit("all-answers-submitted");
         
         // Reset answers for next round if needed
         room.answers = {};
@@ -1289,12 +939,10 @@ export default function gameSocket(io) {
           total: totalPlayers,
           waitingFor: room.players.filter(p => !answeredPlayers.includes(p.name)).map(p => p.name)
         });
-        
-        console.log(`⏳ Waiting for: ${room.players.filter(p => !answeredPlayers.includes(p.name)).map(p => p.name).join(', ')}`);
       }
     });
 
-    // ✅ Player reactions - ENHANCED
+    // ✅ Player reactions
     socket.on("player-reaction", ({ roomId, reaction }) => {
       const room = rooms[roomId];
       if (!room) return;
@@ -1310,7 +958,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // ✅ Time sync for games - NEW
+    // ✅ Time sync for games
     socket.on("time-sync", ({ roomId, time }) => {
       const room = rooms[roomId];
       if (!room) return;
@@ -1318,7 +966,7 @@ export default function gameSocket(io) {
       io.to(roomId).emit("time-sync", time);
     });
 
-    // ✅ FIXED: Random spin to select player (Truth or Dare only) - Now properly synchronized
+    // ✅ Random spin to select player (Truth or Dare only)
     socket.on("spin-player", async ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.players.length === 0 || room.gameType !== "truth-or-dare") return;
@@ -1356,7 +1004,7 @@ export default function gameSocket(io) {
       console.log(`🎯 Selected player: ${selectedPlayer.name} in room ${roomId}`);
     });
 
-    // ✅ ENHANCED: Submit truth/dare choice - better state management
+    // ✅ Submit truth/dare choice
     socket.on("submit-truth-dare", ({ roomId, choice }) => {
       const room = rooms[roomId];
       if (!room || !room.currentPlayer || room.gameType !== "truth-or-dare") return;
@@ -1398,7 +1046,7 @@ export default function gameSocket(io) {
       console.log(`💬 New ${type} prompt in ${roomId}: ${prompt}`);
     });
 
-    // ✅ ENHANCED: Proof uploaded handler - ensure it works for both truth and dare
+    // ✅ Proof uploaded handler
     socket.on("proof-uploaded", ({ roomId, player, proofKey }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -1435,7 +1083,7 @@ export default function gameSocket(io) {
       console.log(`📸 ${player} uploaded ${type} proof in ${roomId}`);
     });
 
-    // ✅ ENHANCED: Request proof data from proof owner (Truth or Dare only)
+    // ✅ Request proof data from proof owner (Truth or Dare only)
     socket.on("request-proof-data", ({ roomId, playerName, proofKey }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -1461,7 +1109,7 @@ export default function gameSocket(io) {
       io.to(requestor).emit("proof-data-received", { proofData });
     });
 
-    // ✅ ENHANCED: Truth completion handler - make sure it properly notifies everyone
+    // ✅ Truth completion handler
     socket.on("truth-completed", ({ roomId, player, completionText }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "truth-or-dare") return;
@@ -1644,7 +1292,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // ✅ Leave room manually - ENHANCED with chat cleanup
+    // ✅ Leave room manually
     socket.on("leave-room", (roomId) => {
       const room = rooms[roomId];
       if (!room) return;
@@ -1680,7 +1328,7 @@ export default function gameSocket(io) {
       socket.leave(roomId);
       if (room.players.length === 0) {
         delete rooms[roomId];
-        // 🔥 NEW: Clean up chat messages when room is empty
+        // Clean up chat messages when room is empty
         chatMessages.delete(roomId);
       } else {
         updateRoomPlayers(roomId);
@@ -1692,7 +1340,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // Create room for Who's Most Likely - NEW with chat
+    // Create room for Who's Most Likely
     socket.on("create-mostlikely-room", ({ player }) => {
       if (!player || !player.name) {
         socket.emit("create-error", "Player name missing");
@@ -1747,7 +1395,7 @@ export default function gameSocket(io) {
         totalVotes: 0
       };
 
-      // 🔥 NEW: Initialize chat for this room
+      // Initialize chat for this room
       chatMessages.set(roomId, []);
 
       socket.join(roomId);
@@ -1755,7 +1403,7 @@ export default function gameSocket(io) {
       console.log(`🆕 Most Likely room created: ${roomId} by ${player.name}`);
     });
 
-    // Join Most Likely room - NEW with chat
+    // Join Most Likely room
     socket.on("join-mostlikely-room", ({ roomId, player }) => {
       const room = rooms[roomId];
       if (!room) return socket.emit("join-error", "Room not found");
@@ -1780,13 +1428,13 @@ export default function gameSocket(io) {
       socket.emit("mostlikely-room-joined", room);
       io.to(roomId).emit("mostlikely-update-players", room.players);
       
-      // 🔥 NEW: Send chat history to joining player
+      // Send chat history to joining player
       sendChatHistory(roomId, socket);
       
       console.log(`👥 ${player.name} joined Most Likely room ${roomId}`);
     });
 
-    // Start Most Likely game - NEW
+    // Start Most Likely game
     socket.on("start-mostlikely-game", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "most-likely") return;
@@ -1821,7 +1469,7 @@ export default function gameSocket(io) {
       console.log(`🚀 Most Likely game started in ${roomId}`);
     });
 
-    // Submit vote - NEW
+    // Submit vote
     socket.on("submit-mostlikely-vote", ({ roomId, votedFor }) => {
       const room = rooms[roomId];
       if (!room || !room.gameStarted || room.gameType !== "most-likely") return;
@@ -1865,7 +1513,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // Next round - NEW
+    // Next round
     socket.on("next-mostlikely-round", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "most-likely") return;
@@ -1896,7 +1544,7 @@ export default function gameSocket(io) {
       }
     });
 
-    // NEW: End game early
+    // End game early
     socket.on("end-game", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room) return;
@@ -1918,12 +1566,12 @@ export default function gameSocket(io) {
       console.log(`🛑 Game ended in ${roomId} by host`);
     });
 
-    // NEW: Ping/pong for connection health
+    // Ping/pong for connection health
     socket.on("ping", () => {
       socket.emit("pong", { timestamp: Date.now() });
     });
 
-    // FIXED: Disconnect cleanup
+    // Disconnect cleanup
     socket.on("disconnect", async () => {
       console.log("❌ Game socket disconnected:", socket.id);
       
