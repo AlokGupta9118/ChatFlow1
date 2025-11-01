@@ -63,7 +63,7 @@ router.put("/friends/decline/:id", protect, declineFriendRequest);
 
 
 // Get user profile by ID - Public or Protected endpoint
-router.get('profile/:userId', async (req, res) => {
+router.get('profiles/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
     
