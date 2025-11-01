@@ -203,24 +203,24 @@ const Compatibility: React.FC = () => {
     };
 
     const handleWaitingForPlayers = (data: any) => {
-      setWaitingForPlayers(data.waitingFor);
-      setGameStatus('waiting-for-players');
-      setIsSubmittingFinal(false);
-    };
+  setWaitingForPlayers(data.waitingFor);
+  setGameStatus('waiting-for-players');
+  setIsSubmittingFinal(false); // Reset submitting state when waiting
+};
 
-    const handleShowResults = (resultsData: CompatibilityResults) => {
-      setResults(resultsData);
-      setGameStatus('results');
-      setIsSubmittingFinal(false);
-    };
+   const handleShowResults = (resultsData: CompatibilityResults) => {
+  setResults(resultsData);
+  setGameStatus('results');
+  setIsSubmittingFinal(false);
+  setWaitingForPlayers([]); // Clear waiting list
+};
 
     const handleSubmissionUpdate = (data: any) => {
-      setSubmissionStatus(prev => ({
-        ...prev,
-        [data.player]: data.submitted
-      }));
-    };
-
+  setSubmissionStatus(prev => ({
+    ...prev,
+    [data.player]: data.submitted
+  }));
+};
     // Error handling
     const handleJoinError = (errorMsg: string) => {
       setError(errorMsg);
