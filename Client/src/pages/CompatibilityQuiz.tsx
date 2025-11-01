@@ -1283,7 +1283,7 @@ const Compatibility: React.FC = () => {
               )}
               
               {/* Debug info */}
-              {import.meta.env.VITE_API_URL=== 'development' && (
+              {process.env.NODE_ENV === 'development' && (
                 <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
                   <div>My Answers: {myAnswers.regularAnswers.filter(Boolean).length}/{questions.length} regular, {Object.keys(myAnswers.advancedAnswers).length}/5 advanced</div>
                   <div>Other Player: {otherPlayerAnswers ? 'Data received' : 'Waiting for data'}</div>
