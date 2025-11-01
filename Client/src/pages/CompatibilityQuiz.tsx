@@ -356,7 +356,7 @@ const Compatibility: React.FC = () => {
     setGameStatus('results');
   }, [calculateResultsIndependently]);
 
-  // FIXED: Enhanced effect to handle the complete flow
+  // FIXED: Effect to handle when both players are ready for results
   useEffect(() => {
     if (players.length === 2 && gameStatus === 'waiting-for-players') {
       const allReadyForResults = players.every(player => resultSubmissions[player.name]);
@@ -366,24 +366,18 @@ const Compatibility: React.FC = () => {
         // Small delay to ensure all data is synchronized
         setTimeout(() => {
           showResults();
-        }, 1500);
-      } else {
-        console.log('⏳ Still waiting for results request from:', 
-          players.filter(player => !resultSubmissions[player.name]).map(p => p.name)
-        );
+        }, 1000);
       }
     }
   }, [resultSubmissions, players, gameStatus, showResults]);
 
-  // NEW: Effect to handle when we have both players' data and can request results
+  // NEW: Effect to handle when we have both players' data
   useEffect(() => {
-    // Only proceed if we're in waiting-for-players state and have the other player's data
     if (gameStatus === 'waiting-for-players' && otherPlayerAnswers) {
       const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
       
       if (bothSubmitted && !resultSubmissions[playerName]) {
-        console.log('📊 Both players submitted, we have all data - can request results');
-        // Auto-request results when we have all data
+        console.log('📊 Both players submitted, we have all data - auto-requesting results');
         requestResults();
       }
     }
@@ -589,6 +583,7 @@ const Compatibility: React.FC = () => {
     };
 
     const handleWaitingForPlayers = (data: any) => {
+      console.log('🔄 Waiting for players:', data.waitingFor);
       setWaitingForPlayers(data.waitingFor || []);
       setGameStatus('waiting-for-players');
       setIsSubmittingFinal(false);
@@ -598,15 +593,6 @@ const Compatibility: React.FC = () => {
     const handleOtherPlayerAnswers = (data: any) => {
       console.log('📨 Received other player answers:', data);
       setOtherPlayerAnswers(data.answers);
-      
-      // If we're in waiting-for-players and now have both data, we can proceed
-      if (gameStatus === 'waiting-for-players') {
-        const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
-        if (bothSubmitted && !resultSubmissions[playerName]) {
-          console.log('✅ Now have both players data - requesting results');
-          requestResults();
-        }
-      }
     };
 
     // Handle submission updates
@@ -680,7 +666,7 @@ const Compatibility: React.FC = () => {
       socket.off('join-error', handleJoinError);
       socket.off('start-error', handleStartError);
     };
-  }, [socket, questions.length, gameStatus, players, localSubmissionStatus, playerName, resultSubmissions, showResults]);
+  }, [socket, questions.length, showResults]);
 
   // Timer effect
   useEffect(() => {
@@ -1513,11 +1499,12 @@ const Compatibility: React.FC = () => {
     );
   };
 
-  // FIXED: Enhanced waiting for players with independent result calculation
+  // FIXED: Enhanced waiting for players with proper synchronization
   const renderWaitingForPlayers = () => {
     const waitingPlayers = getWaitingStatus();
     const hasOtherPlayerData = !!otherPlayerAnswers;
-    const canShowResults = localSubmissionStatus[playerName] && hasOtherPlayerData && !resultSubmissions[playerName];
+    const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
+    const canShowResults = bothSubmitted && hasOtherPlayerData && !resultSubmissions[playerName];
     const allReadyForResults = players.every(player => resultSubmissions[player.name]);
 
     return (
@@ -1550,12 +1537,15 @@ const Compatibility: React.FC = () => {
           </div>
 
           {/* Show appropriate message based on state */}
-          {!canShowResults && !allReadyForResults && (
+          {waitingPlayers.length > 0 && (
             <p className="text-white/80 mb-6">
-              {waitingPlayers.length > 0 
-                ? `Waiting for ${waitingPlayers.join(', ')} to submit...`
-                : 'Processing your answers...'
-              }
+              Waiting for {waitingPlayers.join(', ')} to submit...
+            </p>
+          )}
+
+          {bothSubmitted && !hasOtherPlayerData && (
+            <p className="text-white/80 mb-6">
+              Processing your answers and exchanging data...
             </p>
           )}
 
@@ -1595,10 +1585,12 @@ const Compatibility: React.FC = () => {
           {/* Debug info */}
           {process.env.NODE_ENV === 'development' && (
             <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
-              <div>My Submission: {localSubmissionStatus[playerName] ? 'Yes' : 'No'}</div>
+              <div>Both Submitted: {bothSubmitted ? 'Yes' : 'No'}</div>
               <div>Other Player Data: {otherPlayerAnswers ? 'Available' : 'Not available'}</div>
               <div>Can Show Results: {canShowResults ? 'Yes' : 'No'}</div>
-              <div>Result Requests: {JSON.stringify(resultSubmissions)}</div>
+              <div>All Ready For Results: {allReadyForResults ? 'Yes' : 'No'}</div>
+              <div>Result Submissions: {JSON.stringify(resultSubmissions)}</div>
+              <div>Local Submission Status: {JSON.stringify(localSubmissionStatus)}</div>
               <button 
                 onClick={showResults}
                 className="mt-2 px-3 py-1 bg-blue-500/50 rounded text-white text-xs"
