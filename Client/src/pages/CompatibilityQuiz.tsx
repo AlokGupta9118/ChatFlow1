@@ -146,11 +146,16 @@ const Compatibility: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  // NEW: Independent result calculation function
+  // NEW: Track result submissions
+  const [resultSubmissions, setResultSubmissions] = useState<{[key: string]: boolean}>({});
+
+  // FIXED: Enhanced result calculation with better synchronization
   const calculateResultsIndependently = useCallback((): CompatibilityResults => {
     console.log('🎯 Calculating results independently based on local data');
+    console.log('My answers:', myAnswers);
+    console.log('Other player answers:', otherPlayerAnswers);
     
-    if (!otherPlayerAnswers) {
+    if (!otherPlayerAnswers || !otherPlayerAnswers.regularAnswers || otherPlayerAnswers.regularAnswers.length === 0) {
       console.log('❌ No other player answers found, using mock data');
       return generateMockResults();
     }
@@ -191,7 +196,7 @@ const Compatibility: React.FC = () => {
     };
   }, [myAnswers, otherPlayerAnswers]);
 
-  // NEW: Calculate advanced compatibility
+  // Calculate advanced compatibility
   const calculateAdvancedCompatibility = (myAdvanced: any, otherAdvanced: any): number => {
     if (!myAdvanced || !otherAdvanced) return 75;
 
@@ -248,7 +253,7 @@ const Compatibility: React.FC = () => {
     return factorCount > 0 ? Math.round(totalScore / factorCount) : 75;
   };
 
-  // NEW: Generate score breakdown
+  // Generate score breakdown
   const generateBreakdown = (finalScore: number, baseScore: number, advancedScore: number) => {
     // Ensure scores are reasonably high and balanced
     return {
@@ -260,7 +265,7 @@ const Compatibility: React.FC = () => {
     };
   };
 
-  // NEW: Generate insights based on score
+  // Generate insights based on score
   const generateInsights = (score: number): string[] => {
     const insights: string[] = [];
     
@@ -289,7 +294,7 @@ const Compatibility: React.FC = () => {
     return insights.slice(0, 4); // Return top 4 insights
   };
 
-  // NEW: Get match level with positive framing
+  // Get match level with positive framing
   const getMatchLevel = (score: number): string => {
     if (score >= 90) return "Soulmate Connection ✨";
     if (score >= 85) return "Exceptional Match 🌟";
@@ -300,7 +305,7 @@ const Compatibility: React.FC = () => {
     return "Interesting Connection 🔮";
   };
 
-  // NEW: Generate recommendations
+  // Generate recommendations
   const generateRecommendations = (score: number): string[] => {
     const recommendations = [];
     
@@ -324,7 +329,7 @@ const Compatibility: React.FC = () => {
     return recommendations.slice(0, 4); // Return top 4 recommendations
   };
 
-  // NEW: Generate mock results when other player data isn't available
+  // Generate mock results when other player data isn't available
   const generateMockResults = (): CompatibilityResults => {
     const mockScore = Math.floor(Math.random() * 20) + 70; // 70-90 range
     
@@ -343,7 +348,7 @@ const Compatibility: React.FC = () => {
     };
   };
 
-  // NEW: Show results based on local data
+  // FIXED: Enhanced show results with better synchronization
   const showResults = useCallback(() => {
     console.log('🚀 Showing results based on local data');
     const calculatedResults = calculateResultsIndependently();
@@ -351,17 +356,43 @@ const Compatibility: React.FC = () => {
     setGameStatus('results');
   }, [calculateResultsIndependently]);
 
-  // FIXED: Enhanced effect to track when both players have submitted
+  // FIXED: Enhanced effect to track when both players have submitted for results
   useEffect(() => {
     if (players.length === 2 && gameStatus === 'waiting-for-players') {
-      const allSubmitted = players.every(player => localSubmissionStatus[player.name]);
+      const allSubmitted = players.every(player => resultSubmissions[player.name]);
       
       if (allSubmitted) {
-        console.log('🎉 Both players submitted locally - showing results');
-        showResults();
+        console.log('🎉 Both players submitted for results - showing results');
+        // Small delay to ensure all data is synchronized
+        setTimeout(() => {
+          showResults();
+        }, 1000);
+      } else {
+        console.log('⏳ Still waiting for results submission from:', 
+          players.filter(player => !resultSubmissions[player.name]).map(p => p.name)
+        );
       }
     }
-  }, [localSubmissionStatus, players, gameStatus, showResults]);
+  }, [resultSubmissions, players, gameStatus, showResults]);
+
+  // NEW: Effect to handle result submission tracking
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleResultSubmission = (data: any) => {
+      console.log(`📊 Result submission from: ${data.playerName}`);
+      setResultSubmissions(prev => ({
+        ...prev,
+        [data.playerName]: true
+      }));
+    };
+
+    socket.on('compatibility-result-submitted', handleResultSubmission);
+
+    return () => {
+      socket.off('compatibility-result-submitted', handleResultSubmission);
+    };
+  }, [socket]);
 
   // Initialize socket connection
   useEffect(() => {
@@ -390,10 +421,13 @@ const Compatibility: React.FC = () => {
       
       // Initialize local submission status
       const initialSubmissionStatus: {[key: string]: boolean} = {};
+      const initialResultSubmissions: {[key: string]: boolean} = {};
       room.players.forEach((player: Player) => {
         initialSubmissionStatus[player.name] = false;
+        initialResultSubmissions[player.name] = false;
       });
       setLocalSubmissionStatus(initialSubmissionStatus);
+      setResultSubmissions(initialResultSubmissions);
       
       // Initialize my answers
       setMyAnswers({
@@ -415,10 +449,13 @@ const Compatibility: React.FC = () => {
       
       // Initialize local submission status
       const initialSubmissionStatus: {[key: string]: boolean} = {};
+      const initialResultSubmissions: {[key: string]: boolean} = {};
       room.players.forEach((player: Player) => {
         initialSubmissionStatus[player.name] = false;
+        initialResultSubmissions[player.name] = false;
       });
       setLocalSubmissionStatus(initialSubmissionStatus);
+      setResultSubmissions(initialResultSubmissions);
       
       // Initialize my answers
       setMyAnswers({
@@ -444,6 +481,17 @@ const Compatibility: React.FC = () => {
         });
         return updated;
       });
+
+      // Update result submissions for new players
+      setResultSubmissions(prev => {
+        const updated = {...prev};
+        updatedPlayers.forEach(player => {
+          if (!(player.name in updated)) {
+            updated[player.name] = false;
+          }
+        });
+        return updated;
+      });
     };
 
     // Game events
@@ -455,6 +503,15 @@ const Compatibility: React.FC = () => {
       
       // Reset submission tracking when game starts
       setLocalSubmissionStatus(prev => {
+        const reset: {[key: string]: boolean} = {};
+        Object.keys(prev).forEach(key => {
+          reset[key] = false;
+        });
+        return reset;
+      });
+
+      // Reset result submissions
+      setResultSubmissions(prev => {
         const reset: {[key: string]: boolean} = {};
         Object.keys(prev).forEach(key => {
           reset[key] = false;
@@ -500,7 +557,7 @@ const Compatibility: React.FC = () => {
       setIsSubmittingFinal(false);
     };
 
-    // NEW: Handle other player's answers
+    // Handle other player's answers
     const handleOtherPlayerAnswers = (data: any) => {
       console.log('📨 Received other player answers:', data);
       setOtherPlayerAnswers(data.answers);
@@ -575,7 +632,7 @@ const Compatibility: React.FC = () => {
     containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [gameStatus, currentQuestion, currentAdvancedSection]);
 
-  // NEW: Enhanced reset function
+  // Enhanced reset function
   const resetGame = () => {
     setRoomId('');
     setPlayerName('');
@@ -597,6 +654,7 @@ const Compatibility: React.FC = () => {
     setMyAnswers({ regularAnswers: [], advancedAnswers: {} });
     setOtherPlayerAnswers(null);
     setLocalSubmissionStatus({});
+    setResultSubmissions({});
   };
 
   // Room management
@@ -696,7 +754,7 @@ const Compatibility: React.FC = () => {
     });
   };
 
-  // FIXED: Enhanced final submission
+  // FIXED: Enhanced final submission with result submission tracking
   const submitFinal = () => {
     console.log('🚀 Submitting final answers with local data:', myAnswers);
     setIsSubmittingFinal(true);
@@ -713,21 +771,39 @@ const Compatibility: React.FC = () => {
       answers: myAnswers
     });
 
+    // Emit result submission
+    socket?.emit('compatibility-submit-result', { 
+      roomId,
+      playerName 
+    });
+
     socket?.emit('compatibility-submit-final', { roomId });
   };
 
-  // FIXED: Enhanced screenshot capture with actual image generation
+  // FIXED: Enhanced screenshot capture with better error handling
   const captureScreenshot = async () => {
-    if (!resultsRef.current) return;
+    if (!resultsRef.current) {
+      alert('Results not available for capture');
+      return;
+    }
     
     setIsSharing(true);
     try {
+      // Add a small delay to ensure the component is fully rendered
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const canvas = await html2canvas(resultsRef.current, {
-        backgroundColor: '#7c3aed', // Purple background matching the gradient
-        scale: 2, // Higher quality
+        backgroundColor: '#7c3aed',
+        scale: 2,
         useCORS: true,
-        allowTaint: true,
-        logging: false
+        allowTaint: false,
+        logging: false,
+        onclone: (clonedDoc) => {
+          // Ensure all styles are applied in the clone
+          const clonedElement = clonedDoc.querySelector('[data-html2canvas-container]') || clonedDoc.body;
+          clonedElement.style.width = '100%';
+          clonedElement.style.height = 'auto';
+        }
       });
 
       // Convert canvas to blob and create download
@@ -736,12 +812,16 @@ const Compatibility: React.FC = () => {
           // Create download link
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
-          link.download = `compatibility-results-${roomId}-${Date.now()}.png`;
+          link.download = `compatibility-${roomId}-${results?.score}percent.png`;
           link.href = url;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
           URL.revokeObjectURL(url);
+          
+          // Show success message
+          setCopied(true);
+          setTimeout(() => setCopied(false), 3000);
         }
       }, 'image/png');
 
@@ -753,17 +833,23 @@ const Compatibility: React.FC = () => {
     }
   };
 
-  // NEW: Share results to clipboard as image
+  // FIXED: Enhanced share to clipboard with fallback
   const shareToClipboard = async () => {
-    if (!resultsRef.current) return;
+    if (!resultsRef.current) {
+      alert('Results not available for sharing');
+      return;
+    }
     
     setIsSharing(true);
     try {
+      // Add a small delay to ensure the component is fully rendered
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const canvas = await html2canvas(resultsRef.current, {
         backgroundColor: '#7c3aed',
-        scale: 2,
+        scale: 1, // Lower scale for clipboard to improve performance
         useCORS: true,
-        allowTaint: true,
+        allowTaint: false,
         logging: false
       });
 
@@ -771,35 +857,56 @@ const Compatibility: React.FC = () => {
       canvas.toBlob(async (blob) => {
         if (blob) {
           try {
-            // Try to copy to clipboard using modern API
-            await navigator.clipboard.write([
-              new ClipboardItem({
-                'image/png': blob
-              })
-            ]);
+            // Check if clipboard API is available and has write permission
+            if (navigator.clipboard && navigator.clipboard.write) {
+              try {
+                await navigator.clipboard.write([
+                  new ClipboardItem({
+                    'image/png': blob
+                  })
+                ]);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 3000);
+                return;
+              } catch (clipboardError) {
+                console.warn('Clipboard API failed, falling back to download:', clipboardError);
+              }
+            }
+            
+            // Fallback: Download the image
+            console.log('Clipboard API not available, falling back to download');
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = `compatibility-${roomId}-${results?.score}percent.png`;
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
             setCopied(true);
             setTimeout(() => setCopied(false), 3000);
-          } catch (err) {
-            // Fallback: Download the image
-            console.warn('Clipboard API not supported, falling back to download');
-            captureScreenshot();
+            
+          } catch (error) {
+            console.error('Error in clipboard fallback:', error);
+            alert('Failed to share results. Please try the download option instead.');
           }
         }
       }, 'image/png');
 
     } catch (error) {
       console.error('Error sharing to clipboard:', error);
-      alert('Failed to share results. Please try again.');
+      alert('Failed to share results. Please try again or use the download option.');
     } finally {
       setIsSharing(false);
     }
   };
 
-  // NEW: Get waiting status for display
+  // Get waiting status for display
   const getWaitingStatus = () => {
     if (players.length < 2) return ['Waiting for second player...'];
     
-    const waiting = players.filter(player => !localSubmissionStatus[player.name]);
+    const waiting = players.filter(player => !resultSubmissions[player.name]);
     return waiting.map(player => player.name);
   };
 
@@ -1220,6 +1327,7 @@ const Compatibility: React.FC = () => {
               <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
                 <div>My Answers: {myAnswers.regularAnswers.filter(Boolean).length}/{questions.length} regular, {Object.keys(myAnswers.advancedAnswers).length}/5 advanced</div>
                 <div>Other Player: {otherPlayerAnswers ? 'Data received' : 'Waiting for data'}</div>
+                <div>Result Submissions: {JSON.stringify(resultSubmissions)}</div>
               </div>
             )}
           </div>
@@ -1336,16 +1444,16 @@ const Compatibility: React.FC = () => {
   // FIXED: Enhanced waiting for players with independent result calculation
   const renderWaitingForPlayers = () => {
     const waitingPlayers = getWaitingStatus();
-    const allSubmitted = players.length === 2 && players.every(player => localSubmissionStatus[player.name]);
+    const allSubmitted = players.length === 2 && players.every(player => resultSubmissions[player.name]);
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white/10 backdrop-blur-lg rounded-2xl shadow-xl p-6 text-center border border-white/20">
           <Clock className="w-16 h-16 text-white mx-auto mb-4 animate-pulse" />
-          <h1 className="text-2xl font-bold text-white mb-3">Waiting for Players</h1>
+          <h1 className="text-2xl font-bold text-white mb-3">Calculating Results</h1>
           <p className="text-white/80 mb-6">
             {waitingPlayers.length > 0 
-              ? `Waiting for ${waitingPlayers.join(', ')} to complete the test...`
+              ? `Waiting for ${waitingPlayers.join(', ')} to submit results...`
               : 'All players have submitted! Preparing results...'
             }
           </p>
@@ -1359,7 +1467,7 @@ const Compatibility: React.FC = () => {
                   </div>
                   <span className="text-white font-semibold">{player.name}</span>
                 </div>
-                {localSubmissionStatus[player.name] ? (
+                {resultSubmissions[player.name] ? (
                   <CheckCircle className="w-6 h-6 text-green-400" />
                 ) : (
                   <Clock className="w-6 h-6 text-amber-400 animate-pulse" />
@@ -1368,12 +1476,22 @@ const Compatibility: React.FC = () => {
             ))}
           </div>
 
+          {allSubmitted && (
+            <div className="p-4 bg-green-500/20 border border-green-500/30 rounded-xl mb-4">
+              <div className="flex items-center gap-2 justify-center text-green-400">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-semibold">Both players submitted! Showing results...</span>
+              </div>
+            </div>
+          )}
+
           {/* Show debug info in development */}
           {process.env.NODE_ENV === 'development' && (
             <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
               <div>All Submitted: {allSubmitted ? 'Yes' : 'No'}</div>
               <div>My Data: {myAnswers.regularAnswers.filter(Boolean).length} answers</div>
               <div>Other Player Data: {otherPlayerAnswers ? 'Available' : 'Not available'}</div>
+              <div>Result Submissions: {JSON.stringify(resultSubmissions)}</div>
               <button 
                 onClick={showResults}
                 className="mt-2 px-3 py-1 bg-blue-500/50 rounded text-white text-xs"
