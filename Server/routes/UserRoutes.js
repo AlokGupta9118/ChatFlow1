@@ -63,7 +63,6 @@ router.put("/friends/decline/:id", protect, declineFriendRequest);
 router.get("/users", protect, getUser);
 
 
-// Get user profile by ID
 router.get('/profile/:userId', protect, async (req, res) => {
   try {
     const user = await User.findById(req.params.userId)
@@ -78,6 +77,21 @@ router.get('/profile/:userId', protect, async (req, res) => {
     // Check if the requesting user is blocked by the target user
     if (user.blockedUsers.includes(req.user._id)) {
       return res.status(403).json({ message: 'You are blocked from viewing this profile' });
+    }
+
+    // Convert main user's profile picture to absolute URL if it's relative
+    if (user.profilePicture && !user.profilePicture.startsWith('http')) {
+      user.profilePicture = `${req.protocol}://${req.get('host')}${user.profilePicture}`;
+    }
+
+    // Convert each friend's profile picture to absolute URL if it's relative
+    if (user.friends) {
+      user.friends = user.friends.map(friend => {
+        if (friend.profilePicture && !friend.profilePicture.startsWith('http')) {
+          friend.profilePicture = `${req.protocol}://${req.get('host')}${friend.profilePicture}`;
+        }
+        return friend;
+      });
     }
 
     res.json({
