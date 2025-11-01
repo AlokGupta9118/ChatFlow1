@@ -1164,7 +1164,7 @@ export default function gameSocket(io) {
       console.log(`📊 ${player.name} advanced progress: ${room.playerProgress[player.name]}%`);
     });
 
-  // ✅ FIXED: Submit final answers - only marks submission, doesn't trigger results immediately
+// ✅ FIXED: Submit final answers - ensures both players get results
 socket.on("compatibility-submit-final", ({ roomId }) => {
   const room = rooms[roomId];
   if (!room || room.gameType !== "compatibility") return;
@@ -1190,10 +1190,20 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
   
   if (allSubmitted) {
     console.log(`🎉 ALL players submitted final answers in ${roomId}`);
-    // Move to waiting-for-results state
-    io.to(roomId).emit("compatibility-waiting-for-players", {
-      waitingFor: [],
-      message: "Both players submitted! Share answers and calculate results..."
+    
+    // Calculate results
+    const results = calculateCompatibilityResults(room);
+    
+    // Show results to BOTH players immediately
+    io.to(roomId).emit("compatibility-show-results", {
+      serverCalculated: results
+    });
+    
+    console.log(`📊 Results sent to both players in ${roomId}`);
+    
+    // Reset for potential replay
+    room.players.forEach(player => {
+      room.submissionStatus[player.name] = false;
     });
   } else {
     // Show waiting screen for remaining players

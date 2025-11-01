@@ -146,9 +146,6 @@ const Compatibility: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  // Track if this specific user has submitted for results
-  const [hasUserSubmittedForResults, setHasUserSubmittedForResults] = useState<boolean>(false);
-
   // FIXED: Enhanced result calculation with better synchronization
   const calculateResultsIndependently = useCallback((): CompatibilityResults => {
     console.log('🎯 Calculating results independently based on local data');
@@ -353,47 +350,6 @@ const Compatibility: React.FC = () => {
     setGameStatus('results');
   }, [calculateResultsIndependently]);
 
-  // FIXED: Only show results when this user has explicitly submitted
-  useEffect(() => {
-    if (gameStatus === 'waiting-for-players' && hasUserSubmittedForResults) {
-      const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
-      const hasOtherPlayerData = !!otherPlayerAnswers;
-      
-      if (bothSubmitted && hasOtherPlayerData) {
-        console.log('🎉 Both players submitted and we have data - showing results');
-        setTimeout(() => {
-          showResults();
-        }, 1000);
-      }
-    }
-  }, [gameStatus, hasUserSubmittedForResults, players, localSubmissionStatus, otherPlayerAnswers, showResults]);
-
-  // FIXED: Enhanced final submission - only this user's screen will change
-  const submitFinal = () => {
-    console.log('🚀 Submitting final answers with local data:', myAnswers);
-    setIsSubmittingFinal(true);
-    
-    // Update local submission status immediately
-    setLocalSubmissionStatus(prev => ({
-      ...prev,
-      [playerName]: true
-    }));
-
-    // Mark that THIS user has submitted for results
-    setHasUserSubmittedForResults(true);
-
-    // Share my answers with other player
-    socket?.emit('compatibility-share-answers', {
-      roomId,
-      answers: myAnswers
-    });
-
-    // Submit final answers - this will NOT change the other player's screen
-    socket?.emit('compatibility-submit-final', { roomId });
-
-    console.log('✅ Final submission events emitted');
-  };
-
   // Initialize socket connection
   useEffect(() => {
     const newSocket = io(DEFAULT_SOCKET_URL, {
@@ -407,7 +363,7 @@ const Compatibility: React.FC = () => {
     };
   }, []);
 
-  // FIXED: Enhanced socket event listeners - prevent automatic screen changes
+  // FIXED: Enhanced socket event listeners with all required events
   useEffect(() => {
     if (!socket) return;
 
@@ -493,9 +449,6 @@ const Compatibility: React.FC = () => {
         return reset;
       });
       
-      // Reset user submission status
-      setHasUserSubmittedForResults(false);
-      
       // Reset answers
       setMyAnswers({
         regularAnswers: Array(questions.length).fill(undefined),
@@ -528,15 +481,11 @@ const Compatibility: React.FC = () => {
       }));
     };
 
-    // FIXED: Handle waiting for players - but DON'T automatically change screen
+    // FIXED: Handle waiting for players - always update waiting list
     const handleWaitingForPlayers = (data: any) => {
       console.log('🔄 Waiting for players:', data.waitingFor);
       setWaitingForPlayers(data.waitingFor || []);
-      
-      // Only change to waiting screen if THIS user has submitted
-      if (hasUserSubmittedForResults) {
-        setGameStatus('waiting-for-players');
-      }
+      setGameStatus('waiting-for-players');
       setIsSubmittingFinal(false);
     };
 
@@ -554,6 +503,26 @@ const Compatibility: React.FC = () => {
         ...prev,
         [data.player]: data.submitted
       }));
+    };
+
+    // FIXED: Handle when server sends results - show results to both players
+    const handleShowResults = (data: any) => {
+      console.log('📊 Server is showing results to both players');
+      
+      // Use server-calculated results if available, otherwise calculate locally
+      if (data.serverCalculated) {
+        setResults(data.serverCalculated);
+      } else {
+        const calculatedResults = calculateResultsIndependently();
+        setResults(calculatedResults);
+      }
+      setGameStatus('results');
+    };
+
+    // NEW: Handle when both players are ready for results
+    const handleBothReadyForResults = () => {
+      console.log('🎯 Both players ready for results - showing results');
+      showResults();
     };
 
     // Error handling
@@ -578,6 +547,8 @@ const Compatibility: React.FC = () => {
     socket.on('compatibility-waiting-for-players', handleWaitingForPlayers);
     socket.on('compatibility-other-player-answers', handleOtherPlayerAnswers);
     socket.on('compatibility-submission-update', handleSubmissionUpdate);
+    socket.on('compatibility-show-results', handleShowResults);
+    socket.on('compatibility-both-ready-for-results', handleBothReadyForResults);
     socket.on('join-error', handleJoinError);
     socket.on('start-error', handleStartError);
 
@@ -594,10 +565,12 @@ const Compatibility: React.FC = () => {
       socket.off('compatibility-waiting-for-players', handleWaitingForPlayers);
       socket.off('compatibility-other-player-answers', handleOtherPlayerAnswers);
       socket.off('compatibility-submission-update', handleSubmissionUpdate);
+      socket.off('compatibility-show-results', handleShowResults);
+      socket.off('compatibility-both-ready-for-results', handleBothReadyForResults);
       socket.off('join-error', handleJoinError);
       socket.off('start-error', handleStartError);
     };
-  }, [socket, questions.length, hasUserSubmittedForResults]);
+  }, [socket, questions.length, calculateResultsIndependently, showResults]);
 
   // Timer effect
   useEffect(() => {
@@ -614,6 +587,17 @@ const Compatibility: React.FC = () => {
   useEffect(() => {
     containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [gameStatus, currentQuestion, currentAdvancedSection]);
+
+  // FIXED: Effect to auto-advance when both players have submitted
+  useEffect(() => {
+    if (gameStatus === 'advanced') {
+      const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
+      if (bothSubmitted) {
+        console.log('🔄 Both players submitted - auto-advancing to waiting screen');
+        setGameStatus('waiting-for-players');
+      }
+    }
+  }, [gameStatus, players, localSubmissionStatus]);
 
   // Enhanced reset function
   const resetGame = () => {
@@ -637,7 +621,6 @@ const Compatibility: React.FC = () => {
     setMyAnswers({ regularAnswers: [], advancedAnswers: {} });
     setOtherPlayerAnswers(null);
     setLocalSubmissionStatus({});
-    setHasUserSubmittedForResults(false);
   };
 
   // Room management
@@ -735,6 +718,29 @@ const Compatibility: React.FC = () => {
       category,
       answers
     });
+  };
+
+  // FIXED: Enhanced final submission - ensures both players get results
+  const submitFinal = () => {
+    console.log('🚀 Submitting final answers with local data:', myAnswers);
+    setIsSubmittingFinal(true);
+    
+    // Update local submission status immediately
+    setLocalSubmissionStatus(prev => ({
+      ...prev,
+      [playerName]: true
+    }));
+
+    // Share my answers with other player
+    socket?.emit('compatibility-share-answers', {
+      roomId,
+      answers: myAnswers
+    });
+
+    // Submit final answers - this will trigger the waiting screen
+    socket?.emit('compatibility-submit-final', { roomId });
+
+    console.log('✅ Final submission events emitted');
   };
 
   // FIXED: Enhanced screenshot capture with better error handling
@@ -1127,7 +1133,6 @@ const Compatibility: React.FC = () => {
                     </div>
                     <span className="text-white font-medium">{player.name}</span>
                   </div>
-                  <div className="w-20 bg-white/20 rounded-full h-2">
                     <div 
                       className="bg-green-400 h-2 rounded-full transition-all duration-500"
                       style={{ width: `${playerProgress[player.name] || 0}%` }}
@@ -1149,172 +1154,186 @@ const Compatibility: React.FC = () => {
     </div>
   );
 
-  const renderAdvancedSection = () => (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-6 mb-6 border border-white/20">
-          <div className="text-center mb-6">
-            <Sparkles className="w-12 h-12 text-white mx-auto mb-3" />
-            <h1 className="text-2xl font-bold text-white mb-2">Advanced Compatibility</h1>
-            <p className="text-white/80">Dive deeper into your personality and preferences</p>
-          </div>
+  const renderAdvancedSection = () => {
+    const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
 
-          <div className="max-w-2xl mx-auto mb-6">
-            <div className="flex justify-between text-white font-semibold mb-2 text-sm">
-              <span>Advanced Section Progress</span>
-              <span>{advancedProgress}%</span>
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-6 mb-6 border border-white/20">
+            <div className="text-center mb-6">
+              <Sparkles className="w-12 h-12 text-white mx-auto mb-3" />
+              <h1 className="text-2xl font-bold text-white mb-2">Advanced Compatibility</h1>
+              <p className="text-white/80">Dive deeper into your personality and preferences</p>
             </div>
-            <div className="w-full bg-white/20 rounded-full h-3">
-              <div 
-                className="bg-gradient-to-r from-teal-400 to-cyan-400 h-3 rounded-full transition-all duration-500"
-                style={{ width: `${advancedProgress}%` }}
-              />
+
+            <div className="max-w-2xl mx-auto mb-6">
+              <div className="flex justify-between text-white font-semibold mb-2 text-sm">
+                <span>Advanced Section Progress</span>
+                <span>{advancedProgress}%</span>
+              </div>
+              <div className="w-full bg-white/20 rounded-full h-3">
+                <div 
+                  className="bg-gradient-to-r from-teal-400 to-cyan-400 h-3 rounded-full transition-all duration-500"
+                  style={{ width: `${advancedProgress}%` }}
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            {advancedQuestions && Object.entries(advancedQuestions).map(([section, data]) => (
-              <button
-                key={section}
-                onClick={() => setCurrentAdvancedSection(section)}
-                className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${
-                  currentAdvancedSection === section
-                    ? 'border-white bg-white/20'
-                    : 'border-white/20 bg-white/10 hover:border-white/40'
-                }`}
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                    currentAdvancedSection === section 
-                      ? 'bg-white text-cyan-600' 
-                      : 'bg-white/10 text-white'
-                  }`}>
-                    {getSectionIcon(section)}
-                  </div>
-                  <h3 className="text-base font-bold text-white capitalize flex-1">
-                    {section.replace(/([A-Z])/g, ' $1').trim()}
-                  </h3>
-                </div>
-                <p className={`text-xs ${
-                  currentAdvancedSection === section ? 'text-white/90' : 'text-white/70'
-                }`}>
-                  {myAnswers.advancedAnswers[section] ? '✓ Completed' : 'Click to answer'}
-                </p>
-              </button>
-            ))}
-          </div>
-
-          <div className="text-center">
-            <button
-              onClick={submitFinal}
-              disabled={isSubmittingFinal || localSubmissionStatus[playerName]}
-              className={`py-3 px-8 rounded-xl font-bold text-lg transition-all duration-200 flex items-center gap-2 mx-auto ${
-                isSubmittingFinal || localSubmissionStatus[playerName]
-                  ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
-              }`}
-            >
-              {isSubmittingFinal ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Submitting...
-                </>
-              ) : localSubmissionStatus[playerName] ? (
-                <>
-                  <CheckCircle className="w-5 h-5 text-green-400" />
-                  Submitted - Waiting for Partner
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-5 h-5" />
-                  Complete Compatibility Test
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Enhanced submission status display */}
-          <div className="mt-6 p-4 bg-white/5 border border-white/20 rounded-xl">
-            <h3 className="text-base font-semibold text-white mb-3 text-center">Submission Status</h3>
-            <div className="space-y-2">
-              {players.map(player => (
-                <div key={player.name} className="flex items-center justify-between p-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-semibold text-sm">
-                      {player.name.charAt(0).toUpperCase()}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+              {advancedQuestions && Object.entries(advancedQuestions).map(([section, data]) => (
+                <button
+                  key={section}
+                  onClick={() => setCurrentAdvancedSection(section)}
+                  className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${
+                    currentAdvancedSection === section
+                      ? 'border-white bg-white/20'
+                      : 'border-white/20 bg-white/10 hover:border-white/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      currentAdvancedSection === section 
+                        ? 'bg-white text-cyan-600' 
+                        : 'bg-white/10 text-white'
+                    }`}>
+                      {getSectionIcon(section)}
                     </div>
-                    <span className="text-white font-medium">{player.name}</span>
+                    <h3 className="text-base font-bold text-white capitalize flex-1">
+                      {section.replace(/([A-Z])/g, ' $1').trim()}
+                    </h3>
                   </div>
-                  <div className={`flex items-center gap-2 ${
-                    localSubmissionStatus[player.name] ? 'text-green-400' : 'text-amber-400'
+                  <p className={`text-xs ${
+                    currentAdvancedSection === section ? 'text-white/90' : 'text-white/70'
                   }`}>
-                    {localSubmissionStatus[player.name] ? (
-                      <>
-                        <CheckCircle className="w-5 h-5" />
-                        <span className="text-sm font-semibold">Submitted</span>
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="w-5 h-5 animate-pulse" />
-                        <span className="text-sm font-semibold">Waiting...</span>
-                      </>
-                    )}
-                  </div>
-                </div>
+                    {myAnswers.advancedAnswers[section] ? '✓ Completed' : 'Click to answer'}
+                  </p>
+                </button>
               ))}
             </div>
-            
-            {/* Debug info */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
-                <div>My Answers: {myAnswers.regularAnswers.filter(Boolean).length}/{questions.length} regular, {Object.keys(myAnswers.advancedAnswers).length}/5 advanced</div>
-                <div>Other Player: {otherPlayerAnswers ? 'Data received' : 'Waiting for data'}</div>
-                <div>Has User Submitted for Results: {hasUserSubmittedForResults ? 'Yes' : 'No'}</div>
-                <div>Local Submission Status: {JSON.stringify(localSubmissionStatus)}</div>
+
+            <div className="text-center">
+              <button
+                onClick={submitFinal}
+                disabled={isSubmittingFinal || localSubmissionStatus[playerName]}
+                className={`py-3 px-8 rounded-xl font-bold text-lg transition-all duration-200 flex items-center gap-2 mx-auto ${
+                  isSubmittingFinal || localSubmissionStatus[playerName]
+                    ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
+                }`}
+              >
+                {isSubmittingFinal ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Submitting...
+                  </>
+                ) : localSubmissionStatus[playerName] ? (
+                  <>
+                    <CheckCircle className="w-5 h-5 text-green-400" />
+                    {bothSubmitted ? 'Both Submitted - Calculating...' : 'Submitted - Waiting for Partner'}
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    Complete Compatibility Test
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Enhanced submission status display */}
+            <div className="mt-6 p-4 bg-white/5 border border-white/20 rounded-xl">
+              <h3 className="text-base font-semibold text-white mb-3 text-center">Submission Status</h3>
+              <div className="space-y-2">
+                {players.map(player => (
+                  <div key={player.name} className="flex items-center justify-between p-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-semibold text-sm">
+                        {player.name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-white font-medium">{player.name}</span>
+                    </div>
+                    <div className={`flex items-center gap-2 ${
+                      localSubmissionStatus[player.name] ? 'text-green-400' : 'text-amber-400'
+                    }`}>
+                      {localSubmissionStatus[player.name] ? (
+                        <>
+                          <CheckCircle className="w-5 h-5" />
+                          <span className="text-sm font-semibold">Submitted</span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-5 h-5 animate-pulse" />
+                          <span className="text-sm font-semibold">Waiting...</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
-        </div>
 
-        <button 
-          onClick={leaveRoom}
-          className="fixed bottom-6 left-6 p-3 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-
-        {currentAdvancedSection && advancedQuestions && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
-              <div className="p-4 border-b border-white/20">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setCurrentAdvancedSection('')}
-                    className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
-                  >
-                    <ArrowLeft className="w-4 h-4 text-white" />
-                  </button>
-                  <h2 className="text-lg font-bold text-white capitalize">
-                    {currentAdvancedSection.replace(/([A-Z])/g, ' $1').trim()}
-                  </h2>
-                  <button
-                    onClick={() => setCurrentAdvancedSection('')}
-                    className="ml-auto p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
-                  >
-                    <X className="w-4 h-4 text-white" />
-                  </button>
+              {/* Auto-advance notice */}
+              {bothSubmitted && (
+                <div className="mt-4 p-3 bg-blue-500/20 border border-blue-500/30 rounded-xl">
+                  <div className="flex items-center gap-2 justify-center text-blue-400">
+                    <Sparkles className="w-4 h-4" />
+                    <span className="text-sm font-semibold">Both players submitted! Calculating results...</span>
+                  </div>
                 </div>
-              </div>
+              )}
               
-              <div className="p-4">
-                {renderAdvancedQuestions(currentAdvancedSection, advancedQuestions[currentAdvancedSection])}
-              </div>
+              {/* Debug info */}
+              {import.meta.env.VITE_API_URL=== 'development' && (
+                <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
+                  <div>My Answers: {myAnswers.regularAnswers.filter(Boolean).length}/{questions.length} regular, {Object.keys(myAnswers.advancedAnswers).length}/5 advanced</div>
+                  <div>Other Player: {otherPlayerAnswers ? 'Data received' : 'Waiting for data'}</div>
+                  <div>Both Submitted: {bothSubmitted ? 'Yes' : 'No'}</div>
+                  <div>Game Status: {gameStatus}</div>
+                </div>
+              )}
             </div>
           </div>
-        )}
+
+          <button 
+            onClick={leaveRoom}
+            className="fixed bottom-6 left-6 p-3 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+
+          {currentAdvancedSection && advancedQuestions && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+                <div className="p-4 border-b border-white/20">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setCurrentAdvancedSection('')}
+                      className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
+                    >
+                      <ArrowLeft className="w-4 h-4 text-white" />
+                    </button>
+                    <h2 className="text-lg font-bold text-white capitalize">
+                      {currentAdvancedSection.replace(/([A-Z])/g, ' $1').trim()}
+                    </h2>
+                    <button
+                      onClick={() => setCurrentAdvancedSection('')}
+                      className="ml-auto p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
+                    >
+                      <X className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-4">
+                  {renderAdvancedQuestions(currentAdvancedSection, advancedQuestions[currentAdvancedSection])}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderAdvancedQuestions = (section: string, questions: any) => {
     if (section === 'personalityTraits') {
@@ -1384,7 +1403,7 @@ const Compatibility: React.FC = () => {
     );
   };
 
-  // FIXED: Enhanced waiting for players - only shows if THIS user has submitted
+  // FIXED: Enhanced waiting for players with proper synchronization
   const renderWaitingForPlayers = () => {
     const waitingPlayers = getWaitingStatus();
     const hasOtherPlayerData = !!otherPlayerAnswers;
@@ -1443,8 +1462,7 @@ const Compatibility: React.FC = () => {
             <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
               <div>Both Submitted: {bothSubmitted ? 'Yes' : 'No'}</div>
               <div>Other Player Data: {otherPlayerAnswers ? 'Available' : 'Not available'}</div>
-              <div>Has User Submitted for Results: {hasUserSubmittedForResults ? 'Yes' : 'No'}</div>
-              <div>Local Submission Status: {JSON.stringify(localSubmissionStatus)}</div>
+              <div>Waiting For: {waitingPlayers.join(', ')}</div>
               <button 
                 onClick={showResults}
                 className="mt-2 px-3 py-1 bg-blue-500/50 rounded text-white text-xs"
