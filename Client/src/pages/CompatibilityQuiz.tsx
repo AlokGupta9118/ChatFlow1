@@ -3,8 +3,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { 
   Users, 
-  MessageCircle, 
-  Send, 
   Clock, 
   CheckCircle, 
   X, 
@@ -18,7 +16,9 @@ import {
   Sparkles,
   Trophy,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Crown,
+  MessageCircle
 } from 'lucide-react';
 
 const DEFAULT_SOCKET_URL = `${import.meta.env.VITE_API_URL}`;
@@ -97,17 +97,6 @@ interface CompatibilityResults {
   recommendations: string[];
 }
 
-interface ChatMessage {
-  _id: string;
-  sender: string;
-  senderId: string;
-  content: string;
-  timestamp: string;
-  type: string;
-  chatType: string;
-  roomId: string;
-}
-
 const Compatibility: React.FC = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [roomId, setRoomId] = useState<string>('');
@@ -115,7 +104,7 @@ const Compatibility: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isHost, setIsHost] = useState<boolean>(false);
   const [gameStarted, setGameStarted] = useState<boolean>(false);
-  const [gameStatus, setGameStatus] = useState<'waiting' | 'playing' | 'results'>('waiting');
+  const [gameStatus, setGameStatus] = useState<'waiting' | 'playing' | 'advanced' | 'results'>('waiting');
   
   // Game state
   const [currentQuestion, setCurrentQuestion] = useState<number>(0);
@@ -127,25 +116,22 @@ const Compatibility: React.FC = () => {
   const [submissionStatus, setSubmissionStatus] = useState<{[key: string]: boolean}>({});
   
   // UI state
-  const [showChat, setShowChat] = useState<boolean>(false);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [newMessage, setNewMessage] = useState<string>('');
-  const [isTyping, setIsTyping] = useState<boolean>(false);
-  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [timeLeft, setTimeLeft] = useState<number>(30);
   const [results, setResults] = useState<CompatibilityResults | null>(null);
   const [waitingForPlayers, setWaitingForPlayers] = useState<string[]>([]);
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
   
   // Advanced section state
   const [currentAdvancedSection, setCurrentAdvancedSection] = useState<string>('');
   const [advancedProgress, setAdvancedProgress] = useState<number>(0);
-  
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Initialize socket connection
   useEffect(() => {
-    const newSocket = io(DEFAULT_SOCKET_URL);
+    const newSocket = io(DEFAULT_SOCKET_URL, {
+      transports: ['websocket']
+    });
+    
     setSocket(newSocket);
 
     return () => {
@@ -158,109 +144,131 @@ const Compatibility: React.FC = () => {
     if (!socket) return;
 
     // Room events
-    socket.on('compatibility-room-created', (room) => {
+    const handleRoomCreated = (room: any) => {
+      console.log('Room created:', room);
       setRoomId(room.roomId);
       setPlayers(room.players);
       setIsHost(true);
       setQuestions(room.questions || []);
       setAdvancedQuestions(room.advancedQuestions || null);
-    });
+      setError('');
+      setLoading(false);
+    };
 
-    socket.on('compatibility-room-joined', (room) => {
+    const handleRoomJoined = (room: any) => {
+      console.log('Room joined:', room);
       setRoomId(room.roomId);
       setPlayers(room.players);
       setIsHost(room.players.find((p: Player) => p.socketId === socket.id)?.isHost || false);
       setQuestions(room.questions || []);
       setAdvancedQuestions(room.advancedQuestions || null);
-    });
+      setError('');
+      setLoading(false);
+    };
 
-    socket.on('compatibility-update-players', (updatedPlayers) => {
+    const handleUpdatePlayers = (updatedPlayers: Player[]) => {
+      console.log('Players updated:', updatedPlayers);
       setPlayers(updatedPlayers);
-    });
+    };
 
     // Game events
-    socket.on('compatibility-game-started', (data) => {
+    const handleGameStarted = (data: any) => {
+      console.log('Game started:', data);
       setGameStarted(true);
       setGameStatus('playing');
-      setCurrentQuestion(data.currentQuestion);
-      setTimeLeft(30);
-    });
+      setCurrentQuestion(data.currentQuestion || 0);
+      setTimeLeft(data.timeLeft || 30);
+    };
 
-    socket.on('compatibility-next-question', (data) => {
+    const handleNextQuestion = (data: any) => {
+      console.log('Next question:', data);
       setCurrentQuestion(data.questionIndex);
       setTimeLeft(data.timeLeft);
-    });
+    };
 
-    socket.on('compatibility-all-answered', (data) => {
+    const handleAllAnswered = (data: any) => {
+      console.log('All answered:', data);
       setCurrentQuestion(data.nextQuestionIndex);
       setTimeLeft(data.timeLeft);
-    });
+    };
 
-    socket.on('compatibility-regular-completed', (data) => {
+    const handleRegularCompleted = (data: any) => {
+      console.log('Regular completed:', data);
       setAdvancedQuestions(data.advancedQuestions);
       setGameStatus('advanced');
-    });
+    };
 
-    socket.on('compatibility-player-progress', (data) => {
+    const handlePlayerProgress = (data: any) => {
+      console.log('Player progress:', data);
       setPlayerProgress(prev => ({
         ...prev,
         [data.player]: data.progress
       }));
-    });
+    };
 
-    socket.on('compatibility-waiting-for-players', (data) => {
+    const handleWaitingForPlayers = (data: any) => {
+      console.log('Waiting for players:', data);
       setWaitingForPlayers(data.waitingFor);
-    });
+    };
 
-    socket.on('compatibility-show-results', (resultsData) => {
+    const handleShowResults = (resultsData: CompatibilityResults) => {
+      console.log('Show results:', resultsData);
       setResults(resultsData);
       setGameStatus('results');
-    });
+    };
 
-    socket.on('compatibility-submission-update', (data) => {
+    const handleSubmissionUpdate = (data: any) => {
+      console.log('Submission update:', data);
       setSubmissionStatus(prev => ({
         ...prev,
         [data.player]: data.submitted
       }));
-    });
-
-    // Chat events
-    socket.on('chat-history', (messages) => {
-      setChatMessages(messages);
-    });
-
-    socket.on('receive-chat-message', (message) => {
-      setChatMessages(prev => [...prev, message]);
-    });
-
-    socket.on('user-typing', (data) => {
-      if (data.isTyping) {
-        setTypingUsers(prev => [...prev.filter(u => u !== data.userName), data.userName]);
-      } else {
-        setTypingUsers(prev => prev.filter(u => u !== data.userName));
-      }
-    });
-
-    // Time sync
-    socket.on('time-sync', (time) => {
-      setTimeLeft(time);
-    });
+    };
 
     // Error handling
-    socket.on('join-error', (error) => {
-      alert(`Join error: ${error}`);
-    });
+    const handleJoinError = (errorMsg: string) => {
+      console.error('Join error:', errorMsg);
+      setError(errorMsg);
+      setLoading(false);
+    };
 
-    socket.on('start-error', (error) => {
-      alert(`Start error: ${error}`);
-    });
+    const handleStartError = (errorMsg: string) => {
+      console.error('Start error:', errorMsg);
+      setError(errorMsg);
+    };
 
+    // Register event listeners
+    socket.on('compatibility-room-created', handleRoomCreated);
+    socket.on('compatibility-room-joined', handleRoomJoined);
+    socket.on('compatibility-update-players', handleUpdatePlayers);
+    socket.on('compatibility-game-started', handleGameStarted);
+    socket.on('compatibility-next-question', handleNextQuestion);
+    socket.on('compatibility-all-answered', handleAllAnswered);
+    socket.on('compatibility-regular-completed', handleRegularCompleted);
+    socket.on('compatibility-player-progress', handlePlayerProgress);
+    socket.on('compatibility-waiting-for-players', handleWaitingForPlayers);
+    socket.on('compatibility-show-results', handleShowResults);
+    socket.on('compatibility-submission-update', handleSubmissionUpdate);
+    socket.on('join-error', handleJoinError);
+    socket.on('start-error', handleStartError);
+
+    // Cleanup
+    return () => {
+      socket.off('compatibility-room-created', handleRoomCreated);
+      socket.off('compatibility-room-joined', handleRoomJoined);
+      socket.off('compatibility-update-players', handleUpdatePlayers);
+      socket.off('compatibility-game-started', handleGameStarted);
+      socket.off('compatibility-next-question', handleNextQuestion);
+      socket.off('compatibility-all-answered', handleAllAnswered);
+      socket.off('compatibility-regular-completed', handleRegularCompleted);
+      socket.off('compatibility-player-progress', handlePlayerProgress);
+      socket.off('compatibility-waiting-for-players', handleWaitingForPlayers);
+      socket.off('compatibility-show-results', handleShowResults);
+      socket.off('compatibility-submission-update', handleSubmissionUpdate);
+      socket.off('join-error', handleJoinError);
+      socket.off('start-error', handleStartError);
+    };
   }, [socket]);
-
-  // Auto-scroll chat
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
 
   // Timer effect
   useEffect(() => {
@@ -276,28 +284,40 @@ const Compatibility: React.FC = () => {
   // Room management
   const createRoom = () => {
     if (!playerName.trim()) {
-      alert('Please enter your name');
+      setError('Please enter your name');
       return;
     }
     
+    setLoading(true);
+    setError('');
     socket?.emit('create-compatibility-room', {
-      player: { name: playerName, socketId: socket.id }
+      player: { name: playerName, socketId: socket?.id }
     });
   };
 
   const joinRoom = () => {
-    if (!playerName.trim() || !roomId.trim()) {
-      alert('Please enter your name and room ID');
+    if (!playerName.trim()) {
+      setError('Please enter your name');
+      return;
+    }
+    if (!roomId.trim()) {
+      setError('Please enter room ID');
       return;
     }
 
+    setLoading(true);
+    setError('');
     socket?.emit('join-compatibility-room', {
-      roomId,
-      player: { name: playerName, socketId: socket.id }
+      roomId: roomId.toUpperCase(),
+      player: { name: playerName, socketId: socket?.id }
     });
   };
 
   const startGame = () => {
+    if (players.length !== 2) {
+      setError('Compatibility game requires exactly 2 players');
+      return;
+    }
     socket?.emit('start-compatibility-game', { roomId });
   };
 
@@ -311,6 +331,18 @@ const Compatibility: React.FC = () => {
   };
 
   const submitAdvancedAnswer = (category: string, answers: any) => {
+    const newAdvancedAnswers = {
+      ...advancedAnswers,
+      [category]: answers
+    };
+    setAdvancedAnswers(newAdvancedAnswers);
+
+    // Calculate progress
+    const completedSections = Object.keys(newAdvancedAnswers).length;
+    const totalSections = 5; // personality, lifestyle, communication, interests, values
+    const progress = Math.round((completedSections / totalSections) * 100);
+    setAdvancedProgress(progress);
+
     socket?.emit('compatibility-advanced-answers', {
       roomId,
       category,
@@ -322,101 +354,81 @@ const Compatibility: React.FC = () => {
     socket?.emit('compatibility-submit-final', { roomId });
   };
 
-  // Chat functions
-  const sendMessage = () => {
-    if (!newMessage.trim()) return;
-
-    socket?.emit('send-gamechat-message', {
-      roomId,
-      message: {
-        sender: playerName,
-        senderId: socket?.id,
-        content: newMessage,
-        type: 'text'
-      },
-      chatType: 'game'
-    });
-
-    setNewMessage('');
-  };
-
-  const handleTyping = () => {
-    if (!isTyping) {
-      setIsTyping(true);
-      socket?.emit('typing', { roomId, userId: socket.id, userName: playerName });
-    }
-  };
-
-  const handleStopTyping = () => {
-    setIsTyping(false);
-    socket?.emit('chat-typing-stop', { roomId, userId: socket.id });
-  };
-
   // UI Components
   const renderLobby = () => (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
-      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-6">
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-8 border border-white/20">
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Heart className="text-white w-10 h-10" />
+          <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-white/30">
+            <Heart className="text-white w-12 h-12" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Compatibility Test</h1>
-          <p className="text-gray-600">Discover your connection with friends</p>
+          <h1 className="text-4xl font-bold text-white mb-3">Compatibility Test</h1>
+          <p className="text-white/80 text-lg">Discover your connection with a friend</p>
         </div>
 
-        <div className="space-y-4 mb-6">
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-2xl text-white text-center">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-6 mb-8">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-white text-sm font-semibold mb-3">
               Your Name
             </label>
             <input
               type="text"
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-5 py-4 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-transparent text-lg"
               placeholder="Enter your name"
+              style={{ color: 'white' }}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Room ID (if joining)
+            <label className="block text-white text-sm font-semibold mb-3">
+              Room ID
             </label>
             <input
               type="text"
               value={roomId}
               onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent uppercase"
+              className="w-full px-5 py-4 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-transparent text-lg font-mono uppercase"
               placeholder="Enter room code"
+              style={{ color: 'white' }}
             />
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <button
             onClick={createRoom}
-            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-200 shadow-lg"
+            disabled={loading}
+            className="w-full bg-white text-purple-600 py-4 rounded-2xl font-bold text-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg transform hover:scale-105"
           >
-            Create New Room
+            {loading ? 'Creating Room...' : 'Create New Room'}
           </button>
           
           <button
             onClick={joinRoom}
-            className="w-full border-2 border-purple-500 text-purple-600 py-3 rounded-xl font-semibold hover:bg-purple-50 transition-all duration-200"
+            disabled={loading}
+            className="w-full bg-transparent border-2 border-white text-white py-4 rounded-2xl font-bold text-lg hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
           >
-            Join Existing Room
+            {loading ? 'Joining Room...' : 'Join Room'}
           </button>
         </div>
 
         {roomId && (
-          <div className="mt-6 p-4 bg-purple-50 rounded-xl">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-purple-700">Room Code:</span>
-              <span className="font-mono text-lg font-bold text-purple-900">{roomId}</span>
+          <div className="mt-6 p-4 bg-white/10 rounded-2xl border border-white/20">
+            <div className="flex items-center justify-between">
+              <span className="text-white/80 font-medium">Room Code:</span>
+              <span className="font-mono text-xl font-bold text-white">{roomId}</span>
             </div>
             <button
               onClick={() => navigator.clipboard.writeText(roomId)}
-              className="w-full mt-2 text-sm text-purple-600 hover:text-purple-700 flex items-center justify-center gap-2"
+              className="w-full mt-3 text-white/80 hover:text-white flex items-center justify-center gap-2 text-sm transition-colors"
             >
               <Share2 className="w-4 h-4" />
               Copy Room Code
@@ -428,170 +440,111 @@ const Compatibility: React.FC = () => {
   );
 
   const renderWaitingRoom = () => (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 p-4">
+      <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-6 border border-white/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+            <div className="flex items-center gap-4">
               <button 
                 onClick={() => window.location.reload()}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all duration-200 border border-white/20"
               >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
+                <ArrowLeft className="w-6 h-6 text-white" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">Compatibility Test</h1>
-                <p className="text-gray-600">Room: <span className="font-mono font-semibold">{roomId}</span></p>
+                <h1 className="text-3xl font-bold text-white">Compatibility Test</h1>
+                <p className="text-white/80">Room: <span className="font-mono font-bold text-white">{roomId}</span></p>
               </div>
             </div>
-            <button
-              onClick={() => setShowChat(!showChat)}
-              className="p-3 bg-purple-100 text-purple-600 rounded-xl hover:bg-purple-200 transition-colors relative"
-            >
-              <MessageCircle className="w-6 h-6" />
-              {chatMessages.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {chatMessages.length}
-                </span>
-              )}
-            </button>
+            <div className="flex items-center gap-3 bg-white/10 px-4 py-3 rounded-2xl border border-white/20">
+              <Users className="w-6 h-6 text-white" />
+              <span className="text-white font-semibold">{players.length}/2 Players</span>
+            </div>
           </div>
 
           {/* Players List */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Users className="w-5 h-5 text-purple-600" />
-              <h2 className="text-lg font-semibold text-gray-800">
-                Players ({players.length}/2)
-              </h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-white mb-6 text-center">Waiting for Players</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
               {players.map((player, index) => (
                 <div
                   key={player.socketId}
-                  className={`p-4 rounded-xl border-2 ${
+                  className={`p-6 rounded-2xl border-2 backdrop-blur-sm ${
                     player.isHost 
-                      ? 'border-purple-500 bg-purple-50' 
-                      : 'border-gray-200 bg-white'
+                      ? 'border-yellow-400 bg-yellow-500/20' 
+                      : 'border-white/30 bg-white/10'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-r from-purple-400 to-pink-400 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg">
                       {player.name.charAt(0).toUpperCase()}
                     </div>
-                    <div>
-                      <p className="font-semibold text-gray-800">{player.name}</p>
-                      <p className="text-sm text-gray-600">
-                        {player.isHost ? 'Host' : 'Player'}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-xl font-bold text-white">{player.name}</p>
+                        {player.isHost && (
+                          <Crown className="w-5 h-5 text-yellow-400 fill-current" />
+                        )}
+                      </div>
+                      <p className="text-white/80">
+                        {player.isHost ? 'Room Host' : 'Player'}
                       </p>
                     </div>
-                    {player.isHost && (
-                      <Crown className="w-5 h-5 text-yellow-500 ml-auto" />
-                    )}
                   </div>
+                </div>
+              ))}
+              
+              {/* Empty player slots */}
+              {Array.from({ length: 2 - players.length }).map((_, index) => (
+                <div
+                  key={`empty-${index}`}
+                  className="p-6 rounded-2xl border-2 border-dashed border-white/20 bg-white/5 text-center"
+                >
+                  <Users className="w-8 h-8 text-white/40 mx-auto mb-2" />
+                  <p className="text-white/60 font-medium">Waiting for player...</p>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Start Game Button */}
-          {isHost && players.length === 2 && (
-            <button
-              onClick={startGame}
-              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-4 rounded-xl font-semibold text-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-lg flex items-center justify-center gap-3"
-            >
-              <Sparkles className="w-6 h-6" />
-              Start Compatibility Test
-            </button>
+          {isHost && (
+            <div className="text-center">
+              <button
+                onClick={startGame}
+                disabled={players.length !== 2}
+                className={`px-12 py-5 rounded-2xl font-bold text-xl transition-all duration-200 transform hover:scale-105 ${
+                  players.length === 2
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-2xl hover:from-green-600 hover:to-emerald-600'
+                    : 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+                }`}
+              >
+                {players.length === 2 ? (
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="w-7 h-7" />
+                    Start Compatibility Test
+                  </div>
+                ) : (
+                  `Need ${2 - players.length} more player${2 - players.length > 1 ? 's' : ''}`
+                )}
+              </button>
+            </div>
           )}
 
-          {isHost && players.length < 2 && (
-            <div className="text-center py-6">
-              <Users className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600 font-medium">
-                Waiting for {2 - players.length} more player{2 - players.length > 1 ? 's' : ''} to join...
-              </p>
+          {!isHost && (
+            <div className="text-center">
+              <div className="inline-flex items-center gap-3 px-6 py-4 bg-white/10 rounded-2xl border border-white/20">
+                <Clock className="w-6 h-6 text-white animate-pulse" />
+                <p className="text-white font-semibold">Waiting for host to start the game...</p>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Chat Panel */}
-        {showChat && (
-          <div className="bg-white rounded-2xl shadow-lg p-4 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Chat</h3>
-              <button
-                onClick={() => setShowChat(false)}
-                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
-
-            <div 
-              ref={chatContainerRef}
-              className="h-64 overflow-y-auto mb-4 space-y-3 p-2"
-            >
-              {chatMessages.map((message) => (
-                <div
-                  key={message._id}
-                  className={`flex ${message.sender === playerName ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
-                      message.sender === playerName
-                        ? 'bg-purple-500 text-white rounded-br-none'
-                        : 'bg-gray-100 text-gray-800 rounded-bl-none'
-                    }`}
-                  >
-                    <p className="text-sm font-medium">{message.sender}</p>
-                    <p className="text-sm">{message.content}</p>
-                    <p className="text-xs opacity-70 mt-1">
-                      {new Date(message.timestamp).toLocaleTimeString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              
-              {typingUsers.length > 0 && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-2xl rounded-bl-none">
-                    <p className="text-sm italic">
-                      {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
-                    </p>
-                  </div>
-                </div>
-              )}
-              
-              <div ref={messagesEndRef} />
-            </div>
-
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => {
-                  setNewMessage(e.target.value);
-                  handleTyping();
-                }}
-                onBlur={handleStopTyping}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    sendMessage();
-                    handleStopTyping();
-                  }
-                }}
-                placeholder="Type a message..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-              <button
-                onClick={sendMessage}
-                className="px-4 py-2 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors"
-              >
-                <Send className="w-5 h-5" />
-              </button>
-            </div>
+        {error && (
+          <div className="bg-red-500/20 border border-red-500/30 rounded-2xl p-4 text-white text-center mb-6">
+            {error}
           </div>
         )}
       </div>
@@ -599,79 +552,79 @@ const Compatibility: React.FC = () => {
   );
 
   const renderQuestion = (question: Question) => (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 p-4">
+      <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-6 border border-white/20">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">Question {currentQuestion + 1}</h1>
-              <p className="text-gray-600">of {questions.length}</p>
-            </div>
-            <div className="text-right">
-              <div className="flex items-center gap-2 text-orange-500 mb-1">
-                <Clock className="w-5 h-5" />
-                <span className="font-semibold">{timeLeft}s</span>
-              </div>
-              <div className="w-32 bg-gray-200 rounded-full h-2">
+              <h1 className="text-3xl font-bold text-white mb-2">
+                Question {currentQuestion + 1} of {questions.length}
+              </h1>
+              <div className="w-48 bg-white/20 rounded-full h-3">
                 <div 
-                  className="bg-green-500 h-2 rounded-full transition-all duration-1000"
+                  className="bg-green-400 h-3 rounded-full transition-all duration-1000 shadow-lg"
+                  style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
+                />
+              </div>
+            </div>
+            <div className="text-center lg:text-right">
+              <div className="flex items-center gap-3 text-white mb-3 justify-center lg:justify-end">
+                <Clock className="w-7 h-7" />
+                <span className="text-2xl font-bold">{timeLeft}s</span>
+              </div>
+              <div className="w-48 bg-white/20 rounded-full h-2 mx-auto lg:mx-0">
+                <div 
+                  className="bg-orange-400 h-2 rounded-full transition-all duration-1000"
                   style={{ width: `${(timeLeft / 30) * 100}%` }}
                 />
               </div>
             </div>
           </div>
 
-          {/* Progress Bar */}
-          <div className="mb-6">
-            <div className="flex justify-between text-sm text-gray-600 mb-2">
-              <span>Progress</span>
-              <span>{Math.round(((currentQuestion + 1) / questions.length) * 100)}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div 
-                className="bg-purple-500 h-3 rounded-full transition-all duration-500"
-                style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Question */}
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4 text-center">
+          {/* Question Card */}
+          <div className="bg-white/5 border border-white/20 rounded-2xl p-8 mb-8">
+            <h2 className="text-2xl lg:text-3xl font-bold text-white text-center leading-relaxed">
               {question.text}
             </h2>
-            
-            {question.type === 'scale' && question.options && (
-              <div className="space-y-3">
-                {question.options.map((option, index) => (
-                  <button
-                    key={index}
-                    onClick={() => submitAnswer(index)}
-                    className="w-full p-4 text-left bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 font-semibold">
-                        {index + 1}
-                      </div>
-                      <span className="font-medium text-gray-800">{option}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
+          
+          {/* Options */}
+          {question.type === 'scale' && question.options && (
+            <div className="grid grid-cols-1 gap-4 max-w-2xl mx-auto">
+              {question.options.map((option, index) => (
+                <button
+                  key={index}
+                  onClick={() => submitAnswer(index)}
+                  className="w-full p-6 text-left bg-white/5 border-2 border-white/20 rounded-2xl hover:border-purple-300 hover:bg-white/10 transition-all duration-200 transform hover:scale-105 group"
+                >
+                  <div className="flex items-center gap-6">
+                    <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-white font-bold text-lg group-hover:bg-purple-500 transition-colors">
+                      {index + 1}
+                    </div>
+                    <span className="text-xl font-semibold text-white flex-1">{option}</span>
+                    <ChevronRight className="w-6 h-6 text-white/60 group-hover:text-white transform group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Players Progress */}
-          <div className="border-t pt-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Players Progress</h3>
-            <div className="space-y-2">
+          <div className="mt-12 pt-6 border-t border-white/20">
+            <h3 className="text-lg font-semibold text-white mb-4 text-center">Players Progress</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
               {players.map(player => (
-                <div key={player.name} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-800">{player.name}</span>
-                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                <div key={player.name} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-pink-400 rounded-xl flex items-center justify-center text-white font-semibold">
+                      {player.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-white font-medium">{player.name}</span>
+                  </div>
+                  <div className="w-24 bg-white/20 rounded-full h-3">
                     <div 
-                      className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                      className="bg-green-400 h-3 rounded-full transition-all duration-500"
                       style={{ width: `${playerProgress[player.name] || 0}%` }}
                     />
                   </div>
@@ -680,110 +633,104 @@ const Compatibility: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {/* Chat Toggle */}
-        <button
-          onClick={() => setShowChat(!showChat)}
-          className="fixed bottom-6 right-6 w-14 h-14 bg-purple-500 text-white rounded-full shadow-lg hover:bg-purple-600 transition-colors flex items-center justify-center"
-        >
-          <MessageCircle className="w-6 h-6" />
-        </button>
       </div>
-
-      {/* Chat Panel */}
-      {showChat && renderChatPanel()}
     </div>
   );
 
   const renderAdvancedSection = () => (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-teal-50 p-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-4">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-8 mb-6 border border-white/20">
           <div className="text-center mb-8">
-            <Sparkles className="w-12 h-12 text-purple-500 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Advanced Compatibility</h1>
-            <p className="text-gray-600">Dive deeper into your personality and preferences</p>
+            <Sparkles className="w-16 h-16 text-white mx-auto mb-4" />
+            <h1 className="text-4xl font-bold text-white mb-3">Advanced Compatibility</h1>
+            <p className="text-white/80 text-xl">Dive deeper into your personality and preferences</p>
           </div>
 
           {/* Progress */}
-          <div className="mb-8">
-            <div className="flex justify-between text-sm text-gray-600 mb-2">
+          <div className="max-w-2xl mx-auto mb-12">
+            <div className="flex justify-between text-white font-semibold mb-3">
               <span>Advanced Section Progress</span>
               <span>{advancedProgress}%</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
+            <div className="w-full bg-white/20 rounded-full h-4">
               <div 
-                className="bg-teal-500 h-3 rounded-full transition-all duration-500"
+                className="bg-gradient-to-r from-teal-400 to-cyan-400 h-4 rounded-full transition-all duration-500 shadow-lg"
                 style={{ width: `${advancedProgress}%` }}
               />
             </div>
           </div>
 
-          {/* Sections */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Sections Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {advancedQuestions && Object.entries(advancedQuestions).map(([section, data]) => (
               <button
                 key={section}
                 onClick={() => setCurrentAdvancedSection(section)}
-                className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${
+                className={`p-6 rounded-2xl border-2 text-left transition-all duration-200 transform hover:scale-105 ${
                   currentAdvancedSection === section
-                    ? 'border-purple-500 bg-purple-50'
-                    : 'border-gray-200 bg-white hover:border-purple-300'
+                    ? 'border-white bg-white/20 shadow-2xl'
+                    : 'border-white/20 bg-white/10 hover:border-white/40'
                 }`}
               >
-                <div className="flex items-center gap-3 mb-2">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                <div className="flex items-center gap-4 mb-4">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
                     currentAdvancedSection === section 
-                      ? 'bg-purple-500 text-white' 
-                      : 'bg-gray-100 text-gray-600'
+                      ? 'bg-white text-cyan-600' 
+                      : 'bg-white/10 text-white'
                   }`}>
                     {getSectionIcon(section)}
                   </div>
-                  <h3 className="font-semibold text-gray-800 capitalize">
+                  <h3 className="text-xl font-bold text-white capitalize flex-1">
                     {section.replace(/([A-Z])/g, ' $1').trim()}
                   </h3>
                 </div>
-                <p className="text-sm text-gray-600">
-                  {Object.keys(advancedAnswers[section] || {}).length > 0 
-                    ? 'Completed' 
-                    : 'Click to answer'
-                  }
+                <p className={`text-sm ${
+                  currentAdvancedSection === section ? 'text-white/90' : 'text-white/70'
+                }`}>
+                  {advancedAnswers[section] ? '✓ Completed' : 'Click to answer'}
                 </p>
               </button>
             ))}
           </div>
+
+          {/* Submit Button */}
+          <div className="text-center">
+            <button
+              onClick={submitFinal}
+              className="bg-gradient-to-r from-green-500 to-emerald-500 text-white py-5 px-12 rounded-2xl font-bold text-xl hover:from-green-600 hover:to-emerald-600 transition-all duration-200 transform hover:scale-105 shadow-2xl flex items-center gap-3 mx-auto"
+            >
+              <CheckCircle className="w-7 h-7" />
+              Complete Compatibility Test
+            </button>
+          </div>
         </div>
 
-        {/* Advanced Questions */}
+        {/* Advanced Questions Modal */}
         {currentAdvancedSection && advancedQuestions && (
-          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-            <div className="flex items-center gap-3 mb-6">
-              <button
-                onClick={() => setCurrentAdvancedSection('')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
-              </button>
-              <h2 className="text-xl font-bold text-gray-800 capitalize">
-                {currentAdvancedSection.replace(/([A-Z])/g, ' $1').trim()}
-              </h2>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-white/20">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setCurrentAdvancedSection('')}
+                    className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-colors border border-white/20"
+                  >
+                    <ArrowLeft className="w-6 h-6 text-white" />
+                  </button>
+                  <h2 className="text-2xl font-bold text-white capitalize">
+                    {currentAdvancedSection.replace(/([A-Z])/g, ' $1').trim()}
+                  </h2>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                {renderAdvancedQuestions(currentAdvancedSection, advancedQuestions[currentAdvancedSection])}
+              </div>
             </div>
-
-            {renderAdvancedQuestions(currentAdvancedSection, advancedQuestions[currentAdvancedSection])}
           </div>
         )}
-
-        {/* Submit Button */}
-        <div className="text-center">
-          <button
-            onClick={submitFinal}
-            className="bg-gradient-to-r from-green-500 to-teal-500 text-white py-4 px-8 rounded-xl font-semibold text-lg hover:from-green-600 hover:to-teal-600 transition-all duration-200 shadow-lg flex items-center gap-3 mx-auto"
-          >
-            <CheckCircle className="w-6 h-6" />
-            Complete Compatibility Test
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -792,9 +739,9 @@ const Compatibility: React.FC = () => {
     if (section === 'personalityTraits') {
       return (
         <div className="space-y-6">
-          <h3 className="text-lg font-semibold text-gray-800">{questions.question}</h3>
-          <div className="grid grid-cols-2 gap-3">
-            {questions.options.map((trait: string, index: number) => (
+          <h3 className="text-xl font-semibold text-white mb-6 text-center">{questions.question}</h3>
+          <div className="grid grid-cols-2 gap-4">
+            {questions.options.map((trait: string) => (
               <button
                 key={trait}
                 onClick={() => {
@@ -805,10 +752,10 @@ const Compatibility: React.FC = () => {
                   
                   submitAdvancedAnswer(section, { traits: newTraits });
                 }}
-                className={`p-3 rounded-xl border-2 text-center transition-all duration-200 ${
+                className={`p-4 rounded-2xl border-2 text-center transition-all duration-200 ${
                   (advancedAnswers[section]?.traits || []).includes(trait)
-                    ? 'border-purple-500 bg-purple-50 text-purple-700'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-purple-300'
+                    ? 'border-green-400 bg-green-500/20 text-white shadow-lg'
+                    : 'border-white/20 bg-white/5 text-white/80 hover:border-white/40'
                 }`}
               >
                 {trait}
@@ -819,14 +766,13 @@ const Compatibility: React.FC = () => {
       );
     }
 
-    // Render other sections similarly...
     return (
-      <div className="space-y-6">
+      <div className="space-y-8">
         {Object.entries(questions).map(([key, subQuestion]: [string, any]) => (
-          <div key={key} className="space-y-3">
-            <h4 className="font-medium text-gray-800">{subQuestion.question}</h4>
-            <div className="space-y-2">
-              {subQuestion.options.map((option: string, index: number) => (
+          <div key={key} className="space-y-4">
+            <h4 className="text-lg font-semibold text-white">{subQuestion.question}</h4>
+            <div className="grid grid-cols-1 gap-3">
+              {subQuestion.options.map((option: string) => (
                 <button
                   key={option}
                   onClick={() => {
@@ -835,10 +781,10 @@ const Compatibility: React.FC = () => {
                       [key]: option
                     });
                   }}
-                  className={`w-full p-3 text-left rounded-xl border-2 transition-all duration-200 ${
+                  className={`w-full p-4 text-left rounded-2xl border-2 transition-all duration-200 ${
                     advancedAnswers[section]?.[key] === option
-                      ? 'border-purple-500 bg-purple-50 text-purple-700'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-purple-300'
+                      ? 'border-purple-400 bg-purple-500/20 text-white shadow-lg'
+                      : 'border-white/20 bg-white/5 text-white/80 hover:border-white/40'
                   }`}
                 >
                   {option}
@@ -852,22 +798,27 @@ const Compatibility: React.FC = () => {
   };
 
   const renderWaitingScreen = () => (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 p-4">
-      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8 text-center">
-        <Clock className="w-16 h-16 text-orange-500 mx-auto mb-6 animate-pulse" />
-        <h1 className="text-2xl font-bold text-gray-800 mb-4">Waiting for Players</h1>
-        <p className="text-gray-600 mb-6">
+    <div className="min-h-screen bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-8 text-center border border-white/20">
+        <Clock className="w-20 h-20 text-white mx-auto mb-6 animate-pulse" />
+        <h1 className="text-3xl font-bold text-white mb-4">Waiting for Players</h1>
+        <p className="text-white/80 text-lg mb-8">
           Waiting for {waitingForPlayers.join(', ')} to complete the test...
         </p>
         
         <div className="space-y-4">
           {players.map(player => (
-            <div key={player.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-              <span className="font-medium text-gray-800">{player.name}</span>
+            <div key={player.name} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-r from-purple-400 to-pink-400 rounded-2xl flex items-center justify-center text-white font-semibold">
+                  {player.name.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-white font-semibold text-lg">{player.name}</span>
+              </div>
               {submissionStatus[player.name] ? (
-                <CheckCircle className="w-6 h-6 text-green-500" />
+                <CheckCircle className="w-8 h-8 text-green-400" />
               ) : (
-                <Clock className="w-6 h-6 text-orange-500 animate-pulse" />
+                <Clock className="w-8 h-8 text-amber-400 animate-pulse" />
               )}
             </div>
           ))}
@@ -880,26 +831,26 @@ const Compatibility: React.FC = () => {
     if (!results) return null;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
-        <div className="max-w-4xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-red-600 p-4">
+        <div className="max-w-6xl mx-auto">
           {/* Header */}
-          <div className="bg-white rounded-2xl shadow-lg p-8 text-center mb-6">
-            <div className="w-24 h-24 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Trophy className="w-12 h-12 text-white" />
+          <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-8 text-center mb-6 border border-white/20">
+            <div className="w-32 h-32 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center mx-auto mb-8 shadow-2xl">
+              <Trophy className="w-16 h-16 text-white" />
             </div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">Compatibility Results</h1>
-            <p className="text-xl text-gray-600 mb-6">{results.matchLevel}</p>
+            <h1 className="text-5xl font-bold text-white mb-3">Compatibility Results</h1>
+            <p className="text-2xl text-white/80 mb-8">{results.matchLevel}</p>
             
             {/* Score Circle */}
-            <div className="relative inline-block mb-8">
-              <div className="w-48 h-48 rounded-full border-8 border-gray-200 flex items-center justify-center">
+            <div className="relative inline-block mb-12">
+              <div className="w-64 h-64 rounded-full border-8 border-white/20 flex items-center justify-center shadow-2xl">
                 <div className="text-center">
-                  <div className="text-5xl font-bold text-purple-600">{results.score}%</div>
-                  <div className="text-sm text-gray-600">Compatibility Score</div>
+                  <div className="text-6xl font-bold text-white">{results.score}%</div>
+                  <div className="text-xl text-white/80 mt-2">Compatibility Score</div>
                 </div>
               </div>
               <div 
-                className="absolute top-0 left-0 w-48 h-48 rounded-full border-8 border-transparent border-t-purple-500 border-r-pink-500 transform -rotate-45"
+                className="absolute top-0 left-0 w-64 h-64 rounded-full border-8 border-transparent border-t-purple-300 border-r-pink-300 transform -rotate-45"
                 style={{
                   clipPath: `conic-gradient(transparent 0%, transparent ${100 - results.score}%, purple ${100 - results.score}%, pink 100%)`
                 }}
@@ -907,17 +858,17 @@ const Compatibility: React.FC = () => {
             </div>
 
             {/* Breakdown */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mb-12 max-w-4xl mx-auto">
               {Object.entries(results.breakdown).map(([category, score]) => (
                 <div key={category} className="text-center">
-                  <div className="w-16 h-16 mx-auto mb-2 relative">
+                  <div className="w-20 h-20 mx-auto mb-3 relative">
                     <svg className="w-full h-full" viewBox="0 0 36 36">
                       <path
                         d="M18 2.0845
                           a 15.9155 15.9155 0 0 1 0 31.831
                           a 15.9155 15.9155 0 0 1 0 -31.831"
                         fill="none"
-                        stroke="#eee"
+                        stroke="#ffffff40"
                         strokeWidth="3"
                       />
                       <path
@@ -931,10 +882,10 @@ const Compatibility: React.FC = () => {
                       />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-sm font-bold text-gray-800">{score}%</span>
+                      <span className="text-lg font-bold text-white">{score}%</span>
                     </div>
                   </div>
-                  <p className="text-xs font-medium text-gray-700 capitalize">
+                  <p className="text-sm font-semibold text-white capitalize">
                     {category}
                   </p>
                 </div>
@@ -942,26 +893,26 @@ const Compatibility: React.FC = () => {
             </div>
 
             {/* Insights */}
-            <div className="mb-8">
-              <h3 className="text-xl font-semibold text-gray-800 mb-4">Key Insights</h3>
-              <div className="space-y-3">
+            <div className="mb-12">
+              <h3 className="text-3xl font-bold text-white mb-8">Key Insights</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
                 {results.insights.map((insight, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 bg-blue-50 rounded-xl">
-                    <Sparkles className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
-                    <p className="text-gray-800 text-left">{insight}</p>
+                  <div key={index} className="flex items-start gap-4 p-6 bg-white/5 rounded-2xl border border-white/10">
+                    <Sparkles className="w-6 h-6 text-purple-300 mt-1 flex-shrink-0" />
+                    <p className="text-white text-lg text-left">{insight}</p>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Recommendations */}
-            <div>
-              <h3 className="text-xl font-semibold text-gray-800 mb-4">Recommendations</h3>
-              <div className="space-y-3">
+            <div className="max-w-4xl mx-auto">
+              <h3 className="text-3xl font-bold text-white mb-8">Recommendations</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {results.recommendations.map((recommendation, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 bg-green-50 rounded-xl">
-                    <Target className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                    <p className="text-gray-800 text-left">{recommendation}</p>
+                  <div key={index} className="flex items-start gap-4 p-6 bg-white/5 rounded-2xl border border-white/10">
+                    <Target className="w-6 h-6 text-green-300 mt-1 flex-shrink-0" />
+                    <p className="text-white text-lg text-left">{recommendation}</p>
                   </div>
                 ))}
               </div>
@@ -969,29 +920,34 @@ const Compatibility: React.FC = () => {
           </div>
 
           {/* Action Buttons */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <button
               onClick={() => window.location.reload()}
-              className="p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 transition-colors text-center"
+              className="p-6 bg-white/10 border-2 border-white/20 rounded-2xl hover:border-white/40 transition-all duration-200 transform hover:scale-105 text-center group"
             >
-              <ArrowLeft className="w-6 h-6 mx-auto mb-2 text-gray-600" />
-              <span className="font-medium text-gray-800">New Test</span>
+              <ArrowLeft className="w-8 h-8 text-white mx-auto mb-3 group-hover:-translate-x-1 transition-transform" />
+              <span className="text-white font-semibold text-lg">New Test</span>
             </button>
             
             <button
-              onClick={() => {/* Implement share functionality */}}
-              className="p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 transition-colors text-center"
+              onClick={() => navigator.clipboard.writeText(window.location.href)}
+              className="p-6 bg-white/10 border-2 border-white/20 rounded-2xl hover:border-white/40 transition-all duration-200 transform hover:scale-105 text-center group"
             >
-              <Share2 className="w-6 h-6 mx-auto mb-2 text-gray-600" />
-              <span className="font-medium text-gray-800">Share Results</span>
+              <Share2 className="w-8 h-8 text-white mx-auto mb-3" />
+              <span className="text-white font-semibold text-lg">Share Results</span>
             </button>
             
             <button
-              onClick={() => {/* Implement screenshot functionality */}}
-              className="p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 transition-colors text-center"
+              onClick={() => {
+                // Implement screenshot functionality
+                const element = document.querySelector('.bg-white\\/10');
+                // You can use html2canvas or similar library for actual screenshot
+                alert('Screenshot functionality would be implemented here');
+              }}
+              className="p-6 bg-white/10 border-2 border-white/20 rounded-2xl hover:border-white/40 transition-all duration-200 transform hover:scale-105 text-center group"
             >
-              <Download className="w-6 h-6 mx-auto mb-2 text-gray-600" />
-              <span className="font-medium text-gray-800">Save Results</span>
+              <Download className="w-8 h-8 text-white mx-auto mb-3" />
+              <span className="text-white font-semibold text-lg">Save Results</span>
             </button>
           </div>
         </div>
@@ -999,101 +955,19 @@ const Compatibility: React.FC = () => {
     );
   };
 
-  const renderChatPanel = () => (
-    <div className="fixed bottom-20 right-6 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200">
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-800">Game Chat</h3>
-          <button
-            onClick={() => setShowChat(false)}
-            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X className="w-4 h-4 text-gray-600" />
-          </button>
-        </div>
-      </div>
-
-      <div className="h-64 overflow-y-auto p-4 space-y-3">
-        {chatMessages.map((message) => (
-          <div
-            key={message._id}
-            className={`flex ${message.sender === playerName ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-xs px-3 py-2 rounded-2xl ${
-                message.sender === playerName
-                  ? 'bg-purple-500 text-white rounded-br-none'
-                  : 'bg-gray-100 text-gray-800 rounded-bl-none'
-              }`}
-            >
-              <p className="text-xs font-medium opacity-80">{message.sender}</p>
-              <p className="text-sm">{message.content}</p>
-              <p className="text-xs opacity-70 mt-1">
-                {new Date(message.timestamp).toLocaleTimeString([], { 
-                  hour: '2-digit', 
-                  minute: '2-digit' 
-                })}
-              </p>
-            </div>
-          </div>
-        ))}
-        
-        {typingUsers.length > 0 && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 text-gray-800 px-3 py-2 rounded-2xl rounded-bl-none">
-              <p className="text-sm italic">
-                {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
-              </p>
-            </div>
-          </div>
-        )}
-        
-        <div ref={messagesEndRef} />
-      </div>
-
-      <div className="p-4 border-t border-gray-200">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => {
-              setNewMessage(e.target.value);
-              handleTyping();
-            }}
-            onBlur={handleStopTyping}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') {
-                sendMessage();
-                handleStopTyping();
-              }
-            }}
-            placeholder="Type a message..."
-            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          />
-          <button
-            onClick={sendMessage}
-            className="px-3 py-2 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
   const getSectionIcon = (section: string) => {
     const icons: { [key: string]: React.ReactNode } = {
-      personalityTraits: <Star className="w-5 h-5" />,
-      lifestyle: <Heart className="w-5 h-5" />,
-      communication: <MessageCircle className="w-5 h-5" />,
-      interests: <Sparkles className="w-5 h-5" />,
-      values: <Target className="w-5 h-5" />
+      personalityTraits: <Star className="w-7 h-7" />,
+      lifestyle: <Heart className="w-7 h-7" />,
+      communication: <MessageCircle className="w-7 h-7" />,
+      interests: <Sparkles className="w-7 h-7" />,
+      values: <Target className="w-7 h-7" />
     };
-    return icons[section] || <Star className="w-5 h-5" />;
+    return icons[section] || <Star className="w-7 h-7" />;
   };
 
   // Main render logic
-  if (!roomId) {
+  if (!roomId || !socket?.connected) {
     return renderLobby();
   }
 
@@ -1118,20 +992,13 @@ const Compatibility: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-purple-500 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading...</p>
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-6"></div>
+        <p className="text-white text-xl">Loading game...</p>
       </div>
     </div>
   );
 };
-
-// Helper component for crown icon
-const Crown: React.FC<{ className?: string }> = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 2L8 7 3 4 5 14 12 12 19 14 21 4 16 7 12 2Z"/>
-  </svg>
-);
 
 export default Compatibility;
