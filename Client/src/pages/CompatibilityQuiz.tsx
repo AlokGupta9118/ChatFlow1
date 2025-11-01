@@ -106,7 +106,7 @@ const Compatibility: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isHost, setIsHost] = useState<boolean>(false);
   const [gameStarted, setGameStarted] = useState<boolean>(false);
-  const [gameStatus, setGameStatus] = useState<'waiting' | 'playing' | 'advanced' | 'results' | 'waiting-for-players'>('waiting');
+  const [gameStatus, setGameStatus] = useState<'lobby' | 'waiting' | 'playing' | 'advanced' | 'results' | 'waiting-for-players'>('lobby');
   
   // Game state
   const [currentQuestion, setCurrentQuestion] = useState<number>(0);
@@ -158,6 +158,7 @@ const Compatibility: React.FC = () => {
       setAdvancedQuestions(room.advancedQuestions || null);
       setError('');
       setLoading(false);
+      setGameStatus('waiting'); // Move to waiting room after creation
     };
 
     const handleRoomJoined = (room: any) => {
@@ -169,6 +170,7 @@ const Compatibility: React.FC = () => {
       setAdvancedQuestions(room.advancedQuestions || null);
       setError('');
       setLoading(false);
+      setGameStatus('waiting'); // Move to waiting room after joining
     };
 
     const handleUpdatePlayers = (updatedPlayers: Player[]) => {
@@ -236,6 +238,8 @@ const Compatibility: React.FC = () => {
       console.error('Join error:', errorMsg);
       setError(errorMsg);
       setLoading(false);
+      // Stay in lobby on error
+      setGameStatus('lobby');
     };
 
     const handleStartError = (errorMsg: string) => {
@@ -340,6 +344,17 @@ const Compatibility: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const leaveRoom = () => {
+    if (roomId) {
+      socket?.emit('leave-room', roomId);
+    }
+    setRoomId('');
+    setPlayers([]);
+    setGameStarted(false);
+    setGameStatus('lobby');
+    setError('');
+  };
+
   // Game actions
   const submitAnswer = (answer: any) => {
     socket?.emit('compatibility-answer-submitted', {
@@ -422,7 +437,7 @@ const Compatibility: React.FC = () => {
 
           <div>
             <label className="block text-white text-sm font-semibold mb-2">
-              Room ID
+              Room ID (to join existing room)
             </label>
             <input
               type="text"
@@ -445,7 +460,7 @@ const Compatibility: React.FC = () => {
           
           <button
             onClick={joinRoom}
-            disabled={loading}
+            disabled={loading || !roomId.trim()}
             className="w-full bg-transparent border-2 border-white text-white py-3 rounded-xl font-bold hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
           >
             {loading ? 'Joining Room...' : 'Join Room'}
@@ -463,7 +478,7 @@ const Compatibility: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
               <button 
-                onClick={() => window.location.reload()}
+                onClick={leaveRoom}
                 className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all duration-200 border border-white/20"
               >
                 <ArrowLeft className="w-5 h-5 text-white" />
@@ -668,7 +683,7 @@ const Compatibility: React.FC = () => {
 
         {/* Back Button */}
         <button 
-          onClick={() => window.location.reload()}
+          onClick={leaveRoom}
           className="fixed bottom-6 left-6 p-3 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -749,7 +764,7 @@ const Compatibility: React.FC = () => {
 
         {/* Back Button */}
         <button 
-          onClick={() => window.location.reload()}
+          onClick={leaveRoom}
           className="fixed bottom-6 left-6 p-3 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -770,6 +785,12 @@ const Compatibility: React.FC = () => {
                   <h2 className="text-lg font-bold text-white capitalize">
                     {currentAdvancedSection.replace(/([A-Z])/g, ' $1').trim()}
                   </h2>
+                  <button
+                    onClick={() => setCurrentAdvancedSection('')}
+                    className="ml-auto p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
                 </div>
               </div>
               
@@ -874,7 +895,7 @@ const Compatibility: React.FC = () => {
 
         {/* Back Button */}
         <button 
-          onClick={() => window.location.reload()}
+          onClick={leaveRoom}
           className="mt-6 p-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors flex items-center gap-2 mx-auto"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -979,7 +1000,7 @@ const Compatibility: React.FC = () => {
           {/* Action Buttons */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
-              onClick={() => window.location.reload()}
+              onClick={leaveRoom}
               className="p-4 bg-white/10 border-2 border-white/20 rounded-xl hover:border-white/40 transition-all duration-200 text-center group"
             >
               <ArrowLeft className="w-6 h-6 text-white mx-auto mb-2 group-hover:-translate-x-1 transition-transform" />
@@ -1023,8 +1044,8 @@ const Compatibility: React.FC = () => {
   // Main render logic
   return (
     <div ref={containerRef} className="h-screen overflow-y-auto bg-gray-900">
-      {!roomId || !socket?.connected ? renderLobby() :
-       !gameStarted ? renderWaitingRoom() :
+      {gameStatus === 'lobby' ? renderLobby() :
+       gameStatus === 'waiting' ? renderWaitingRoom() :
        gameStatus === 'results' ? renderResults() :
        gameStatus === 'waiting-for-players' ? renderWaitingForPlayers() :
        gameStatus === 'advanced' ? renderAdvancedSection() :
