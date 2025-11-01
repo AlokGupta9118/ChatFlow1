@@ -68,7 +68,7 @@ router.get('/profile/:userId', protect, async (req, res) => {
     const user = await User.findById(req.params.userId)
       .select('-password -refreshTokens -__v')
       .populate('friends', 'name profilePicture status')
-      .lean(); // Use lean() for better performance
+      .lean();
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -79,18 +79,23 @@ router.get('/profile/:userId', protect, async (req, res) => {
       return res.status(403).json({ message: 'You are blocked from viewing this profile' });
     }
 
-    // Convert profile picture to absolute URL if it's a relative path
-    let profilePicture = user.profilePicture;
-    if (profilePicture && !profilePicture.startsWith('http')) {
-      profilePicture = `${req.protocol}://${req.get('host')}${profilePicture}`;
-    }
+    // Force HTTPS for image URLs
+    const getAbsoluteUrl = (path) => {
+      if (!path) return null;
+      if (path.startsWith('http')) {
+        // Replace http with https
+        return path.replace('http://', 'https://');
+      }
+      // For relative paths, use HTTPS
+      return `https://${req.get('host')}${path}`;
+    };
 
-    // Also convert friends' profile pictures
+    let profilePicture = getAbsoluteUrl(user.profilePicture);
+
+    // Also convert friends' profile pictures to HTTPS
     const friendsWithAbsoluteUrls = (user.friends || []).map(friend => ({
       ...friend,
-      profilePicture: friend.profilePicture && !friend.profilePicture.startsWith('http') 
-        ? `${req.protocol}://${req.get('host')}${friend.profilePicture}`
-        : friend.profilePicture
+      profilePicture: getAbsoluteUrl(friend.profilePicture)
     }));
 
     res.json({
@@ -107,7 +112,7 @@ router.get('/profile/:userId', protect, async (req, res) => {
         status: user.status || 'offline',
         lastSeen: user.lastSeen || user.updatedAt,
         friends: friendsWithAbsoluteUrls,
-        stories: [], // Empty array since stories field doesn't exist in model
+        stories: [],
         isOnline: user.status === 'online',
         joinedAt: user.createdAt
       }

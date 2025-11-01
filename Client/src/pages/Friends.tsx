@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+
 import { motion } from "framer-motion";
 import { 
   UserPlus, 
@@ -25,7 +26,7 @@ import {
   Mail
 } from "lucide-react";
 import { getToken } from "@/utils/getToken";
-
+import { getSafeImageUrl } from '@/utils/urlUtils';
 interface IUser {
   _id: string;
   name: string;
@@ -138,13 +139,13 @@ const fetchUserProfile = async (userId: string) => {
     };
 
     const processedUser = {
-      ...userData,
-      profilePicture: convertToAbsoluteUrl(userData.profilePicture),
-      friends: (userData.friends || []).map((friend: any) => ({
-        ...friend,
-        profilePicture: convertToAbsoluteUrl(friend.profilePicture)
-      }))
-    };
+  ...userData,
+  profilePicture: getSafeImageUrl(userData.profilePicture),
+  friends: (userData.friends || []).map((friend: any) => ({
+    ...friend,
+    profilePicture: getSafeImageUrl(friend.profilePicture)
+  }))
+};
 
     console.log('Processed User:', processedUser); // Debug log
     setSelectedUser(processedUser);
@@ -351,10 +352,10 @@ const fetchUserProfile = async (userId: string) => {
         <div className="flex items-center gap-4">
           <div className="relative">
             <img
-              src={user.profilePicture || "/default-avatar.png"}
-              alt={user.name}
-              className="w-12 h-12 rounded-2xl border-2 border-white/20 shadow-lg object-cover"
-            />
+  src={getSafeImageUrl(user.profilePicture)}
+  alt={user.name}
+  className="w-12 h-12 rounded-2xl border-2 border-white/20 shadow-lg object-cover"
+/>
             {status === "friend" && (
               <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-1 border-2 border-white">
                 <CheckCircle className="w-3 h-3 text-white" />
@@ -412,11 +413,11 @@ const fetchUserProfile = async (userId: string) => {
                 </button>
                 
                 <div className="absolute -bottom-12 left-8">
-                  <img
-                    src={selectedUser.profilePicture || "/default-avatar.png"}
-                    alt={selectedUser.name}
-                    className="w-24 h-24 rounded-3xl border-4 border-white/20 shadow-2xl object-cover"
-                  />
+                 <img
+  src={getSafeImageUrl(selectedUser.profilePicture)}
+  alt={selectedUser.name}
+  className="w-24 h-24 rounded-3xl border-4 border-white/20 shadow-2xl object-cover"
+/>
                 </div>
               </div>
             
@@ -522,11 +523,11 @@ const fetchUserProfile = async (userId: string) => {
                     <div className="grid grid-cols-3 gap-3">
                       {selectedUser.friends.slice(0, 6).map(friend => (
                         <div key={friend._id} className="text-center">
-                          <img
-                            src={friend.profilePicture || "/default-avatar.png"}
-                            alt={friend.name}
-                            className="w-12 h-12 rounded-2xl mx-auto mb-2 object-cover"
-                          />
+                         <img
+  src={getSafeImageUrl(selectedUser.profilePicture)}
+  alt={selectedUser.name}
+  className="w-24 h-24 rounded-3xl border-4 border-white/20 shadow-2xl object-cover"
+/>
                           <span className="text-white/70 text-sm block truncate">{friend.name}</span>
                         </div>
                       ))}
