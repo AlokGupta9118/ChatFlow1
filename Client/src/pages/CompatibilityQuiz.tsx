@@ -1,42 +1,82 @@
-// components/games/CompatibilityGame.tsx
+// components/Compatibility.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/router';
 import { io, Socket } from 'socket.io-client';
+import { 
+  Users, 
+  Clock, 
+  CheckCircle, 
+  X, 
+  ArrowLeft,
+  Share2,
+  Download,
+  Heart,
+  Star,
+  Target,
+  Sparkles,
+  Trophy,
+  ChevronRight,
+  Crown,
+  Copy,
+  AlertCircle
+} from 'lucide-react';
+
+const DEFAULT_SOCKET_URL = `${import.meta.env.VITE_API_URL}`;
 
 interface Player {
   name: string;
   socketId: string;
   isHost: boolean;
-  avatar?: string;
 }
 
 interface Question {
   id: number;
   text: string;
-  type: string;
+  type: 'scale';
   options: string[];
 }
 
 interface AdvancedQuestions {
-  personalityTraits: any;
-  lifestyle: any;
-  communication: any;
-  interests: any;
-  values: any;
-}
-
-interface Room {
-  roomId: string;
-  players: Player[];
-  status: string;
-  gameType: string;
-  gameStarted: boolean;
-  currentQuestion: number;
-  questions: Question[];
-  advancedQuestions: AdvancedQuestions;
-  playerProgress: { [key: string]: number };
-  answers: { [key: string]: any };
-  submissionStatus: { [key: string]: boolean };
+  personalityTraits: {
+    question: string;
+    type: string;
+    options: string[];
+  };
+  lifestyle: {
+    sleepSchedule: {
+      question: string;
+      options: string[];
+    };
+    socialActivity: {
+      question: string;
+      options: string[];
+    };
+  };
+  communication: {
+    style: {
+      question: string;
+      options: string[];
+    };
+    conflictResolution: {
+      question: string;
+      options: string[];
+    };
+  };
+  interests: {
+    hobbies: {
+      question: string;
+      options: string[];
+    };
+  };
+  values: {
+    family: {
+      question: string;
+      options: string[];
+    };
+    career: {
+      question: string;
+      options: string[];
+    };
+  };
 }
 
 interface CompatibilityResults {
@@ -49,1157 +89,968 @@ interface CompatibilityResults {
     interests: number;
   };
   insights: string[];
-  advancedFactors: any;
-  playerAnswers: any;
   matchLevel: string;
   recommendations: string[];
 }
 
-const CompatibilityGame: React.FC = () => {
-  const router = useRouter();
+type GameStatus = 'lobby' | 'waiting' | 'playing' | 'advanced' | 'waiting-for-players' | 'results';
+
+const Compatibility: React.FC = () => {
+  // Connection & Room State
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [currentView, setCurrentView] = useState<'lobby' | 'game' | 'results' | 'waiting'>('lobby');
-  const [room, setRoom] = useState<Room | null>(null);
-  const [playerName, setPlayerName] = useState('');
-  const [roomId, setRoomId] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [isJoining, setIsJoining] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [roomId, setRoomId] = useState<string>('');
+  const [playerName, setPlayerName] = useState<string>('');
+  const [gameStatus, setGameStatus] = useState<GameStatus>('lobby');
   
-  // Game state
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<any>({ regular: [], advancedAnswers: {} });
-  const [playerProgress, setPlayerProgress] = useState(0);
-  const [otherPlayerProgress, setOtherPlayerProgress] = useState(0);
-  const [waitingForPlayers, setWaitingForPlayers] = useState<string[]>([]);
+  // Players & Game State
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [isHost, setIsHost] = useState<boolean>(false);
+  const [currentQuestion, setCurrentQuestion] = useState<number>(0);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [advancedQuestions, setAdvancedQuestions] = useState<AdvancedQuestions | null>(null);
+  const [advancedAnswers, setAdvancedAnswers] = useState<any>({});
+  const [playerProgress, setPlayerProgress] = useState<{[key: string]: number}>({});
+  const [submissionStatus, setSubmissionStatus] = useState<{[key: string]: boolean}>({});
+  const [hasAnsweredCurrent, setHasAnsweredCurrent] = useState<boolean>(false);
+  
+  // UI State
+  const [timeLeft, setTimeLeft] = useState<number>(30);
   const [results, setResults] = useState<CompatibilityResults | null>(null);
-  const [timeLeft, setTimeLeft] = useState(30);
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingUser, setTypingUser] = useState('');
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [waitingForPlayers, setWaitingForPlayers] = useState<string[]>([]);
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [copied, setCopied] = useState<boolean>(false);
+  const [currentAdvancedSection, setCurrentAdvancedSection] = useState<string>('');
+  const [advancedProgress, setAdvancedProgress] = useState<number>(0);
+  const [isSubmittingFinal, setIsSubmittingFinal] = useState<boolean>(false);
 
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Initialize socket connection
   useEffect(() => {
-    // Initialize socket connection
-    const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001');
+    const newSocket = io(DEFAULT_SOCKET_URL, {
+      transports: ['websocket']
+    });
+    
     setSocket(newSocket);
-
-    // Load player name from localStorage
-    const savedName = localStorage.getItem('playerName');
-    if (savedName) {
-      setPlayerName(savedName);
-    }
 
     return () => {
       newSocket.disconnect();
     };
   }, []);
 
+  // Socket event listeners
   useEffect(() => {
     if (!socket) return;
 
     // Room events
-    socket.on('compatibility-room-created', (roomData: Room) => {
-      setRoom(roomData);
-      setCurrentView('lobby');
-      setSuccess('Room created successfully!');
-      setIsCreating(false);
-    });
+    const handleRoomCreated = (room: any) => {
+      setRoomId(room.roomId);
+      setPlayers(room.players);
+      setIsHost(true);
+      setQuestions(room.questions || []);
+      setAdvancedQuestions(room.advancedQuestions || null);
+      setError('');
+      setLoading(false);
+      setGameStatus('waiting');
+    };
 
-    socket.on('compatibility-room-joined', (roomData: Room) => {
-      setRoom(roomData);
-      setCurrentView('lobby');
-      setSuccess('Joined room successfully!');
-      setIsJoining(false);
-    });
+    const handleRoomJoined = (room: any) => {
+      setRoomId(room.roomId);
+      setPlayers(room.players);
+      setIsHost(room.players.find((p: Player) => p.socketId === socket.id)?.isHost || false);
+      setQuestions(room.questions || []);
+      setAdvancedQuestions(room.advancedQuestions || null);
+      setError('');
+      setLoading(false);
+      setGameStatus('waiting');
+    };
 
-    socket.on('join-error', (errorMsg: string) => {
-      setError(errorMsg);
-      setIsCreating(false);
-      setIsJoining(false);
-    });
-
-    socket.on('compatibility-update-players', (players: Player[]) => {
-      if (room) {
-        setRoom({ ...room, players });
-      }
-    });
+    const handleUpdatePlayers = (updatedPlayers: Player[]) => {
+      setPlayers(updatedPlayers);
+    };
 
     // Game events
-    socket.on('compatibility-game-started', (data: any) => {
-      setCurrentView('game');
-      setCurrentQuestionIndex(0);
-      setTimeLeft(30);
-    });
-
-    socket.on('compatibility-next-question', (data: any) => {
-      setCurrentQuestionIndex(data.questionIndex);
-      setTimeLeft(data.timeLeft);
-    });
-
-    socket.on('compatibility-all-answered', (data: any) => {
-      setCurrentQuestionIndex(data.nextQuestionIndex);
-      setTimeLeft(data.timeLeft);
-    });
-
-    socket.on('compatibility-regular-completed', (data: any) => {
-      setCurrentView('advanced');
-    });
-
-    socket.on('compatibility-player-progress', (data: any) => {
-      if (data.player !== playerName) {
-        setOtherPlayerProgress(data.progress);
-      }
-    });
-
-    socket.on('compatibility-waiting-for-players', (data: any) => {
-      setWaitingForPlayers(data.waitingFor);
-      setCurrentView('waiting');
-    });
-
-    socket.on('compatibility-submission-update', (data: any) => {
-      // Update submission status
-    });
-
-    socket.on('compatibility-show-results', (resultsData: CompatibilityResults) => {
-      setResults(resultsData);
-      setCurrentView('results');
-    });
-
-    socket.on('compatibility-time-up', () => {
-      // Handle time up
-      if (currentQuestionIndex < (room?.questions.length || 0) - 1) {
-        handleNextQuestion();
-      }
-    });
-
-    // Chat events
-    socket.on('receive-chat-message', (message: any) => {
-      setChatMessages(prev => [...prev, message]);
-    });
-
-    socket.on('chat-history', (messages: any[]) => {
-      setChatMessages(messages);
-    });
-
-    socket.on('user-typing', (data: any) => {
-      if (data.userName !== playerName) {
-        setTypingUser(data.userName);
-        setIsTyping(data.isTyping);
-      }
-    });
-
-    // Cleanup on unmount
-    return () => {
-      socket.off('compatibility-room-created');
-      socket.off('compatibility-room-joined');
-      socket.off('join-error');
-      socket.off('compatibility-update-players');
-      socket.off('compatibility-game-started');
-      socket.off('compatibility-next-question');
-      socket.off('compatibility-all-answered');
-      socket.off('compatibility-regular-completed');
-      socket.off('compatibility-player-progress');
-      socket.off('compatibility-waiting-for-players');
-      socket.off('compatibility-submission-update');
-      socket.off('compatibility-show-results');
-      socket.off('compatibility-time-up');
-      socket.off('receive-chat-message');
-      socket.off('chat-history');
-      socket.off('user-typing');
+    const handleGameStarted = (data: any) => {
+      setGameStatus('playing');
+      setCurrentQuestion(data.currentQuestion || 0);
+      setTimeLeft(data.timeLeft || 30);
+      setHasAnsweredCurrent(false);
     };
-  }, [socket, room, playerName, currentQuestionIndex]);
 
+    const handleNextQuestion = (data: any) => {
+      setCurrentQuestion(data.questionIndex);
+      setTimeLeft(data.timeLeft);
+      setHasAnsweredCurrent(false);
+    };
+
+    const handleAllAnswered = (data: any) => {
+      setCurrentQuestion(data.nextQuestionIndex);
+      setTimeLeft(data.timeLeft);
+      setHasAnsweredCurrent(false);
+    };
+
+    const handleRegularCompleted = (data: any) => {
+      setAdvancedQuestions(data.advancedQuestions);
+      setGameStatus('advanced');
+    };
+
+    const handlePlayerProgress = (data: any) => {
+      setPlayerProgress(prev => ({
+        ...prev,
+        [data.player]: data.progress
+      }));
+    };
+
+    const handleWaitingForPlayers = (data: any) => {
+      setWaitingForPlayers(data.waitingFor);
+      setGameStatus('waiting-for-players');
+      setIsSubmittingFinal(false);
+    };
+
+    const handleShowResults = (resultsData: CompatibilityResults) => {
+      setResults(resultsData);
+      setGameStatus('results');
+      setIsSubmittingFinal(false);
+    };
+
+    const handleSubmissionUpdate = (data: any) => {
+      setSubmissionStatus(prev => ({
+        ...prev,
+        [data.player]: data.submitted
+      }));
+    };
+
+    // Error handling
+    const handleJoinError = (errorMsg: string) => {
+      setError(errorMsg);
+      setLoading(false);
+    };
+
+    const handleStartError = (errorMsg: string) => {
+      setError(errorMsg);
+    };
+
+    // Register event listeners
+    socket.on('compatibility-room-created', handleRoomCreated);
+    socket.on('compatibility-room-joined', handleRoomJoined);
+    socket.on('compatibility-update-players', handleUpdatePlayers);
+    socket.on('compatibility-game-started', handleGameStarted);
+    socket.on('compatibility-next-question', handleNextQuestion);
+    socket.on('compatibility-all-answered', handleAllAnswered);
+    socket.on('compatibility-regular-completed', handleRegularCompleted);
+    socket.on('compatibility-player-progress', handlePlayerProgress);
+    socket.on('compatibility-waiting-for-players', handleWaitingForPlayers);
+    socket.on('compatibility-show-results', handleShowResults);
+    socket.on('compatibility-submission-update', handleSubmissionUpdate);
+    socket.on('join-error', handleJoinError);
+    socket.on('start-error', handleStartError);
+
+    // Cleanup
+    return () => {
+      socket.off('compatibility-room-created', handleRoomCreated);
+      socket.off('compatibility-room-joined', handleRoomJoined);
+      socket.off('compatibility-update-players', handleUpdatePlayers);
+      socket.off('compatibility-game-started', handleGameStarted);
+      socket.off('compatibility-next-question', handleNextQuestion);
+      socket.off('compatibility-all-answered', handleAllAnswered);
+      socket.off('compatibility-regular-completed', handleRegularCompleted);
+      socket.off('compatibility-player-progress', handlePlayerProgress);
+      socket.off('compatibility-waiting-for-players', handleWaitingForPlayers);
+      socket.off('compatibility-show-results', handleShowResults);
+      socket.off('compatibility-submission-update', handleSubmissionUpdate);
+      socket.off('join-error', handleJoinError);
+      socket.off('start-error', handleStartError);
+    };
+  }, [socket]);
+
+  // Timer effect
   useEffect(() => {
-    // Auto-scroll chat to bottom
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [chatMessages]);
+    if (gameStatus !== 'playing' || timeLeft <= 0) return;
 
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [gameStatus, timeLeft]);
+
+  // Auto-scroll to top on screen changes
   useEffect(() => {
-    // Timer countdown
-    if (currentView === 'game' && timeLeft > 0) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-      return () => clearTimeout(timer);
-    } else if (timeLeft === 0 && currentView === 'game') {
-      // Auto-answer or move to next question
-      if (currentQuestionIndex < (room?.questions.length || 0) - 1) {
-        handleNextQuestion();
-      }
-    }
-  }, [timeLeft, currentView]);
+    containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [gameStatus, currentQuestion, currentAdvancedSection]);
 
+  // Room management
   const createRoom = () => {
     if (!playerName.trim()) {
       setError('Please enter your name');
       return;
     }
     
-    setIsCreating(true);
+    setLoading(true);
     setError('');
-    localStorage.setItem('playerName', playerName);
-    
     socket?.emit('create-compatibility-room', {
-      player: { name: playerName, avatar: '' }
+      player: { name: playerName.trim(), socketId: socket?.id }
     });
   };
 
   const joinRoom = () => {
-    if (!playerName.trim() || !roomId.trim()) {
-      setError('Please enter your name and room ID');
+    if (!playerName.trim()) {
+      setError('Please enter your name');
       return;
     }
-    
-    setIsJoining(true);
+    if (!roomId.trim()) {
+      setError('Please enter room ID');
+      return;
+    }
+
+    setLoading(true);
     setError('');
-    localStorage.setItem('playerName', playerName);
-    
     socket?.emit('join-compatibility-room', {
-      roomId: roomId.toUpperCase(),
-      player: { name: playerName, avatar: '' }
+      roomId: roomId.trim().toUpperCase(),
+      player: { name: playerName.trim(), socketId: socket?.id }
     });
   };
 
   const startGame = () => {
-    if (room) {
-      socket?.emit('start-compatibility-game', { roomId: room.roomId });
+    if (players.length !== 2) {
+      setError('Compatibility game requires exactly 2 players');
+      return;
     }
+    socket?.emit('start-compatibility-game', { roomId });
   };
 
-  const handleAnswer = (answer: number) => {
-    if (!room) return;
-
-    const currentQuestion = room.questions[currentQuestionIndex];
-    
-    // Store answer locally
-    const newAnswers = { ...answers };
-    if (!newAnswers.regular) newAnswers.regular = [];
-    newAnswers.regular[currentQuestionIndex] = {
-      questionIndex: currentQuestionIndex,
-      answer,
-      option: currentQuestion.options[answer]
-    };
-    setAnswers(newAnswers);
-
-    // Send to server
-    socket?.emit('compatibility-answer-submitted', {
-      roomId: room.roomId,
-      questionIndex: currentQuestionIndex,
-      answer
-    });
-
-    // Update progress
-    const progress = Math.round(((currentQuestionIndex + 1) / room.questions.length) * 100);
-    setPlayerProgress(progress);
-  };
-
-  const handleNextQuestion = () => {
-    if (room && currentQuestionIndex < room.questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-      setTimeLeft(30);
-    }
-  };
-
-  const handleAdvancedAnswer = (category: string, field: string, value: any) => {
-    const newAnswers = { ...answers };
-    if (!newAnswers.advancedAnswers) newAnswers.advancedAnswers = {};
-    if (!newAnswers.advancedAnswers[category]) newAnswers.advancedAnswers[category] = {};
-    
-    newAnswers.advancedAnswers[category][field] = value;
-    setAnswers(newAnswers);
-
-    // Send to server
-    socket?.emit('compatibility-advanced-answers', {
-      roomId: room?.roomId,
-      category,
-      answers: newAnswers.advancedAnswers[category]
-    });
-  };
-
-  const submitFinalAnswers = () => {
-    if (room) {
-      socket?.emit('compatibility-submit-final', { roomId: room.roomId });
-    }
-  };
-
-  const sendMessage = () => {
-    if (!newMessage.trim() || !room) return;
-
-    const message = {
-      sender: playerName,
-      senderId: socket?.id,
-      content: newMessage,
-      type: 'text'
-    };
-
-    socket?.emit('send-gamechat-message', {
-      roomId: room.roomId,
-      message,
-      chatType: 'game'
-    });
-
-    setNewMessage('');
-  };
-
-  const handleTyping = (isTyping: boolean) => {
-    if (room) {
-      if (isTyping) {
-        socket?.emit('typing', {
-          roomId: room.roomId,
-          userId: socket.id,
-          userName: playerName
-        });
-      } else {
-        socket?.emit('chat-typing-stop', {
-          roomId: room.roomId,
-          userId: socket.id
-        });
-      }
-    }
+  const copyRoomCode = () => {
+    navigator.clipboard.writeText(roomId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const leaveRoom = () => {
-    if (room) {
-      socket?.emit('leave-room', room.roomId);
+    if (roomId && socket) {
+      socket.emit('leave-room', roomId);
     }
-    setRoom(null);
-    setCurrentView('lobby');
-    setResults(null);
+    resetGame();
   };
 
-  const copyRoomId = () => {
-    if (room) {
-      navigator.clipboard.writeText(room.roomId);
-      setSuccess('Room ID copied to clipboard!');
-      setTimeout(() => setSuccess(''), 3000);
-    }
+  const resetGame = () => {
+    setRoomId('');
+    setPlayerName('');
+    setPlayers([]);
+    setIsHost(false);
+    setGameStatus('lobby');
+    setCurrentQuestion(0);
+    setQuestions([]);
+    setAdvancedQuestions(null);
+    setAdvancedAnswers({});
+    setPlayerProgress({});
+    setSubmissionStatus({});
+    setResults(null);
+    setWaitingForPlayers([]);
+    setError('');
+    setCurrentAdvancedSection('');
+    setAdvancedProgress(0);
+    setHasAnsweredCurrent(false);
+    setIsSubmittingFinal(false);
+  };
+
+  // Game actions
+  const submitAnswer = (answerIndex: number) => {
+    if (hasAnsweredCurrent) return;
+    
+    setHasAnsweredCurrent(true);
+    socket?.emit('compatibility-answer-submitted', {
+      roomId,
+      questionIndex: currentQuestion,
+      answer: answerIndex
+    });
+  };
+
+  const submitAdvancedAnswer = (category: string, answers: any) => {
+    const newAdvancedAnswers = {
+      ...advancedAnswers,
+      [category]: answers
+    };
+    setAdvancedAnswers(newAdvancedAnswers);
+
+    const completedSections = Object.keys(newAdvancedAnswers).length;
+    const progress = Math.round((completedSections / 5) * 100);
+    setAdvancedProgress(progress);
+
+    socket?.emit('compatibility-advanced-answers', {
+      roomId,
+      category,
+      answers
+    });
+  };
+
+  const submitFinal = () => {
+    setIsSubmittingFinal(true);
+    socket?.emit('compatibility-submit-final', { roomId });
   };
 
   const captureScreenshot = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
+    const resultText = `Compatibility Score: ${results?.score}% - ${results?.matchLevel}\nRoom: ${roomId}\nPlayers: ${players.map(p => p.name).join(' & ')}`;
+    console.log('Screenshot content:', resultText);
+    alert('Results copied to console! In a real app, this would save or share the results.');
   };
 
-  const handleScreenshotUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && room) {
-      // Here you would typically upload the file to your server
-      // and then emit a proof-uploaded event
-      console.log('Screenshot captured:', file.name);
-      // For now, we'll just show a success message
-      setSuccess('Screenshot captured successfully!');
-    }
-  };
-
-  // Render different views based on current state
-  const renderView = () => {
-    switch (currentView) {
-      case 'lobby':
-        return renderLobby();
-      case 'game':
-        return renderGame();
-      case 'advanced':
-        return renderAdvancedQuestions();
-      case 'waiting':
-        return renderWaitingScreen();
-      case 'results':
-        return renderResults();
-      default:
-        return renderMainMenu();
-    }
-  };
-
-  const renderMainMenu = () => (
-    <div className="min-h-screen bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">💕 Compatibility Test</h1>
-          <p className="text-gray-600">Discover your connection with friends!</p>
+  // UI Components
+  const renderLobby = () => (
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-6 border border-white/20">
+        <div className="text-center mb-6">
+          <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-white/30">
+            <Heart className="text-white w-10 h-10" />
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-2">Compatibility Test</h1>
+          <p className="text-white/80">Discover your connection with a friend</p>
         </div>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-white text-center text-sm flex items-center justify-center gap-2">
+            <AlertCircle className="w-4 h-4" />
             {error}
           </div>
         )}
 
-        {success && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-            {success}
-          </div>
-        )}
-
-        <div className="space-y-4">
+        <div className="space-y-4 mb-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-white text-sm font-semibold mb-2">
               Your Name
             </label>
             <input
               type="text"
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-transparent"
               placeholder="Enter your name"
             />
           </div>
 
-          <button
-            onClick={createRoom}
-            disabled={isCreating}
-            className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg hover:bg-purple-700 transition duration-200 disabled:opacity-50"
-          >
-            {isCreating ? 'Creating Room...' : 'Create New Room'}
-          </button>
-
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">Or join existing room</span>
-            </div>
-          </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Room ID
+            <label className="block text-white text-sm font-semibold mb-2">
+              Room ID (to join existing room)
             </label>
             <input
               type="text"
               value={roomId}
               onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent uppercase"
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-transparent font-mono uppercase"
               placeholder="Enter room code"
             />
           </div>
+        </div>
 
+        <div className="space-y-3">
+          <button
+            onClick={createRoom}
+            disabled={loading}
+            className="w-full bg-white text-purple-600 py-3 rounded-xl font-bold hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg"
+          >
+            {loading ? 'Creating Room...' : 'Create New Room'}
+          </button>
+          
           <button
             onClick={joinRoom}
-            disabled={isJoining}
-            className="w-full bg-pink-500 text-white py-3 px-4 rounded-lg hover:bg-pink-600 transition duration-200 disabled:opacity-50"
+            disabled={loading || !roomId.trim()}
+            className="w-full bg-white/20 text-white py-3 rounded-xl font-bold hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border border-white/30"
           >
-            {isJoining ? 'Joining...' : 'Join Room'}
+            {loading ? 'Joining Room...' : 'Join Room'}
           </button>
         </div>
       </div>
     </div>
   );
 
-  const renderLobby = () => (
-    <div className="min-h-screen bg-gradient-to-br from-purple-400 to-pink-500 p-4">
+  const renderWaitingRoom = () => (
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 p-4">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-800">Compatibility Test</h1>
-              <p className="text-gray-600">Room: {room?.roomId}</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={copyRoomId}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition duration-200"
-              >
-                📋 Copy Code
-              </button>
-              <button
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-6 mb-6 border border-white/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <button 
                 onClick={leaveRoom}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-200"
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all duration-200 border border-white/20"
               >
-                ❌ Leave
+                <ArrowLeft className="w-5 h-5 text-white" />
               </button>
+              <div>
+                <h1 className="text-2xl font-bold text-white">Compatibility Test</h1>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-white/80">Room:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-white">{roomId}</span>
+                    <button
+                      onClick={copyRoomCode}
+                      className="p-1 hover:bg-white/10 rounded transition-colors"
+                      title="Copy room code"
+                    >
+                      {copied ? (
+                        <CheckCircle className="w-4 h-4 text-green-400" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-white" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl border border-white/20">
+              <Users className="w-5 h-5 text-white" />
+              <span className="text-white font-semibold">{players.length}/2 Players</span>
             </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Players List */}
-          <div className="lg:col-span-2 bg-white rounded-2xl shadow-xl p-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Players ({room?.players.length}/2)</h2>
-            <div className="space-y-3">
-              {room?.players.map((player, index) => (
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-white mb-4 text-center">Waiting for Players</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl mx-auto">
+              {players.map((player) => (
                 <div
                   key={player.socketId}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold">
-                      {player.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-800">{player.name}</p>
-                      <p className="text-sm text-gray-500">
-                        {player.isHost ? 'Host' : 'Player'}
-                      </p>
-                    </div>
-                  </div>
-                  {player.isHost && (
-                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-                      👑 Host
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {room?.players.find(p => p.isHost)?.socketId === socket?.id && (
-              <button
-                onClick={startGame}
-                disabled={room?.players.length !== 2}
-                className="w-full mt-6 bg-green-500 text-white py-3 px-4 rounded-lg hover:bg-green-600 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {room?.players.length === 2 ? 'Start Game 🚀' : 'Waiting for 2nd Player...'}
-              </button>
-            )}
-          </div>
-
-          {/* Chat */}
-          <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Chat</h2>
-            
-            <div 
-              ref={chatContainerRef}
-              className="flex-1 overflow-y-auto mb-4 space-y-3 max-h-64"
-            >
-              {chatMessages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`p-3 rounded-lg ${
-                    message.sender === playerName
-                      ? 'bg-purple-100 ml-8'
-                      : 'bg-gray-100 mr-8'
+                  className={`p-4 rounded-xl border-2 ${
+                    player.isHost 
+                      ? 'border-yellow-400 bg-yellow-500/20' 
+                      : 'border-white/30 bg-white/10'
                   }`}
                 >
-                  <p className="text-sm font-semibold text-gray-700">
-                    {message.sender === playerName ? 'You' : message.sender}
-                  </p>
-                  <p className="text-gray-800">{message.content}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {new Date(message.timestamp).toLocaleTimeString()}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-gradient-to-r from-purple-400 to-pink-400 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                      {player.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-lg font-bold text-white">{player.name}</p>
+                        {player.isHost && <Crown className="w-4 h-4 text-yellow-400 fill-current" />}
+                      </div>
+                      <p className="text-white/80 text-sm">{player.isHost ? 'Room Host' : 'Player'}</p>
+                    </div>
+                  </div>
                 </div>
               ))}
               
-              {isTyping && (
-                <div className="bg-gray-100 p-3 rounded-lg mr-8">
-                  <p className="text-sm text-gray-500 italic">
-                    {typingUser} is typing...
-                  </p>
+              {Array.from({ length: 2 - players.length }).map((_, index) => (
+                <div
+                  key={`empty-${index}`}
+                  className="p-4 rounded-xl border-2 border-dashed border-white/20 bg-white/5 text-center"
+                >
+                  <Users className="w-8 h-8 text-white/40 mx-auto mb-2" />
+                  <p className="text-white/60 text-sm">Waiting for player...</p>
                 </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') sendMessage();
-                }}
-                onFocus={() => handleTyping(true)}
-                onBlur={() => handleTyping(false)}
-                placeholder="Type a message..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
-              <button
-                onClick={sendMessage}
-                className="w-full bg-purple-500 text-white py-2 px-4 rounded-lg hover:bg-purple-600 transition duration-200"
-              >
-                Send
-              </button>
+              ))}
             </div>
           </div>
+
+          {isHost && (
+            <div className="text-center">
+              <button
+                onClick={startGame}
+                disabled={players.length !== 2}
+                className={`px-8 py-4 rounded-xl font-bold text-lg transition-all duration-200 ${
+                  players.length === 2
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-xl hover:from-green-600 hover:to-emerald-600'
+                    : 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+                }`}
+              >
+                {players.length === 2 ? (
+                  <div className="flex items-center gap-2 justify-center">
+                    <Sparkles className="w-5 h-5" />
+                    Start Compatibility Test
+                  </div>
+                ) : (
+                  `Need ${2 - players.length} more player${2 - players.length > 1 ? 's' : ''}`
+                )}
+              </button>
+            </div>
+          )}
+
+          {!isHost && players.length < 2 && (
+            <div className="text-center">
+              <div className="inline-flex items-center gap-2 px-4 py-3 bg-white/10 rounded-xl border border-white/20">
+                <Clock className="w-5 h-5 text-white animate-pulse" />
+                <p className="text-white font-semibold text-sm">Waiting for host to start the game...</p>
+              </div>
+            </div>
+          )}
         </div>
+
+        {error && (
+          <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-3 text-white text-center mb-6">
+            {error}
+          </div>
+        )}
       </div>
     </div>
   );
 
-  const renderGame = () => (
-    <div className="min-h-screen bg-gradient-to-br from-blue-400 to-purple-500 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+  const renderQuestion = (question: Question) => (
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 p-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-6 mb-6 border border-white/20">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">Compatibility Questions</h1>
-              <p className="text-gray-600">Question {currentQuestionIndex + 1} of {room?.questions.length}</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Your Progress</p>
-                <div className="w-32 bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${playerProgress}%` }}
-                  ></div>
-                </div>
-                <p className="text-xs text-gray-600 mt-1">{playerProgress}%</p>
+              <h1 className="text-2xl font-bold text-white mb-2">
+                Question {currentQuestion + 1} of {questions.length}
+              </h1>
+              <div className="w-40 bg-white/20 rounded-full h-2">
+                <div 
+                  className="bg-green-400 h-2 rounded-full transition-all duration-1000"
+                  style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
+                />
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Partner's Progress</p>
-                <div className="w-32 bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${otherPlayerProgress}%` }}
-                  ></div>
-                </div>
-                <p className="text-xs text-gray-600 mt-1">{otherPlayerProgress}%</p>
+            </div>
+            <div className="text-center lg:text-right">
+              <div className="flex items-center gap-2 text-white mb-2 justify-center lg:justify-end">
+                <Clock className="w-5 h-5" />
+                <span className="text-xl font-bold">{timeLeft}s</span>
               </div>
-              <button
-                onClick={leaveRoom}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-200"
-              >
-                ❌ Leave
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Question Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-          <div className="flex justify-between items-center mb-6">
-            <div className="text-sm text-gray-500">
-              Time left: <span className="font-bold text-red-500">{timeLeft}s</span>
-            </div>
-            <div className="text-sm text-gray-500">
-              Room: {room?.roomId}
+              <div className="w-40 bg-white/20 rounded-full h-2 mx-auto lg:mx-0">
+                <div 
+                  className="bg-orange-400 h-2 rounded-full transition-all duration-1000"
+                  style={{ width: `${(timeLeft / 30) * 100}%` }}
+                />
+              </div>
             </div>
           </div>
 
-          <h2 className="text-2xl font-bold text-gray-800 mb-8 text-center">
-            {room?.questions[currentQuestionIndex]?.text}
-          </h2>
-
+          <div className="bg-white/5 border border-white/20 rounded-xl p-6 mb-6">
+            <h2 className="text-xl font-bold text-white text-center leading-relaxed">
+              {question.text}
+            </h2>
+          </div>
+          
           <div className="space-y-3 max-w-2xl mx-auto">
-            {room?.questions[currentQuestionIndex]?.options.map((option, index) => (
+            {question.options.map((option, index) => (
               <button
                 key={index}
-                onClick={() => handleAnswer(index)}
-                className={`w-full p-4 text-left rounded-xl border-2 transition-all duration-200 ${
-                  answers.regular?.[currentQuestionIndex]?.answer === index
-                    ? 'border-purple-500 bg-purple-50 text-purple-700'
-                    : 'border-gray-200 hover:border-purple-300 hover:bg-purple-25'
+                onClick={() => submitAnswer(index)}
+                disabled={hasAnsweredCurrent}
+                className={`w-full p-4 text-left rounded-xl border-2 transition-all duration-200 group ${
+                  hasAnsweredCurrent
+                    ? 'bg-white/5 border-white/10 cursor-not-allowed opacity-70'
+                    : 'bg-white/5 border-white/20 hover:border-purple-300 hover:bg-white/10'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{option}</span>
-                  {answers.regular?.[currentQuestionIndex]?.answer === index && (
-                    <span className="text-green-500">✓</span>
-                  )}
+                <div className="flex items-center gap-4">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm transition-colors ${
+                    hasAnsweredCurrent ? 'bg-white/10' : 'bg-white/10 group-hover:bg-purple-500'
+                  }`}>
+                    {index + 1}
+                  </div>
+                  <span className="text-lg font-semibold text-white flex-1">{option}</span>
+                  <ChevronRight className={`w-5 h-5 transition-transform ${
+                    hasAnsweredCurrent ? 'text-white/30' : 'text-white/60 group-hover:text-white group-hover:translate-x-1'
+                  }`} />
                 </div>
               </button>
             ))}
           </div>
 
-          {/* Navigation */}
-          <div className="flex justify-between mt-8">
-            <button
-              onClick={() => currentQuestionIndex > 0 && setCurrentQuestionIndex(currentQuestionIndex - 1)}
-              disabled={currentQuestionIndex === 0}
-              className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-200 disabled:opacity-50"
-            >
-              ← Previous
-            </button>
-            
-            <button
-              onClick={handleNextQuestion}
-              disabled={!answers.regular?.[currentQuestionIndex]}
-              className="px-6 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition duration-200 disabled:opacity-50"
-            >
-              {currentQuestionIndex === (room?.questions.length || 0) - 1 ? 'Finish Questions' : 'Next Question →'}
-            </button>
-          </div>
-        </div>
-
-        {/* Quick Chat */}
-        <div className="bg-white rounded-2xl shadow-xl p-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Quick Chat</h3>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Send a quick message..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-            />
-            <button
-              onClick={sendMessage}
-              className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600"
-            >
-              Send
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderAdvancedQuestions = () => (
-    <div className="min-h-screen bg-gradient-to-br from-green-400 to-blue-500 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">Advanced Compatibility</h1>
-              <p className="text-gray-600">Deeper insights for better matching</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Completion</p>
-                <div className="w-32 bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${playerProgress}%` }}
-                  ></div>
-                </div>
-                <p className="text-xs text-gray-600 mt-1">{playerProgress}%</p>
+          {hasAnsweredCurrent && (
+            <div className="mt-6 p-4 bg-white/5 border border-white/20 rounded-xl text-center">
+              <div className="flex items-center justify-center gap-2 text-white mb-2">
+                <CheckCircle className="w-5 h-5 text-green-400" />
+                <span className="font-semibold">Answer Submitted!</span>
               </div>
-              <button
-                onClick={captureScreenshot}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-200"
-              >
-                📸 Screenshot
-              </button>
-              <button
-                onClick={leaveRoom}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-200"
-              >
-                ❌ Leave
-              </button>
+              <p className="text-white/70 text-sm">
+                Waiting for {players.find(p => p.name !== playerName)?.name} to answer...
+              </p>
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Advanced Questions */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Personality Traits */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-bold text-gray-800">Personality Traits</h3>
-              {room?.advancedQuestions.personalityTraits.options.map((trait: string) => (
-                <label key={trait} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
-                  <input
-                    type="checkbox"
-                    onChange={(e) => {
-                      const current = answers.advancedAnswers?.personalityTraits || [];
-                      const newValue = e.target.checked
-                        ? [...current, trait]
-                        : current.filter((t: string) => t !== trait);
-                      handleAdvancedAnswer('personalityTraits', 'traits', newValue);
-                    }}
-                    className="rounded text-purple-500 focus:ring-purple-500"
-                  />
-                  <span className="text-gray-700">{trait}</span>
-                </label>
+          <div className="mt-8 pt-4 border-t border-white/20">
+            <h3 className="text-base font-semibold text-white mb-3 text-center">Players Progress</h3>
+            <div className="grid grid-cols-1 gap-3 max-w-2xl mx-auto">
+              {players.map(player => (
+                <div key={player.name} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-semibold text-sm">
+                      {player.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-white font-medium">{player.name}</span>
+                  </div>
+                  <div className="w-20 bg-white/20 rounded-full h-2">
+                    <div 
+                      className="bg-green-400 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${playerProgress[player.name] || 0}%` }}
+                    />
+                  </div>
+                </div>
               ))}
             </div>
-
-            {/* Lifestyle */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-bold text-gray-800">Lifestyle</h3>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Sleep Schedule
-                </label>
-                <select
-                  onChange={(e) => handleAdvancedAnswer('lifestyle', 'sleepSchedule', e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">Select your sleep schedule</option>
-                  {room?.advancedQuestions.lifestyle.sleepSchedule.options.map((option: string) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Social Activity Level
-                </label>
-                <select
-                  onChange={(e) => handleAdvancedAnswer('lifestyle', 'socialActivity', e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">Select social activity level</option>
-                  {room?.advancedQuestions.lifestyle.socialActivity.options.map((option: string) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Communication */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-bold text-gray-800">Communication</h3>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Communication Style
-                </label>
-                <select
-                  onChange={(e) => handleAdvancedAnswer('communication', 'style', e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">Select communication style</option>
-                  {room?.advancedQuestions.communication.style.options.map((option: string) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Conflict Resolution
-                </label>
-                <select
-                  onChange={(e) => handleAdvancedAnswer('communication', 'conflictResolution', e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">Select conflict resolution style</option>
-                  {room?.advancedQuestions.communication.conflictResolution.options.map((option: string) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Interests & Values */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-bold text-gray-800">Interests & Values</h3>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Hobbies
-                </label>
-                <div className="space-y-2">
-                  {room?.advancedQuestions.interests.hobbies.options.map((hobby: string) => (
-                    <label key={hobby} className="flex items-center space-x-3">
-                      <input
-                        type="checkbox"
-                        onChange={(e) => {
-                          const current = answers.advancedAnswers?.interests?.hobbies || [];
-                          const newValue = e.target.checked
-                            ? [...current, hobby]
-                            : current.filter((h: string) => h !== hobby);
-                          handleAdvancedAnswer('interests', 'hobbies', newValue);
-                        }}
-                        className="rounded text-purple-500 focus:ring-purple-500"
-                      />
-                      <span className="text-gray-700">{hobby}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Family Importance
-                </label>
-                <select
-                  onChange={(e) => handleAdvancedAnswer('values', 'family', e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">Select importance level</option>
-                  {room?.advancedQuestions.values.family.options.map((option: string) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <div className="text-center mt-8">
-            <button
-              onClick={submitFinalAnswers}
-              className="px-8 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition duration-200 text-lg font-semibold"
-            >
-              Submit Final Answers 🎯
-            </button>
           </div>
         </div>
 
-        {/* Hidden file input for screenshots */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleScreenshotUpload}
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-        />
+        <button 
+          onClick={leaveRoom}
+          className="fixed bottom-6 left-6 p-3 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
       </div>
     </div>
   );
 
-  const renderWaitingScreen = () => (
-    <div className="min-h-screen bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
-        <div className="animate-pulse mb-6">
-          <div className="text-6xl mb-4">⏳</div>
-        </div>
-        
-        <h1 className="text-3xl font-bold text-gray-800 mb-4">Waiting for Players</h1>
-        
-        <div className="space-y-4 mb-6">
-          <p className="text-gray-600">
-            Waiting for {waitingForPlayers.join(', ')} to complete their answers...
-          </p>
-          
-          <div className="w-full bg-gray-200 rounded-full h-4">
-            <div 
-              className="bg-orange-500 h-4 rounded-full transition-all duration-300"
-              style={{ width: `${((room?.players.length || 0) - waitingForPlayers.length) / (room?.players.length || 1) * 100}%` }}
-            ></div>
-          </div>
-          
-          <p className="text-sm text-gray-500">
-            {((room?.players.length || 0) - waitingForPlayers.length)} / {room?.players.length} players ready
-          </p>
-        </div>
-
-        <div className="space-y-3">
-          <button
-            onClick={captureScreenshot}
-            className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-200"
-          >
-            📸 Capture Screenshot
-          </button>
-          
-          <button
-            onClick={leaveRoom}
-            className="w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-200"
-          >
-            ❌ Leave Room
-          </button>
-        </div>
-
-        {/* Quick status update */}
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <p className="text-sm text-gray-600">
-            Your progress: <span className="font-semibold text-green-600">{playerProgress}%</span>
-          </p>
-          <p className="text-sm text-gray-600">
-            Partner's progress: <span className="font-semibold text-blue-600">{otherPlayerProgress}%</span>
-          </p>
-        </div>
-      </div>
-
-      {/* Hidden file input for screenshots */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleScreenshotUpload}
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-      />
-    </div>
-  );
-
-  const renderResults = () => (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 to-indigo-700 p-4">
+  const renderAdvancedSection = () => (
+    <div className="min-h-screen bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-4">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-800">Compatibility Results</h1>
-              <p className="text-gray-600">Discover your connection strength</p>
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-6 mb-6 border border-white/20">
+          <div className="text-center mb-6">
+            <Sparkles className="w-12 h-12 text-white mx-auto mb-3" />
+            <h1 className="text-2xl font-bold text-white mb-2">Advanced Compatibility</h1>
+            <p className="text-white/80">Dive deeper into your personality and preferences</p>
+          </div>
+
+          <div className="max-w-2xl mx-auto mb-6">
+            <div className="flex justify-between text-white font-semibold mb-2 text-sm">
+              <span>Advanced Section Progress</span>
+              <span>{advancedProgress}%</span>
             </div>
+            <div className="w-full bg-white/20 rounded-full h-3">
+              <div 
+                className="bg-gradient-to-r from-teal-400 to-cyan-400 h-3 rounded-full transition-all duration-500"
+                style={{ width: `${advancedProgress}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            {advancedQuestions && Object.entries(advancedQuestions).map(([section, data]) => (
+              <button
+                key={section}
+                onClick={() => setCurrentAdvancedSection(section)}
+                className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${
+                  currentAdvancedSection === section
+                    ? 'border-white bg-white/20'
+                    : 'border-white/20 bg-white/10 hover:border-white/40'
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    currentAdvancedSection === section 
+                      ? 'bg-white text-cyan-600' 
+                      : 'bg-white/10 text-white'
+                  }`}>
+                    {getSectionIcon(section)}
+                  </div>
+                  <h3 className="text-base font-bold text-white capitalize flex-1">
+                    {section.replace(/([A-Z])/g, ' $1').trim()}
+                  </h3>
+                </div>
+                <p className={`text-xs ${
+                  currentAdvancedSection === section ? 'text-white/90' : 'text-white/70'
+                }`}>
+                  {advancedAnswers[section] ? '✓ Completed' : 'Click to answer'}
+                </p>
+              </button>
+            ))}
+          </div>
+
+          <div className="text-center">
             <button
-              onClick={leaveRoom}
-              className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-200"
+              onClick={submitFinal}
+              disabled={isSubmittingFinal}
+              className={`py-3 px-8 rounded-xl font-bold text-lg transition-all duration-200 flex items-center gap-2 mx-auto ${
+                isSubmittingFinal
+                  ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
+              }`}
             >
-              ❌ Leave Room
+              {isSubmittingFinal ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-5 h-5" />
+                  Complete Compatibility Test
+                </>
+              )}
             </button>
           </div>
         </div>
 
-        {results && (
-          <div className="space-y-6">
-            {/* Main Score */}
-            <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-              <div className="mb-6">
-                <div className="text-6xl mb-4">💕</div>
-                <h2 className="text-4xl font-bold text-gray-800 mb-2">
-                  {results.score}% Match
-                </h2>
-                <p className="text-xl text-purple-600 font-semibold">
-                  {results.matchLevel}
-                </p>
-              </div>
+        <button 
+          onClick={leaveRoom}
+          className="fixed bottom-6 left-6 p-3 bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
 
-              {/* Score Circle */}
-              <div className="relative inline-block mb-6">
-                <div className="w-48 h-48 rounded-full border-8 border-gray-200 flex items-center justify-center">
-                  <div 
-                    className="absolute w-48 h-48 rounded-full border-8 border-transparent"
-                    style={{
-                      background: `conic-gradient(
-                        #8B5CF6 0% ${results.score}%, 
-                        #E5E7EB ${results.score}% 100%
-                      )`
-                    }}
-                  ></div>
-                  <div className="w-40 h-40 bg-white rounded-full flex items-center justify-center">
-                    <span className="text-3xl font-bold text-gray-800">{results.score}%</span>
-                  </div>
+        {currentAdvancedSection && advancedQuestions && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+              <div className="p-4 border-b border-white/20">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setCurrentAdvancedSection('')}
+                    className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-white" />
+                  </button>
+                  <h2 className="text-lg font-bold text-white capitalize">
+                    {currentAdvancedSection.replace(/([A-Z])/g, ' $1').trim()}
+                  </h2>
+                  <button
+                    onClick={() => setCurrentAdvancedSection('')}
+                    className="ml-auto p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/20"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
                 </div>
               </div>
-            </div>
-
-            {/* Breakdown */}
-            <div className="bg-white rounded-2xl shadow-xl p-6">
-              <h3 className="text-2xl font-bold text-gray-800 mb-6">Compatibility Breakdown</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {Object.entries(results.breakdown).map(([category, score]) => (
-                  <div key={category} className="text-center">
-                    <div className="relative w-20 h-20 mx-auto mb-2">
-                      <svg className="w-full h-full" viewBox="0 0 36 36">
-                        <path
-                          d="M18 2.0845
-                            a 15.9155 15.9155 0 0 1 0 31.831
-                            a 15.9155 15.9155 0 0 1 0 -31.831"
-                          fill="none"
-                          stroke="#E5E7EB"
-                          strokeWidth="3"
-                        />
-                        <path
-                          d="M18 2.0845
-                            a 15.9155 15.9155 0 0 1 0 31.831
-                            a 15.9155 15.9155 0 0 1 0 -31.831"
-                          fill="none"
-                          stroke="#8B5CF6"
-                          strokeWidth="3"
-                          strokeDasharray={`${score}, 100`}
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-sm font-bold text-gray-800">{score}%</span>
-                      </div>
-                    </div>
-                    <p className="text-sm font-medium text-gray-700 capitalize">
-                      {category}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Insights */}
-            <div className="bg-white rounded-2xl shadow-xl p-6">
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">Key Insights</h3>
-              <div className="space-y-3">
-                {results.insights.map((insight, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 bg-purple-50 rounded-lg">
-                    <span className="text-purple-500 mt-1">💡</span>
-                    <p className="text-gray-700">{insight}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Recommendations */}
-            <div className="bg-white rounded-2xl shadow-xl p-6">
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">Recommendations</h3>
-              <div className="space-y-3">
-                {results.recommendations.map((recommendation, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
-                    <span className="text-green-500 mt-1">🌟</span>
-                    <p className="text-gray-700">{recommendation}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="bg-white rounded-2xl shadow-xl p-6">
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <button
-                  onClick={captureScreenshot}
-                  className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-200"
-                >
-                  📸 Save Results
-                </button>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition duration-200"
-                >
-                  🔄 Play Again
-                </button>
-                <button
-                  onClick={leaveRoom}
-                  className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-200"
-                >
-                  🏠 Main Menu
-                </button>
+              
+              <div className="p-4">
+                {renderAdvancedQuestions(currentAdvancedSection, advancedQuestions[currentAdvancedSection])}
               </div>
             </div>
           </div>
         )}
-
-        {/* Hidden file input for screenshots */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleScreenshotUpload}
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-        />
       </div>
     </div>
   );
 
+  const renderAdvancedQuestions = (section: string, questions: any) => {
+    if (section === 'personalityTraits') {
+      return (
+        <div className="space-y-4">
+          <h3 className="text-base font-semibold text-white mb-4 text-center">{questions.question}</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {questions.options.map((trait: string) => (
+              <button
+                key={trait}
+                onClick={() => {
+                  const currentTraits = advancedAnswers[section]?.traits || [];
+                  const newTraits = currentTraits.includes(trait)
+                    ? currentTraits.filter((t: string) => t !== trait)
+                    : [...currentTraits, trait];
+                  
+                  submitAdvancedAnswer(section, { traits: newTraits });
+                }}
+                className={`p-3 rounded-lg border-2 text-center transition-all duration-200 text-sm ${
+                  (advancedAnswers[section]?.traits || []).includes(trait)
+                    ? 'border-green-400 bg-green-500/20 text-white'
+                    : 'border-white/20 bg-white/5 text-white/80 hover:border-white/40'
+                }`}
+              >
+                {trait}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {Object.entries(questions).map(([key, subQuestion]: [string, any]) => (
+          <div key={key} className="space-y-3">
+            <h4 className="text-base font-semibold text-white">{subQuestion.question}</h4>
+            <div className="space-y-2">
+              {subQuestion.options.map((option: string) => (
+                <button
+                  key={option}
+                  onClick={() => {
+                    submitAdvancedAnswer(section, {
+                      ...advancedAnswers[section],
+                      [key]: option
+                    });
+                  }}
+                  className={`w-full p-3 text-left rounded-lg border-2 transition-all duration-200 ${
+                    advancedAnswers[section]?.[key] === option
+                      ? 'border-purple-400 bg-purple-500/20 text-white'
+                      : 'border-white/20 bg-white/5 text-white/80 hover:border-white/40'
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderWaitingForPlayers = () => (
+    <div className="min-h-screen bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white/10 backdrop-blur-lg rounded-2xl shadow-xl p-6 text-center border border-white/20">
+        <Clock className="w-16 h-16 text-white mx-auto mb-4 animate-pulse" />
+        <h1 className="text-2xl font-bold text-white mb-3">Waiting for Players</h1>
+        <p className="text-white/80 mb-6">
+          Waiting for {waitingForPlayers.join(', ')} to complete the test...
+        </p>
+        
+        <div className="space-y-3">
+          {players.map(player => (
+            <div key={player.name} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-semibold">
+                  {player.name.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-white font-semibold">{player.name}</span>
+              </div>
+              {submissionStatus[player.name] ? (
+                <CheckCircle className="w-6 h-6 text-green-400" />
+              ) : (
+                <Clock className="w-6 h-6 text-amber-400 animate-pulse" />
+              )}
+            </div>
+          ))}
+        </div>
+
+        <button 
+          onClick={leaveRoom}
+          className="mt-6 p-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors flex items-center gap-2 mx-auto"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Leave Game
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderResults = () => {
+    if (!results) return null;
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-red-600 p-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-6 text-center mb-6 border border-white/20">
+            <div className="w-24 h-24 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+              <Trophy className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-white mb-2">Compatibility Results</h1>
+            <p className="text-xl text-white/80 mb-6">{results.matchLevel}</p>
+            
+            <div className="relative inline-block mb-8">
+              <div className="w-48 h-48 rounded-full border-8 border-white/20 flex items-center justify-center shadow-lg">
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-white">{results.score}%</div>
+                  <div className="text-white/80 mt-1">Compatibility Score</div>
+                </div>
+              </div>
+              <div 
+                className="absolute top-0 left-0 w-48 h-48 rounded-full border-8 border-transparent border-t-purple-300 border-r-pink-300 transform -rotate-45"
+                style={{
+                  clipPath: `conic-gradient(transparent 0%, transparent ${100 - results.score}%, purple ${100 - results.score}%, pink 100%)`
+                }}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8 max-w-2xl mx-auto">
+              {Object.entries(results.breakdown).map(([category, score]) => (
+                <div key={category} className="text-center">
+                  <div className="w-16 h-16 mx-auto mb-2 relative">
+                    <svg className="w-full h-full" viewBox="0 0 36 36">
+                      <path
+                        d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        stroke="#ffffff40"
+                        strokeWidth="3"
+                      />
+                      <path
+                        d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        stroke="#8b5cf6"
+                        strokeWidth="3"
+                        strokeDasharray={`${score}, 100`}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-sm font-bold text-white">{score}%</span>
+                    </div>
+                  </div>
+                  <p className="text-xs font-semibold text-white capitalize">
+                    {category}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-8">
+              <h3 className="text-2xl font-bold text-white mb-4">Key Insights</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                {results.insights.map((insight, index) => (
+                  <div key={index} className="flex items-start gap-3 p-4 bg-white/5 rounded-xl border border-white/10">
+                    <Sparkles className="w-5 h-5 text-purple-300 mt-0.5 flex-shrink-0" />
+                    <p className="text-white text-left text-sm">{insight}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="max-w-2xl mx-auto">
+              <h3 className="text-2xl font-bold text-white mb-4">Recommendations</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {results.recommendations.map((recommendation, index) => (
+                  <div key={index} className="flex items-start gap-3 p-4 bg-white/5 rounded-xl border border-white/10">
+                    <Target className="w-5 h-5 text-green-300 mt-0.5 flex-shrink-0" />
+                    <p className="text-white text-left text-sm">{recommendation}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button
+              onClick={resetGame}
+              className="p-4 bg-white/10 border-2 border-white/20 rounded-xl hover:border-white/40 transition-all duration-200 text-center group"
+            >
+              <ArrowLeft className="w-6 h-6 text-white mx-auto mb-2 group-hover:-translate-x-1 transition-transform" />
+              <span className="text-white font-semibold">New Test</span>
+            </button>
+            
+            <button
+              onClick={copyRoomCode}
+              className="p-4 bg-white/10 border-2 border-white/20 rounded-xl hover:border-white/40 transition-all duration-200 text-center"
+            >
+              <Share2 className="w-6 h-6 text-white mx-auto mb-2" />
+              <span className="text-white font-semibold">
+                {copied ? 'Copied!' : 'Share Results'}
+              </span>
+            </button>
+            
+            <button
+              onClick={captureScreenshot}
+              className="p-4 bg-white/10 border-2 border-white/20 rounded-xl hover:border-white/40 transition-all duration-200 text-center"
+            >
+              <Download className="w-6 h-6 text-white mx-auto mb-2" />
+              <span className="text-white font-semibold">Save Results</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const getSectionIcon = (section: string) => {
+    const icons: { [key: string]: React.ReactNode } = {
+      personalityTraits: <Star className="w-5 h-5" />,
+      lifestyle: <Heart className="w-5 h-5" />,
+      communication: <Target className="w-5 h-5" />,
+      interests: <Sparkles className="w-5 h-5" />,
+      values: <Trophy className="w-5 h-5" />
+    };
+    return icons[section] || <Star className="w-5 h-5" />;
+  };
+
   return (
-    <div className="compatibility-game">
-      {error && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
-          <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-lg max-w-sm mx-auto">
-            <div className="flex items-center">
-              <span className="text-red-500 mr-2">⚠️</span>
-              <span>{error}</span>
-              <button 
-                onClick={() => setError('')}
-                className="ml-auto text-red-500 hover:text-red-700"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {success && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
-          <div className="bg-green-100 border border-green-400 text-green-700 px-6 py-4 rounded-lg shadow-lg max-w-sm mx-auto">
-            <div className="flex items-center">
-              <span className="text-green-500 mr-2">✅</span>
-              <span>{success}</span>
-              <button 
-                onClick={() => setSuccess('')}
-                className="ml-auto text-green-500 hover:text-green-700"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {renderView()}
+    <div ref={containerRef} className="h-screen overflow-y-auto bg-gray-900">
+      {gameStatus === 'lobby' && renderLobby()}
+      {gameStatus === 'waiting' && renderWaitingRoom()}
+      {gameStatus === 'playing' && questions[currentQuestion] && renderQuestion(questions[currentQuestion])}
+      {gameStatus === 'advanced' && renderAdvancedSection()}
+      {gameStatus === 'waiting-for-players' && renderWaitingForPlayers()}
+      {gameStatus === 'results' && renderResults()}
     </div>
   );
 };
 
-export default CompatibilityGame;
+export default Compatibility;
