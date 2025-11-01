@@ -17,20 +17,53 @@ import {
   Star,
   Trophy,
   Sparkles,
-  Crown
+  Crown,
+  X,
+  Calendar,
+  MapPin,
+  Phone,
+  Mail
 } from "lucide-react";
 import { getToken } from "@/utils/getToken";
 
 interface IUser {
   _id: string;
   name: string;
+  email?: string;
   profilePicture?: string;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  birthday?: string;
+  status?: string;
+  lastSeen?: string;
+  isOnline?: boolean;
+  joinedAt?: string;
+  friends?: IUser[];
+  stories?: any[];
 }
 
 interface IFriendsData {
   friends: IUser[];
   incomingRequests: IUser[];
   outgoingRequests: IUser[];
+}
+
+interface IProfile {
+  _id: string;
+  name: string;
+  email: string;
+  profilePicture?: string;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  birthday?: string;
+  status: string;
+  lastSeen: string;
+  friends: IUser[];
+  stories: any[];
+  isOnline: boolean;
+  joinedAt: string;
 }
 
 const AddFriends: React.FC = () => {
@@ -43,6 +76,8 @@ const AddFriends: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedUser, setSelectedUser] = useState<IProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   const token = getToken();
   const userData = localStorage.getItem("user");
@@ -81,6 +116,36 @@ const AddFriends: React.FC = () => {
     }
   };
 
+  const fetchUserProfile = async (userId: string) => {
+    setProfileLoading(true);
+    try {
+      const res = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/profile/${userId}`,
+        axiosConfig
+      );
+      setSelectedUser(res.data.user);
+    } catch (err) {
+      console.error("❌ Error fetching user profile:", err);
+      // Fallback to basic user data if profile endpoint fails
+      const user = [...users, ...friendsData.friends, ...friendsData.incomingRequests, ...friendsData.outgoingRequests]
+        .find(u => u._id === userId);
+      if (user) {
+        setSelectedUser({
+          ...user,
+          email: user.email || "",
+          status: user.status || "offline",
+          lastSeen: user.lastSeen || new Date().toISOString(),
+          friends: user.friends || [],
+          stories: user.stories || [],
+          isOnline: user.isOnline || false,
+          joinedAt: user.joinedAt || new Date().toISOString()
+        } as IProfile);
+      }
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!token) {
       console.warn("⚠️ No token found!");
@@ -98,7 +163,12 @@ const AddFriends: React.FC = () => {
         {},
         axiosConfig
       );
-      fetchFriends();
+      // Update UI immediately
+      setFriendsData(prev => ({
+        ...prev,
+        outgoingRequests: [...prev.outgoingRequests, users.find(u => u._id === userId)!]
+      }));
+      setUsers(prev => prev.filter(u => u._id !== userId));
     } catch (err) {
       console.error("❌ Error sending request:", err);
     }
@@ -111,7 +181,13 @@ const AddFriends: React.FC = () => {
         {},
         axiosConfig
       );
-      fetchFriends();
+      // Update UI immediately
+      const acceptedUser = friendsData.incomingRequests.find(u => u._id === userId);
+      setFriendsData(prev => ({
+        ...prev,
+        friends: [...prev.friends, acceptedUser!],
+        incomingRequests: prev.incomingRequests.filter(u => u._id !== userId)
+      }));
     } catch (err) {
       console.error("❌ Error accepting request:", err);
     }
@@ -124,10 +200,22 @@ const AddFriends: React.FC = () => {
         {},
         axiosConfig
       );
-      fetchFriends();
+      // Update UI immediately
+      setFriendsData(prev => ({
+        ...prev,
+        incomingRequests: prev.incomingRequests.filter(u => u._id !== userId)
+      }));
     } catch (err) {
       console.error("❌ Error declining request:", err);
     }
+  };
+
+  const handleViewProfile = (user: IUser) => {
+    fetchUserProfile(user._id);
+  };
+
+  const handleCloseProfile = () => {
+    setSelectedUser(null);
   };
 
   // Filter users based on search query
@@ -216,18 +304,19 @@ const AddFriends: React.FC = () => {
       <motion.div
         whileHover={{ scale: 1.02, y: -2 }}
         whileTap={{ scale: 0.98 }}
-        className={`flex justify-between items-center p-4 rounded-2xl border-2 transition-all duration-300 ${
+        className={`flex justify-between items-center p-4 rounded-2xl border-2 transition-all duration-300 cursor-pointer ${
           highlight 
             ? "bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-400/50 shadow-lg" 
             : "bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10"
         }`}
+        onClick={() => handleViewProfile(user)}
       >
         <div className="flex items-center gap-4">
           <div className="relative">
             <img
               src={user.profilePicture || "/default-avatar.png"}
               alt={user.name}
-              className="w-12 h-12 rounded-2xl border-2 border-white/20 shadow-lg"
+              className="w-12 h-12 rounded-2xl border-2 border-white/20 shadow-lg object-cover"
             />
             {status === "friend" && (
               <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-1 border-2 border-white">
@@ -244,7 +333,165 @@ const AddFriends: React.FC = () => {
             </div>
           </div>
         </div>
-        {actions}
+        <div onClick={(e) => e.stopPropagation()}>
+          {actions}
+        </div>
+      </motion.div>
+    );
+  };
+
+  const ProfileDrawer: React.FC = () => {
+    if (!selectedUser) return null;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        onClick={handleCloseProfile}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 rounded-3xl shadow-2xl border border-white/20 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {profileLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : (
+            <>
+              {/* Header */}
+              <div className="relative">
+                <div className="h-48 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-3xl"></div>
+                <button
+                  onClick={handleCloseProfile}
+                  className="absolute top-4 right-4 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-all"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+                
+                <div className="absolute -bottom-12 left-8">
+                  <img
+                    src={selectedUser.profilePicture || "/default-avatar.png"}
+                    alt={selectedUser.name}
+                    className="w-24 h-24 rounded-3xl border-4 border-white/20 shadow-2xl object-cover"
+                  />
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="pt-16 p-8">
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <h2 className="text-3xl font-bold text-white mb-2">{selectedUser.name}</h2>
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className={`w-3 h-3 rounded-full ${selectedUser.isOnline ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+                      <span className="text-white/70 text-sm">
+                        {selectedUser.isOnline ? 'Online' : `Last seen ${new Date(selectedUser.lastSeen).toLocaleDateString()}`}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    {!friendsData.friends.some(f => f._id === selectedUser._id) &&
+                     !friendsData.outgoingRequests.some(f => f._id === selectedUser._id) &&
+                     !friendsData.incomingRequests.some(f => f._id === selectedUser._id) && (
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleSendRequest(selectedUser._id)}
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2 rounded-xl text-white font-semibold flex items-center gap-2"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        Add Friend
+                      </motion.button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bio */}
+                {selectedUser.bio && (
+                  <div className="mb-6">
+                    <p className="text-white/80 text-lg leading-relaxed">{selectedUser.bio}</p>
+                  </div>
+                )}
+
+                {/* Stats */}
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                  <div className="text-center bg-white/10 rounded-2xl p-4">
+                    <div className="text-2xl font-bold text-white">{selectedUser.friends?.length || 0}</div>
+                    <div className="text-white/70 text-sm">Friends</div>
+                  </div>
+                  <div className="text-center bg-white/10 rounded-2xl p-4">
+                    <div className="text-2xl font-bold text-white">{selectedUser.stories?.length || 0}</div>
+                    <div className="text-white/70 text-sm">Stories</div>
+                  </div>
+                  <div className="text-center bg-white/10 rounded-2xl p-4">
+                    <div className="text-2xl font-bold text-white">
+                      {selectedUser.joinedAt ? new Date(selectedUser.joinedAt).getFullYear() : 'N/A'}
+                    </div>
+                    <div className="text-white/70 text-sm">Joined</div>
+                  </div>
+                </div>
+
+                {/* Details */}
+                <div className="space-y-4">
+                  {selectedUser.email && (
+                    <div className="flex items-center gap-3 text-white/80">
+                      <Mail className="w-5 h-5 text-purple-400" />
+                      <span>{selectedUser.email}</span>
+                    </div>
+                  )}
+                  
+                  {selectedUser.phone && (
+                    <div className="flex items-center gap-3 text-white/80">
+                      <Phone className="w-5 h-5 text-green-400" />
+                      <span>{selectedUser.phone}</span>
+                    </div>
+                  )}
+                  
+                  {selectedUser.location && (
+                    <div className="flex items-center gap-3 text-white/80">
+                      <MapPin className="w-5 h-5 text-red-400" />
+                      <span>{selectedUser.location}</span>
+                    </div>
+                  )}
+                  
+                  {selectedUser.birthday && (
+                    <div className="flex items-center gap-3 text-white/80">
+                      <Calendar className="w-5 h-5 text-yellow-400" />
+                      <span>{new Date(selectedUser.birthday).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Friends Preview */}
+                {selectedUser.friends && selectedUser.friends.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="text-xl font-bold text-white mb-4">Friends ({selectedUser.friends.length})</h3>
+                    <div className="grid grid-cols-3 gap-3">
+                      {selectedUser.friends.slice(0, 6).map(friend => (
+                        <div key={friend._id} className="text-center">
+                          <img
+                            src={friend.profilePicture || "/default-avatar.png"}
+                            alt={friend.name}
+                            className="w-12 h-12 rounded-2xl mx-auto mb-2 object-cover"
+                          />
+                          <span className="text-white/70 text-sm block truncate">{friend.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </motion.div>
       </motion.div>
     );
   };
@@ -475,7 +722,10 @@ const AddFriends: React.FC = () => {
                       status="discover"
                       actions={
                         <motion.button
-                          onClick={() => handleSendRequest(user._id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSendRequest(user._id);
+                          }}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 px-4 py-2 rounded-xl text-white font-semibold flex items-center gap-2 transition-all shadow-lg"
@@ -501,6 +751,9 @@ const AddFriends: React.FC = () => {
           <div className="h-20"></div>
         </motion.div>
       </div>
+
+      {/* Profile Drawer */}
+      <ProfileDrawer />
     </div>
   );
 };
