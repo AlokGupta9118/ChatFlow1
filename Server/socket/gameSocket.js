@@ -872,8 +872,7 @@ export default function gameSocket(io) {
 
       console.log(`🎯 ${playerName} submitted result request in ${roomId}`);
       
-      // Mark this player as ready for results
-      room.resultSubmissions[playerName] = true;
+      
 
       // Notify all players about this result submission
       io.to(roomId).emit("compatibility-result-submitted", {
