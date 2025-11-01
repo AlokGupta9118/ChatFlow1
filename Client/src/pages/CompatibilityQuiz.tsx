@@ -930,7 +930,7 @@ const Compatibility: React.FC = () => {
 
   // Get waiting status for display
   const getWaitingStatus = () => {
-    if (players.length < 3) return ['Waiting for second player...'];
+    if (players.length < 2) return ['Waiting for second player...'];
     
     const waiting = players.filter(player => !localSubmissionStatus[player.name]);
     return waiting.map(player => player.name);
