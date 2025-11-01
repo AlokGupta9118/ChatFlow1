@@ -62,22 +62,13 @@ interface IProfile {
   joinedAt: string;
 }
 
-// URL building function that matches your getProfile controller logic
+// URL building function (same as profile page)
 const buildImageUrl = (imagePath: string | undefined): string => {
   if (!imagePath) return "/default-avatar.png";
-  
-  // If it's already a full URL, return as is
   if (imagePath.startsWith("http")) {
     return imagePath;
   }
-  
-  // For relative paths, construct the full URL using VITE_API_URL
-  // This mimics what your getProfile controller does with req.protocol and req.get("host")
-  const baseUrl = import.meta.env.VITE_API_URL;
-  const cleanBaseUrl = baseUrl.replace(/\/$/, ""); // Remove trailing slash if present
-  const cleanImagePath = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
-  
-  return `${cleanBaseUrl}${cleanImagePath}`;
+  return `${import.meta.env.VITE_API_URL}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
 };
 
 const AddFriends: React.FC = () => {
@@ -140,7 +131,6 @@ const AddFriends: React.FC = () => {
       
       const userData = res.data.user;
       
-      // Process the user data with proper URL building
       const processedUser = {
         ...userData,
         profilePicture: buildImageUrl(userData.profilePicture),
@@ -150,13 +140,13 @@ const AddFriends: React.FC = () => {
         }))
       };
 
-      console.log('Processed User:', processedUser);
+      console.log('Processed User with new logic:', processedUser);
       setSelectedUser(processedUser);
     } catch (err: any) {
       console.error("❌ Error fetching user profile:", err);
       console.error("Error details:", err.response?.data);
       
-      // Enhanced fallback with proper URL building
+      // Enhanced fallback with the same URL building logic
       const allUsers = [...users, ...friendsData.friends, ...friendsData.incomingRequests, ...friendsData.outgoingRequests];
       const user = allUsers.find(u => u._id === userId);
       
@@ -181,8 +171,6 @@ const AddFriends: React.FC = () => {
           joinedAt: user.joinedAt || new Date().toISOString()
         };
         setSelectedUser(fallbackUser);
-      } else {
-        console.error("User not found in any list");
       }
     } finally {
       setProfileLoading(false);
@@ -207,14 +195,11 @@ const AddFriends: React.FC = () => {
         axiosConfig
       );
       // Update UI immediately
-      const userToAdd = users.find(u => u._id === userId);
-      if (userToAdd) {
-        setFriendsData(prev => ({
-          ...prev,
-          outgoingRequests: [...prev.outgoingRequests, userToAdd]
-        }));
-        setUsers(prev => prev.filter(u => u._id !== userId));
-      }
+      setFriendsData(prev => ({
+        ...prev,
+        outgoingRequests: [...prev.outgoingRequests, users.find(u => u._id === userId)!]
+      }));
+      setUsers(prev => prev.filter(u => u._id !== userId));
     } catch (err) {
       console.error("❌ Error sending request:", err);
     }
@@ -229,13 +214,11 @@ const AddFriends: React.FC = () => {
       );
       // Update UI immediately
       const acceptedUser = friendsData.incomingRequests.find(u => u._id === userId);
-      if (acceptedUser) {
-        setFriendsData(prev => ({
-          ...prev,
-          friends: [...prev.friends, acceptedUser],
-          incomingRequests: prev.incomingRequests.filter(u => u._id !== userId)
-        }));
-      }
+      setFriendsData(prev => ({
+        ...prev,
+        friends: [...prev.friends, acceptedUser!],
+        incomingRequests: prev.incomingRequests.filter(u => u._id !== userId)
+      }));
     } catch (err) {
       console.error("❌ Error accepting request:", err);
     }
