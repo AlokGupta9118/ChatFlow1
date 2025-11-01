@@ -371,7 +371,7 @@ const Compatibility: React.FC = () => {
     }
   }, [resultSubmissions, players, gameStatus, showResults]);
 
-  // NEW: Effect to handle when we have both players' data
+  // FIXED: Effect to handle when we have both players' data
   useEffect(() => {
     if (gameStatus === 'waiting-for-players' && otherPlayerAnswers) {
       const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
@@ -383,7 +383,7 @@ const Compatibility: React.FC = () => {
     }
   }, [gameStatus, otherPlayerAnswers, localSubmissionStatus, players, playerName, resultSubmissions]);
 
-  // NEW: Separate function for requesting results
+  // FIXED: Separate function for requesting results
   const requestResults = () => {
     console.log('🎯 Requesting results calculation');
     
@@ -605,7 +605,7 @@ const Compatibility: React.FC = () => {
       }));
     };
 
-    // NEW: Handle result submission updates
+    // FIXED: Handle result submission updates
     const handleResultSubmissionUpdate = (data: any) => {
       console.log(`📊 Result submission update: ${data.playerName} - ${data.submitted}`);
       
@@ -615,10 +615,32 @@ const Compatibility: React.FC = () => {
       }));
     };
 
-    // NEW: Handle when server confirms both are ready for results
+    // FIXED: Handle when server confirms both are ready for results
     const handleBothReadyForResults = () => {
       console.log('🎯 Server confirms both players ready for results');
       showResults();
+    };
+
+    // NEW: Handle server-calculated results
+    const handleShowResults = (data: any) => {
+      console.log('📊 Server is showing results', data);
+      if (data.serverCalculated) {
+        setResults(data.serverCalculated);
+      } else {
+        showResults();
+      }
+      setGameStatus('results');
+    };
+
+    // NEW: Handle when all players have submitted
+    const handleAllSubmitted = (data: any) => {
+      console.log('🎉 All players have submitted, preparing results...');
+      // Automatically request results when all have submitted
+      if (!resultSubmissions[playerName]) {
+        setTimeout(() => {
+          requestResults();
+        }, 1000);
+      }
     };
 
     // Error handling
@@ -645,6 +667,8 @@ const Compatibility: React.FC = () => {
     socket.on('compatibility-submission-update', handleSubmissionUpdate);
     socket.on('compatibility-result-submitted', handleResultSubmissionUpdate);
     socket.on('compatibility-both-ready-for-results', handleBothReadyForResults);
+    socket.on('compatibility-show-results', handleShowResults);
+    socket.on('compatibility-all-submitted', handleAllSubmitted);
     socket.on('join-error', handleJoinError);
     socket.on('start-error', handleStartError);
 
@@ -663,10 +687,12 @@ const Compatibility: React.FC = () => {
       socket.off('compatibility-submission-update', handleSubmissionUpdate);
       socket.off('compatibility-result-submitted', handleResultSubmissionUpdate);
       socket.off('compatibility-both-ready-for-results', handleBothReadyForResults);
+      socket.off('compatibility-show-results', handleShowResults);
+      socket.off('compatibility-all-submitted', handleAllSubmitted);
       socket.off('join-error', handleJoinError);
       socket.off('start-error', handleStartError);
     };
-  }, [socket, questions.length, showResults]);
+  }, [socket, questions.length, showResults, playerName, resultSubmissions]);
 
   // Timer effect
   useEffect(() => {
