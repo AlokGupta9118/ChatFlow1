@@ -57,71 +57,53 @@ router.post("/friends/request/:id", protect, sendFriendRequest);
 router.put("/friends/accept/:id", protect, acceptFriendRequest);
 router.put("/friends/decline/:id", protect, declineFriendRequest);
 
-/* ===========================
-   USER LIST (for suggestions)
-=========================== */
-router.get("/users", protect, getUser);
 
 
-router.get('/other/profile/:userId', protect, async (req, res) => {
+
+
+// Get all users for discover section
+router.get('/users', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.params.userId)
-      .select('-password -refreshTokens -__v')
-      .populate('friends', 'name profilePicture status')
+    const currentUserId = req.user._id;
+    const users = await User.find({ _id: { $ne: currentUserId } })
+      .select('name profilePicture status email bio phone location birthday lastSeen')
       .lean();
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    // Check if the requesting user is blocked by the target user
-    if (user.blockedUsers && user.blockedUsers.includes(req.user._id)) {
-      return res.status(403).json({ message: 'You are blocked from viewing this profile' });
-    }
-
-    // Force HTTPS for image URLs
+    // Function to convert image URLs to absolute URLs
     const getAbsoluteUrl = (path) => {
       if (!path) return null;
       if (path.startsWith('http')) {
-        // Replace http with https
         return path.replace('http://', 'https://');
       }
-      // For relative paths, use HTTPS
       return `https://${req.get('host')}${path}`;
     };
 
-    let profilePicture = getAbsoluteUrl(user.profilePicture);
-
-    // Also convert friends' profile pictures to HTTPS
-    const friendsWithAbsoluteUrls = (user.friends || []).map(friend => ({
-      ...friend,
-      profilePicture: getAbsoluteUrl(friend.profilePicture)
+    // Process users with absolute URLs
+    const processedUsers = users.map(user => ({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      profilePicture: getAbsoluteUrl(user.profilePicture),
+      status: user.status,
+      bio: user.bio || '',
+      phone: user.phone || '',
+      location: user.location || '',
+      birthday: user.birthday || '',
+      lastSeen: user.lastSeen,
+      isOnline: user.status === 'online'
     }));
 
-    res.json({
-      message: 'Profile fetched successfully',
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        profilePicture: profilePicture,
-        bio: user.bio || '',
-        phone: user.phone || '',
-        location: user.location || '',
-        birthday: user.birthday || '',
-        status: user.status || 'offline',
-        lastSeen: user.lastSeen || user.updatedAt,
-        friends: friendsWithAbsoluteUrls,
-        stories: [],
-        isOnline: user.status === 'online',
-        joinedAt: user.createdAt
-      }
-    });
+    res.json({ users: processedUsers });
   } catch (error) {
-    console.error('Profile fetch error:', error);
+    console.error('Users fetch error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
+/* ===========================
+   USER LIST (for suggestions)
+=========================== */
+
+
 
 // Get multiple users profiles (for group members)
 router.post('/profiles', protect, async (req, res) => {

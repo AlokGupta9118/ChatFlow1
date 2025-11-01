@@ -21,6 +21,7 @@ import {
   Mail
 } from "lucide-react";
 import { getToken } from "@/utils/getToken";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface IUser {
   _id: string;
@@ -62,8 +63,8 @@ interface IProfile {
   joinedAt: string;
 }
 
-// URL building function (same as profile page)
-const buildImageUrl = (imagePath: string | undefined): string => {
+// EXACT SAME LOGIC AS PROFILE.TSX
+const buildImageUrl = (imagePath: string | undefined | null): string => {
   if (!imagePath) return "/default-avatar.png";
   if (imagePath.startsWith("http")) {
     return imagePath;
@@ -99,7 +100,14 @@ const AddFriends: React.FC = () => {
     try {
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/users`, axiosConfig);
       const allUsers = res.data.users || res.data || [];
-      setUsers(allUsers.filter((u: IUser) => u._id !== currentUserId));
+      
+      // Process users with proper image URLs (EXACTLY like profile.tsx)
+      const processedUsers = allUsers.filter((u: IUser) => u._id !== currentUserId).map((user: IUser) => ({
+        ...user,
+        profilePicture: buildImageUrl(user.profilePicture)
+      }));
+      
+      setUsers(processedUsers);
     } catch (err) {
       console.error("❌ Error fetching users:", err);
     }
@@ -109,10 +117,19 @@ const AddFriends: React.FC = () => {
     try {
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/friends`, axiosConfig);
       const data = res.data || {};
+      
+      // Process all user data with image URLs
+      const processUserData = (userArray: IUser[]) => {
+        return userArray.filter((f: IUser) => f._id !== currentUserId).map((user: IUser) => ({
+          ...user,
+          profilePicture: buildImageUrl(user.profilePicture)
+        }));
+      };
+
       setFriendsData({
-        friends: (data.friends || []).filter((f: IUser) => f._id !== currentUserId),
-        incomingRequests: data.incomingRequests || [],
-        outgoingRequests: data.outgoingRequests || [],
+        friends: processUserData(data.friends || []),
+        incomingRequests: processUserData(data.incomingRequests || []),
+        outgoingRequests: processUserData(data.outgoingRequests || []),
       });
     } catch (err) {
       console.error("❌ Error fetching friends data:", err);
@@ -131,41 +148,71 @@ const AddFriends: React.FC = () => {
       
       const userData = res.data.user;
       
+      // Use EXACT same logic as profile.tsx
+      let profileUrl = "/default-avatar.png";
+      if (userData.profilePicture) {
+        profileUrl = userData.profilePicture.startsWith("http")
+          ? userData.profilePicture
+          : `${import.meta.env.VITE_API_URL}${userData.profilePicture.startsWith("/") ? "" : "/"}${userData.profilePicture}`;
+      }
+
       const processedUser = {
         ...userData,
-        profilePicture: buildImageUrl(userData.profilePicture),
-        friends: (userData.friends || []).map((friend: any) => ({
-          ...friend,
-          profilePicture: buildImageUrl(friend.profilePicture)
-        }))
+        profilePicture: profileUrl,
+        friends: (userData.friends || []).map((friend: any) => {
+          let friendProfileUrl = "/default-avatar.png";
+          if (friend.profilePicture) {
+            friendProfileUrl = friend.profilePicture.startsWith("http")
+              ? friend.profilePicture
+              : `${import.meta.env.VITE_API_URL}${friend.profilePicture.startsWith("/") ? "" : "/"}${friend.profilePicture}`;
+          }
+          return {
+            ...friend,
+            profilePicture: friendProfileUrl
+          };
+        })
       };
 
-      console.log('Processed User with new logic:', processedUser);
+      console.log('Processed User:', processedUser);
       setSelectedUser(processedUser);
     } catch (err: any) {
       console.error("❌ Error fetching user profile:", err);
-      console.error("Error details:", err.response?.data);
       
-      // Enhanced fallback with the same URL building logic
+      // Enhanced fallback with profile.tsx logic
       const allUsers = [...users, ...friendsData.friends, ...friendsData.incomingRequests, ...friendsData.outgoingRequests];
       const user = allUsers.find(u => u._id === userId);
       
       if (user) {
+        let profileUrl = "/default-avatar.png";
+        if (user.profilePicture) {
+          profileUrl = user.profilePicture.startsWith("http")
+            ? user.profilePicture
+            : `${import.meta.env.VITE_API_URL}${user.profilePicture.startsWith("api/pfp") ? "" : "/"}${user.profilePicture}`;
+        }
+
         const fallbackUser: IProfile = {
           _id: user._id,
           name: user.name,
           email: user.email || "email@example.com",
-          profilePicture: buildImageUrl(user.profilePicture),
+          profilePicture: profileUrl,
           bio: user.bio || '',
           phone: user.phone || '',
           location: user.location || '',
           birthday: user.birthday || '',
           status: user.status || 'offline',
           lastSeen: user.lastSeen || new Date().toISOString(),
-          friends: (user.friends || []).map((f: any) => ({
-            ...f,
-            profilePicture: buildImageUrl(f.profilePicture)
-          })),
+          friends: (user.friends || []).map((f: any) => {
+            let friendProfileUrl = "/default-avatar.png";
+            if (f.profilePicture) {
+              friendProfileUrl = f.profilePicture.startsWith("http")
+                ? f.profilePicture
+                : `${import.meta.env.VITE_API_URL}${f.profilePicture.startsWith("/") ? "" : "/"}${f.profilePicture}`;
+            }
+            return {
+              ...f,
+              profilePicture: friendProfileUrl
+            };
+          }),
           stories: user.stories || [],
           isOnline: user.isOnline || false,
           joinedAt: user.joinedAt || new Date().toISOString()
@@ -344,14 +391,20 @@ const AddFriends: React.FC = () => {
       >
         <div className="flex items-center gap-4">
           <div className="relative">
-            <img
-              src={buildImageUrl(user.profilePicture)}
-              alt={user.name}
-              className="w-12 h-12 rounded-2xl border-2 border-white/20 shadow-lg object-cover"
-              onError={(e) => {
-                e.target.src = "/default-avatar.png";
-              }}
-            />
+            {/* USE AVATAR COMPONENT EXACTLY LIKE PROFILE.TSX */}
+            <Avatar className="w-12 h-12 rounded-2xl border-2 border-white/20 shadow-lg">
+              <AvatarImage
+                src={user.profilePicture}
+                alt={user.name}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src = "/default-avatar.png";
+                }}
+              />
+              <AvatarFallback className="rounded-2xl bg-white/20 text-white font-semibold">
+                {user.name ? user.name[0]?.toUpperCase() : 'U'}
+              </AvatarFallback>
+            </Avatar>
             {status === "friend" && (
               <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-1 border-2 border-white">
                 <CheckCircle className="w-3 h-3 text-white" />
@@ -409,14 +462,20 @@ const AddFriends: React.FC = () => {
                 </button>
                 
                 <div className="absolute -bottom-12 left-8">
-                  <img
-                    src={buildImageUrl(selectedUser.profilePicture)}
-                    alt={selectedUser.name}
-                    className="w-24 h-24 rounded-3xl border-4 border-white/20 shadow-2xl object-cover"
-                    onError={(e) => {
-                      e.target.src = "/default-avatar.png";
-                    }}
-                  />
+                  {/* USE AVATAR COMPONENT EXACTLY LIKE PROFILE.TSX */}
+                  <Avatar className="w-24 h-24 rounded-3xl border-4 border-white/20 shadow-2xl">
+                    <AvatarImage
+                      src={selectedUser.profilePicture}
+                      alt={selectedUser.name}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = "/default-avatar.png";
+                      }}
+                    />
+                    <AvatarFallback className="rounded-3xl text-2xl bg-white/20 text-white font-bold">
+                      {selectedUser.name ? selectedUser.name[0]?.toUpperCase() : 'U'}
+                    </AvatarFallback>
+                  </Avatar>
                 </div>
               </div>
 
@@ -514,14 +573,20 @@ const AddFriends: React.FC = () => {
                     <div className="grid grid-cols-3 gap-3">
                       {selectedUser.friends.slice(0, 6).map(friend => (
                         <div key={friend._id} className="text-center">
-                          <img
-                            src={buildImageUrl(friend.profilePicture)}
-                            alt={friend.name}
-                            className="w-12 h-12 rounded-2xl mx-auto mb-2 object-cover"
-                            onError={(e) => {
-                              e.target.src = "/default-avatar.png";
-                            }}
-                          />
+                          {/* USE AVATAR COMPONENT FOR FRIENDS TOO */}
+                          <Avatar className="w-12 h-12 rounded-2xl mx-auto mb-2">
+                            <AvatarImage
+                              src={friend.profilePicture}
+                              alt={friend.name}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.src = "/default-avatar.png";
+                              }}
+                            />
+                            <AvatarFallback className="rounded-2xl bg-white/20 text-white text-xs">
+                              {friend.name ? friend.name[0]?.toUpperCase() : 'F'}
+                            </AvatarFallback>
+                          </Avatar>
                           <span className="text-white/70 text-sm block truncate">{friend.name}</span>
                         </div>
                       ))}
