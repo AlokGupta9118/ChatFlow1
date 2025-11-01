@@ -581,7 +581,7 @@ const Compatibility: React.FC = () => {
     const handleWaitingForPlayers = (data: any) => {
       console.log('🔄 Waiting for players:', data.waitingFor);
       setWaitingForPlayers(data.waitingFor || []);
-      setGameStatus('waiting-for-players');
+      
       setIsSubmittingFinal(false);
     };
 
