@@ -124,6 +124,11 @@ const Compatibility: React.FC = () => {
   const [advancedProgress, setAdvancedProgress] = useState<number>(0);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState<boolean>(false);
 
+  // NEW: Frontend submission tracking
+  const [localSubmissionStatus, setLocalSubmissionStatus] = useState<{[key: string]: boolean}>({});
+  const [receivedResults, setReceivedResults] = useState<boolean>(false);
+  const [bothPlayersSubmitted, setBothPlayersSubmitted] = useState<boolean>(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Initialize socket connection
@@ -139,6 +144,26 @@ const Compatibility: React.FC = () => {
     };
   }, []);
 
+  // NEW: Effect to track when both players have submitted
+  useEffect(() => {
+    if (players.length === 2) {
+      const allSubmitted = players.every(player => localSubmissionStatus[player.name]);
+      setBothPlayersSubmitted(allSubmitted);
+      
+      console.log('🔄 Frontend submission check:', {
+        players: players.map(p => p.name),
+        localSubmissionStatus,
+        allSubmitted
+      });
+
+      // If both have submitted AND we have results, show results
+      if (allSubmitted && receivedResults) {
+        console.log('🎉 Both players submitted and results received - showing results');
+        setGameStatus('results');
+      }
+    }
+  }, [localSubmissionStatus, players, receivedResults]);
+
   // Socket event listeners
   useEffect(() => {
     if (!socket) return;
@@ -150,6 +175,14 @@ const Compatibility: React.FC = () => {
       setIsHost(true);
       setQuestions(room.questions || []);
       setAdvancedQuestions(room.advancedQuestions || null);
+      
+      // Initialize local submission status
+      const initialSubmissionStatus: {[key: string]: boolean} = {};
+      room.players.forEach((player: Player) => {
+        initialSubmissionStatus[player.name] = false;
+      });
+      setLocalSubmissionStatus(initialSubmissionStatus);
+      
       setError('');
       setLoading(false);
       setGameStatus('waiting');
@@ -161,6 +194,14 @@ const Compatibility: React.FC = () => {
       setIsHost(room.players.find((p: Player) => p.socketId === socket.id)?.isHost || false);
       setQuestions(room.questions || []);
       setAdvancedQuestions(room.advancedQuestions || null);
+      
+      // Initialize local submission status
+      const initialSubmissionStatus: {[key: string]: boolean} = {};
+      room.players.forEach((player: Player) => {
+        initialSubmissionStatus[player.name] = false;
+      });
+      setLocalSubmissionStatus(initialSubmissionStatus);
+      
       setError('');
       setLoading(false);
       setGameStatus('waiting');
@@ -168,6 +209,17 @@ const Compatibility: React.FC = () => {
 
     const handleUpdatePlayers = (updatedPlayers: Player[]) => {
       setPlayers(updatedPlayers);
+      
+      // Update local submission status for new players
+      setLocalSubmissionStatus(prev => {
+        const updated = {...prev};
+        updatedPlayers.forEach(player => {
+          if (!(player.name in updated)) {
+            updated[player.name] = false;
+          }
+        });
+        return updated;
+      });
     };
 
     // Game events
@@ -176,6 +228,16 @@ const Compatibility: React.FC = () => {
       setCurrentQuestion(data.currentQuestion || 0);
       setTimeLeft(data.timeLeft || 30);
       setHasAnsweredCurrent(false);
+      // Reset submission tracking when game starts
+      setLocalSubmissionStatus(prev => {
+        const reset: {[key: string]: boolean} = {};
+        Object.keys(prev).forEach(key => {
+          reset[key] = false;
+        });
+        return reset;
+      });
+      setBothPlayersSubmitted(false);
+      setReceivedResults(false);
     };
 
     const handleNextQuestion = (data: any) => {
@@ -203,24 +265,43 @@ const Compatibility: React.FC = () => {
     };
 
     const handleWaitingForPlayers = (data: any) => {
-  setWaitingForPlayers(data.waitingFor);
-  setGameStatus('waiting-for-players');
-  setIsSubmittingFinal(false); // Reset submitting state when waiting
-};
+      setWaitingForPlayers(data.waitingFor);
+      setGameStatus('waiting-for-players');
+      setIsSubmittingFinal(false);
+    };
 
-   const handleShowResults = (resultsData: CompatibilityResults) => {
-  setResults(resultsData);
-  setGameStatus('results');
-  setIsSubmittingFinal(false);
-  setWaitingForPlayers([]); // Clear waiting list
-};
+    // UPDATED: Handle show results - store results but don't show immediately
+    const handleShowResults = (resultsData: CompatibilityResults) => {
+      console.log('📊 Results received from backend, waiting for both submissions...');
+      setResults(resultsData);
+      setReceivedResults(true);
+      
+      // Check if we can show results immediately
+      if (players.length === 2 && players.every(player => localSubmissionStatus[player.name])) {
+        console.log('✅ Both already submitted - showing results immediately');
+        setGameStatus('results');
+      } else {
+        console.log('⏳ Results received but waiting for other player...');
+        // Stay in waiting state until both submit
+      }
+    };
 
+    // UPDATED: Handle submission updates
     const handleSubmissionUpdate = (data: any) => {
-  setSubmissionStatus(prev => ({
-    ...prev,
-    [data.player]: data.submitted
-  }));
-};
+      console.log(`📝 Submission update: ${data.player} - ${data.submitted}`);
+      
+      setSubmissionStatus(prev => ({
+        ...prev,
+        [data.player]: data.submitted
+      }));
+
+      // Update local submission status
+      setLocalSubmissionStatus(prev => ({
+        ...prev,
+        [data.player]: data.submitted
+      }));
+    };
+
     // Error handling
     const handleJoinError = (errorMsg: string) => {
       setError(errorMsg);
@@ -262,7 +343,7 @@ const Compatibility: React.FC = () => {
       socket.off('join-error', handleJoinError);
       socket.off('start-error', handleStartError);
     };
-  }, [socket]);
+  }, [socket, localSubmissionStatus, players]);
 
   // Timer effect
   useEffect(() => {
@@ -279,6 +360,32 @@ const Compatibility: React.FC = () => {
   useEffect(() => {
     containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [gameStatus, currentQuestion, currentAdvancedSection]);
+
+  // NEW: Enhanced reset function
+  const resetGame = () => {
+    setRoomId('');
+    setPlayerName('');
+    setPlayers([]);
+    setIsHost(false);
+    setGameStatus('lobby');
+    setCurrentQuestion(0);
+    setQuestions([]);
+    setAdvancedQuestions(null);
+    setAdvancedAnswers({});
+    setPlayerProgress({});
+    setSubmissionStatus({});
+    setResults(null);
+    setWaitingForPlayers([]);
+    setError('');
+    setCurrentAdvancedSection('');
+    setAdvancedProgress(0);
+    setHasAnsweredCurrent(false);
+    setIsSubmittingFinal(false);
+    // Reset frontend tracking
+    setLocalSubmissionStatus({});
+    setReceivedResults(false);
+    setBothPlayersSubmitted(false);
+  };
 
   // Room management
   const createRoom = () => {
@@ -333,27 +440,6 @@ const Compatibility: React.FC = () => {
     resetGame();
   };
 
-  const resetGame = () => {
-    setRoomId('');
-    setPlayerName('');
-    setPlayers([]);
-    setIsHost(false);
-    setGameStatus('lobby');
-    setCurrentQuestion(0);
-    setQuestions([]);
-    setAdvancedQuestions(null);
-    setAdvancedAnswers({});
-    setPlayerProgress({});
-    setSubmissionStatus({});
-    setResults(null);
-    setWaitingForPlayers([]);
-    setError('');
-    setCurrentAdvancedSection('');
-    setAdvancedProgress(0);
-    setHasAnsweredCurrent(false);
-    setIsSubmittingFinal(false);
-  };
-
   // Game actions
   const submitAnswer = (answerIndex: number) => {
     if (hasAnsweredCurrent) return;
@@ -384,8 +470,17 @@ const Compatibility: React.FC = () => {
     });
   };
 
+  // UPDATED: Submit final with enhanced frontend tracking
   const submitFinal = () => {
+    console.log('🚀 Submitting final answers...');
     setIsSubmittingFinal(true);
+    
+    // Update local submission status immediately
+    setLocalSubmissionStatus(prev => ({
+      ...prev,
+      [playerName]: true
+    }));
+
     socket?.emit('compatibility-submit-final', { roomId });
   };
 
@@ -393,6 +488,14 @@ const Compatibility: React.FC = () => {
     const resultText = `Compatibility Score: ${results?.score}% - ${results?.matchLevel}\nRoom: ${roomId}\nPlayers: ${players.map(p => p.name).join(' & ')}`;
     console.log('Screenshot content:', resultText);
     alert('Results copied to console! In a real app, this would save or share the results.');
+  };
+
+  // NEW: Get waiting status for display
+  const getWaitingStatus = () => {
+    if (players.length < 2) return ['Waiting for second player...'];
+    
+    const waiting = players.filter(player => !localSubmissionStatus[player.name]);
+    return waiting.map(player => player.name);
   };
 
   // UI Components
@@ -749,9 +852,9 @@ const Compatibility: React.FC = () => {
           <div className="text-center">
             <button
               onClick={submitFinal}
-              disabled={isSubmittingFinal}
+              disabled={isSubmittingFinal || localSubmissionStatus[playerName]}
               className={`py-3 px-8 rounded-xl font-bold text-lg transition-all duration-200 flex items-center gap-2 mx-auto ${
-                isSubmittingFinal
+                isSubmittingFinal || localSubmissionStatus[playerName]
                   ? 'bg-gray-500/50 text-white/60 cursor-not-allowed'
                   : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600'
               }`}
@@ -761,6 +864,11 @@ const Compatibility: React.FC = () => {
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   Submitting...
                 </>
+              ) : localSubmissionStatus[playerName] ? (
+                <>
+                  <CheckCircle className="w-5 h-5 text-green-400" />
+                  Submitted - Waiting for Partner
+                </>
               ) : (
                 <>
                   <CheckCircle className="w-5 h-5" />
@@ -768,6 +876,38 @@ const Compatibility: React.FC = () => {
                 </>
               )}
             </button>
+          </div>
+
+          {/* NEW: Enhanced submission status display */}
+          <div className="mt-6 p-4 bg-white/5 border border-white/20 rounded-xl">
+            <h3 className="text-base font-semibold text-white mb-3 text-center">Submission Status</h3>
+            <div className="space-y-2">
+              {players.map(player => (
+                <div key={player.name} className="flex items-center justify-between p-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-semibold text-sm">
+                      {player.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-white font-medium">{player.name}</span>
+                  </div>
+                  <div className={`flex items-center gap-2 ${
+                    localSubmissionStatus[player.name] ? 'text-green-400' : 'text-amber-400'
+                  }`}>
+                    {localSubmissionStatus[player.name] ? (
+                      <>
+                        <CheckCircle className="w-5 h-5" />
+                        <span className="text-sm font-semibold">Submitted</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-5 h-5 animate-pulse" />
+                        <span className="text-sm font-semibold">Waiting...</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -873,43 +1013,68 @@ const Compatibility: React.FC = () => {
     );
   };
 
-  const renderWaitingForPlayers = () => (
-    <div className="min-h-screen bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white/10 backdrop-blur-lg rounded-2xl shadow-xl p-6 text-center border border-white/20">
-        <Clock className="w-16 h-16 text-white mx-auto mb-4 animate-pulse" />
-        <h1 className="text-2xl font-bold text-white mb-3">Waiting for Players</h1>
-        <p className="text-white/80 mb-6">
-          Waiting for {waitingForPlayers.join(', ')} to complete the test...
-        </p>
-        
-        <div className="space-y-3">
-          {players.map(player => (
-            <div key={player.name} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-semibold">
-                  {player.name.charAt(0).toUpperCase()}
-                </div>
-                <span className="text-white font-semibold">{player.name}</span>
-              </div>
-              {submissionStatus[player.name] ? (
-                <CheckCircle className="w-6 h-6 text-green-400" />
-              ) : (
-                <Clock className="w-6 h-6 text-amber-400 animate-pulse" />
-              )}
-            </div>
-          ))}
-        </div>
+  // UPDATED: Enhanced waiting for players with frontend tracking
+  const renderWaitingForPlayers = () => {
+    const waitingPlayers = getWaitingStatus();
+    const allSubmitted = bothPlayersSubmitted && receivedResults;
 
-        <button 
-          onClick={leaveRoom}
-          className="mt-6 p-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors flex items-center gap-2 mx-auto"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Leave Game
-        </button>
+    // If both have submitted and we have results, automatically show results
+    if (allSubmitted) {
+      console.log('🎉 Frontend detected both submitted with results - showing results');
+      setTimeout(() => setGameStatus('results'), 500);
+      return renderResults();
+    }
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white/10 backdrop-blur-lg rounded-2xl shadow-xl p-6 text-center border border-white/20">
+          <Clock className="w-16 h-16 text-white mx-auto mb-4 animate-pulse" />
+          <h1 className="text-2xl font-bold text-white mb-3">Waiting for Players</h1>
+          <p className="text-white/80 mb-6">
+            {waitingPlayers.length > 0 
+              ? `Waiting for ${waitingPlayers.join(', ')} to complete the test...`
+              : 'All players have submitted! Preparing results...'
+            }
+          </p>
+          
+          <div className="space-y-3 mb-6">
+            {players.map(player => (
+              <div key={player.name} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-semibold">
+                    {player.name.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-white font-semibold">{player.name}</span>
+                </div>
+                {localSubmissionStatus[player.name] ? (
+                  <CheckCircle className="w-6 h-6 text-green-400" />
+                ) : (
+                  <Clock className="w-6 h-6 text-amber-400 animate-pulse" />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* NEW: Show debug info in development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
+              <div>Debug: {bothPlayersSubmitted ? 'Both submitted' : 'Waiting'}</div>
+              <div>Results: {receivedResults ? 'Received' : 'Pending'}</div>
+              <div>Local Status: {JSON.stringify(localSubmissionStatus)}</div>
+            </div>
+          )}
+
+          <button 
+            onClick={leaveRoom}
+            className="mt-6 p-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition-colors flex items-center gap-2 mx-auto"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Leave Game
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderResults = () => {
     if (!results) return null;
