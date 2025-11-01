@@ -77,6 +77,55 @@ export default function gameSocket(io) {
     console.log(`📊 Advanced compatibility calculated: ${finalScore}%`);
     return result;
   }
+  // ✅ FIXED: Check if all players have submitted their final answers
+function checkAllSubmissions(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  console.log(`🔍 Checking submissions for room ${roomId}:`, {
+    players: room.players.map(p => p.name),
+    submissionStatus: room.submissionStatus,
+    gameType: room.gameType
+  });
+
+  // Count how many players have submitted
+  const submittedCount = room.players.filter(player => 
+    room.submissionStatus[player.name] === true
+  ).length;
+
+  const waitingFor = room.players
+    .filter(player => room.submissionStatus[player.name] !== true)
+    .map(player => player.name);
+
+  console.log(`📊 Room ${roomId}: ${submittedCount}/${room.players.length} players submitted`);
+  console.log(`⏳ Waiting for: ${waitingFor.join(', ') || 'none'}`);
+
+  if (submittedCount === room.players.length) {
+    // ALL players have submitted - calculate and show results
+    console.log(`🎉 ALL players submitted in ${roomId}, calculating results`);
+    
+    const results = calculateCompatibilityResults(room);
+    
+    // Show results to everyone in the room
+    io.to(roomId).emit("compatibility-show-results", results);
+    
+    // Reset submission status for potential replay
+    room.players.forEach(player => {
+      room.submissionStatus[player.name] = false;
+    });
+    
+    console.log(`📈 Results shown for ${roomId}`);
+  } else {
+    // NOT all players have submitted - show waiting screen
+    io.to(roomId).emit("compatibility-waiting-for-players", {
+      submitted: submittedCount,
+      total: room.players.length,
+      waitingFor: waitingFor
+    });
+    
+    console.log(`⏳ Still waiting for ${waitingFor.length} player(s): ${waitingFor.join(', ')}`);
+  }
+}
 
   function calculateAdvancedCompatibility(adv1, adv2) {
     return {
@@ -1138,7 +1187,10 @@ export default function gameSocket(io) {
     });
 
     // ✅ ENHANCED: Submit final answers
-    // ✅ FIXED: Submit final answers - only show waiting screen, don't calculate results immediately
+// ✅ FIXED: Submit final answers
+
+// ✅ FIXED: Check if all players have submitted their final answers
+
 socket.on("compatibility-submit-final", ({ roomId }) => {
   const room = rooms[roomId];
   if (!room || room.gameType !== "compatibility") return;
@@ -1157,53 +1209,11 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
     submitted: true
   });
 
-  console.log(`📋 ${player.name} completed compatibility test`);
+  console.log(`📋 ${player.name} marked as completed`);
 
   // Check if all players have submitted
   checkAllSubmissions(roomId);
 });
-
-// ✅ FIXED: Check if all players have submitted their final answers
-function checkAllSubmissions(roomId) {
-  const room = rooms[roomId];
-  if (!room) return;
-
-  const submittedPlayers = room.players.filter(p => room.submissionStatus[p.name]);
-  const waitingFor = room.players.filter(p => !room.submissionStatus[p.name]).map(p => p.name);
-
-  console.log(`📊 Submission status in ${roomId}:`, {
-    submitted: submittedPlayers.map(p => p.name),
-    waiting: waitingFor,
-    total: room.players.length
-  });
-
-  if (submittedPlayers.length === room.players.length) {
-    // ALL players have submitted - calculate and show results
-    console.log(`🎉 All players submitted in ${roomId}, calculating results`);
-    
-    const results = calculateCompatibilityResults(room);
-    
-    // Show results to everyone in the room
-    io.to(roomId).emit("compatibility-show-results", results);
-    
-    // Reset submission status for potential replay
-    room.submissionStatus = {};
-    room.players.forEach(player => {
-      room.submissionStatus[player.name] = false;
-    });
-    
-    console.log(`📈 Results shown for ${roomId}`);
-  } else {
-    // NOT all players have submitted - show waiting screen
-    io.to(roomId).emit("compatibility-waiting-for-players", {
-      submitted: submittedPlayers.length,
-      total: room.players.length,
-      waitingFor: waitingFor
-    });
-    
-    console.log(`⏳ Waiting for: ${waitingFor.join(', ')}`);
-  }
-}
 
     // ✅ Submit answers for compatibility game - ENHANCED
     socket.on("submit-answers", ({ roomId, player, answers }) => {
