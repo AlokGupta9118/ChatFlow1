@@ -1,5 +1,5 @@
 // components/Compatibility.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { 
   Users, 
@@ -19,6 +19,7 @@ import {
   Copy,
   AlertCircle
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
 
 const DEFAULT_SOCKET_URL = `${import.meta.env.VITE_API_URL}`;
 
@@ -95,7 +96,6 @@ interface CompatibilityResults {
 
 type GameStatus = 'lobby' | 'waiting' | 'playing' | 'advanced' | 'waiting-for-players' | 'results';
 
-// NEW: Store all answer data locally
 interface AnswerData {
   regularAnswers: number[];
   advancedAnswers: {
@@ -122,7 +122,7 @@ const Compatibility: React.FC = () => {
   const [advancedQuestions, setAdvancedQuestions] = useState<AdvancedQuestions | null>(null);
   const [hasAnsweredCurrent, setHasAnsweredCurrent] = useState<boolean>(false);
   
-  // NEW: Enhanced local state management
+  // Enhanced local state management
   const [myAnswers, setMyAnswers] = useState<AnswerData>({
     regularAnswers: [],
     advancedAnswers: {}
@@ -141,11 +141,13 @@ const Compatibility: React.FC = () => {
   const [currentAdvancedSection, setCurrentAdvancedSection] = useState<string>('');
   const [advancedProgress, setAdvancedProgress] = useState<number>(0);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState<boolean>(false);
+  const [isSharing, setIsSharing] = useState<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   // NEW: Independent result calculation function
-  const calculateResultsIndependently = (): CompatibilityResults => {
+  const calculateResultsIndependently = useCallback((): CompatibilityResults => {
     console.log('🎯 Calculating results independently based on local data');
     
     if (!otherPlayerAnswers) {
@@ -187,7 +189,7 @@ const Compatibility: React.FC = () => {
       matchLevel: getMatchLevel(finalScore),
       recommendations: generateRecommendations(finalScore)
     };
-  };
+  }, [myAnswers, otherPlayerAnswers]);
 
   // NEW: Calculate advanced compatibility
   const calculateAdvancedCompatibility = (myAdvanced: any, otherAdvanced: any): number => {
@@ -342,12 +344,24 @@ const Compatibility: React.FC = () => {
   };
 
   // NEW: Show results based on local data
-  const showResults = () => {
+  const showResults = useCallback(() => {
     console.log('🚀 Showing results based on local data');
     const calculatedResults = calculateResultsIndependently();
     setResults(calculatedResults);
     setGameStatus('results');
-  };
+  }, [calculateResultsIndependently]);
+
+  // FIXED: Enhanced effect to track when both players have submitted
+  useEffect(() => {
+    if (players.length === 2 && gameStatus === 'waiting-for-players') {
+      const allSubmitted = players.every(player => localSubmissionStatus[player.name]);
+      
+      if (allSubmitted) {
+        console.log('🎉 Both players submitted locally - showing results');
+        showResults();
+      }
+    }
+  }, [localSubmissionStatus, players, gameStatus, showResults]);
 
   // Initialize socket connection
   useEffect(() => {
@@ -361,19 +375,6 @@ const Compatibility: React.FC = () => {
       newSocket.disconnect();
     };
   }, []);
-
-  // NEW: Enhanced effect to track when both players have submitted
-  useEffect(() => {
-    if (players.length === 2 && gameStatus === 'waiting-for-players') {
-      const allSubmitted = players.every(player => localSubmissionStatus[player.name]);
-      
-      if (allSubmitted) {
-        console.log('🎉 Both players submitted locally - showing results');
-        // Small delay to ensure all data is processed
-        setTimeout(showResults, 1000);
-      }
-    }
-  }, [localSubmissionStatus, players, gameStatus]);
 
   // Socket event listeners
   useEffect(() => {
@@ -695,7 +696,7 @@ const Compatibility: React.FC = () => {
     });
   };
 
-  // NEW: Enhanced final submission
+  // FIXED: Enhanced final submission
   const submitFinal = () => {
     console.log('🚀 Submitting final answers with local data:', myAnswers);
     setIsSubmittingFinal(true);
@@ -715,10 +716,83 @@ const Compatibility: React.FC = () => {
     socket?.emit('compatibility-submit-final', { roomId });
   };
 
-  const captureScreenshot = () => {
-    const resultText = `Compatibility Score: ${results?.score}% - ${results?.matchLevel}\nRoom: ${roomId}\nPlayers: ${players.map(p => p.name).join(' & ')}`;
-    console.log('Screenshot content:', resultText);
-    alert('Results copied to console! In a real app, this would save or share the results.');
+  // FIXED: Enhanced screenshot capture with actual image generation
+  const captureScreenshot = async () => {
+    if (!resultsRef.current) return;
+    
+    setIsSharing(true);
+    try {
+      const canvas = await html2canvas(resultsRef.current, {
+        backgroundColor: '#7c3aed', // Purple background matching the gradient
+        scale: 2, // Higher quality
+        useCORS: true,
+        allowTaint: true,
+        logging: false
+      });
+
+      // Convert canvas to blob and create download
+      canvas.toBlob((blob) => {
+        if (blob) {
+          // Create download link
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = `compatibility-results-${roomId}-${Date.now()}.png`;
+          link.href = url;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
+      }, 'image/png');
+
+    } catch (error) {
+      console.error('Error capturing screenshot:', error);
+      alert('Failed to capture screenshot. Please try again.');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  // NEW: Share results to clipboard as image
+  const shareToClipboard = async () => {
+    if (!resultsRef.current) return;
+    
+    setIsSharing(true);
+    try {
+      const canvas = await html2canvas(resultsRef.current, {
+        backgroundColor: '#7c3aed',
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false
+      });
+
+      // Convert canvas to blob for clipboard
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          try {
+            // Try to copy to clipboard using modern API
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                'image/png': blob
+              })
+            ]);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 3000);
+          } catch (err) {
+            // Fallback: Download the image
+            console.warn('Clipboard API not supported, falling back to download');
+            captureScreenshot();
+          }
+        }
+      }, 'image/png');
+
+    } catch (error) {
+      console.error('Error sharing to clipboard:', error);
+      alert('Failed to share results. Please try again.');
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   // NEW: Get waiting status for display
@@ -1259,17 +1333,10 @@ const Compatibility: React.FC = () => {
     );
   };
 
-  // Enhanced waiting for players with independent result calculation
+  // FIXED: Enhanced waiting for players with independent result calculation
   const renderWaitingForPlayers = () => {
     const waitingPlayers = getWaitingStatus();
     const allSubmitted = players.length === 2 && players.every(player => localSubmissionStatus[player.name]);
-
-    // If both have submitted, show results immediately using local data
-    if (allSubmitted) {
-      console.log('🎉 Both players submitted - showing independent results');
-      setTimeout(showResults, 500);
-      return renderResults();
-    }
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center p-4">
@@ -1333,7 +1400,7 @@ const Compatibility: React.FC = () => {
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-red-600 p-4">
-        <div className="max-w-4xl mx-auto">
+        <div ref={resultsRef} className="max-w-4xl mx-auto">
           <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-6 text-center mb-6 border border-white/20">
             <div className="w-24 h-24 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
               <Trophy className="w-10 h-10 text-white" />
@@ -1425,21 +1492,33 @@ const Compatibility: React.FC = () => {
             </button>
             
             <button
-              onClick={copyRoomCode}
-              className="p-4 bg-white/10 border-2 border-white/20 rounded-xl hover:border-white/40 transition-all duration-200 text-center"
+              onClick={shareToClipboard}
+              disabled={isSharing}
+              className="p-4 bg-white/10 border-2 border-white/20 rounded-xl hover:border-white/40 transition-all duration-200 text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Share2 className="w-6 h-6 text-white mx-auto mb-2" />
+              {isSharing ? (
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              ) : (
+                <Share2 className="w-6 h-6 text-white mx-auto mb-2" />
+              )}
               <span className="text-white font-semibold">
-                {copied ? 'Copied!' : 'Share Results'}
+                {copied ? 'Copied!' : (isSharing ? 'Sharing...' : 'Share Results')}
               </span>
             </button>
             
             <button
               onClick={captureScreenshot}
-              className="p-4 bg-white/10 border-2 border-white/20 rounded-xl hover:border-white/40 transition-all duration-200 text-center"
+              disabled={isSharing}
+              className="p-4 bg-white/10 border-2 border-white/20 rounded-xl hover:border-white/40 transition-all duration-200 text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Download className="w-6 h-6 text-white mx-auto mb-2" />
-              <span className="text-white font-semibold">Save Results</span>
+              {isSharing ? (
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              ) : (
+                <Download className="w-6 h-6 text-white mx-auto mb-2" />
+              )}
+              <span className="text-white font-semibold">
+                {isSharing ? 'Saving...' : 'Save Results'}
+              </span>
             </button>
           </div>
         </div>
