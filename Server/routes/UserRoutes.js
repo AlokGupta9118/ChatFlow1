@@ -60,6 +60,113 @@ router.put("/friends/decline/:id", protect, declineFriendRequest);
 
 // friendsController.js
 
+
+
+// Get user profile by ID - Public or Protected endpoint
+router.get('profile/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    
+    // Check if user exists
+    const user = await User.findById(userId)
+      .select('-password -refreshTokens -__v -blockedUsers -incomingRequests -outgoingRequests')
+      .populate('friends', 'name profilePicture status email bio phone location birthday lastSeen')
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
+    }
+
+    // Function to convert image URLs to absolute URLs (EXACTLY like other controllers)
+    const getAbsoluteUrl = (path) => {
+      if (!path) return null;
+      if (path.startsWith('http')) {
+        // Replace http with https for consistency
+        return path.replace('http://', 'https://');
+      }
+      // For relative paths, use HTTPS
+      return `https://${req.get('host')}${path}`;
+    };
+
+    // Process main user profile picture
+    let profilePicture = getAbsoluteUrl(user.profilePicture);
+    let coverPhoto = getAbsoluteUrl(user.coverPhoto);
+
+    // Process friends with absolute URLs
+    const processedFriends = (user.friends || []).map(friend => ({
+      _id: friend._id,
+      name: friend.name,
+      email: friend.email,
+      profilePicture: getAbsoluteUrl(friend.profilePicture),
+      status: friend.status,
+      bio: friend.bio || '',
+      phone: friend.phone || '',
+      location: friend.location || '',
+      birthday: friend.birthday || '',
+      lastSeen: friend.lastSeen,
+      isOnline: friend.status === 'online'
+    }));
+
+    // Process stories with absolute URLs
+    const processedStories = (user.stories || []).map(story => ({
+      _id: story._id,
+      mediaUrl: getAbsoluteUrl(story.mediaUrl),
+      mediaType: story.mediaType,
+      caption: story.caption,
+      createdAt: story.createdAt,
+      expiresAt: story.expiresAt
+    }));
+
+    // Construct the response object
+    const userProfile = {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      profilePicture: profilePicture,
+      coverPhoto: coverPhoto,
+      bio: user.bio || '',
+      phone: user.phone || '',
+      location: user.location || '',
+      birthday: user.birthday || '',
+      status: user.status || 'offline',
+      lastSeen: user.lastSeen || user.updatedAt,
+      friends: processedFriends,
+      stories: processedStories,
+      isOnline: user.status === 'online',
+      joinedAt: user.createdAt,
+      // Additional stats
+      friendsCount: processedFriends.length,
+      storiesCount: processedStories.length
+    };
+
+    res.json({
+      success: true,
+      message: 'Profile fetched successfully',
+      user: userProfile
+    });
+
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    
+    // Handle specific errors
+    if (error.name === 'CastError') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid user ID format' 
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while fetching profile',
+      error: process.env.NODE_ENV === 'production' ? undefined : error.message 
+    });
+  }
+});
+
 // Get friends, incoming and outgoing requests
 router.get('/', protect, async (req, res) => {
   try {
