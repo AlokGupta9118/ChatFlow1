@@ -79,20 +79,19 @@ router.get('/profile/:userId', protect, async (req, res) => {
       return res.status(403).json({ message: 'You are blocked from viewing this profile' });
     }
 
-    // Convert main user's profile picture to absolute URL if it's relative
-    if (user.profilePicture && !user.profilePicture.startsWith('http')) {
-      user.profilePicture = `${req.protocol}://${req.get('host')}${user.profilePicture}`;
+    // Convert profile picture to absolute URL if it's a relative path
+    let profilePicture = user.profilePicture;
+    if (profilePicture && !profilePicture.startsWith('http')) {
+      profilePicture = `${req.protocol}://${req.get('host')}${profilePicture}`;
     }
 
-    // Convert each friend's profile picture to absolute URL if it's relative
-    if (user.friends) {
-      user.friends = user.friends.map(friend => {
-        if (friend.profilePicture && !friend.profilePicture.startsWith('http')) {
-          friend.profilePicture = `${req.protocol}://${req.get('host')}${friend.profilePicture}`;
-        }
-        return friend;
-      });
-    }
+    // Also convert friends' profile pictures
+    const friendsWithAbsoluteUrls = user.friends.map(friend => ({
+      ...friend.toObject ? friend.toObject() : friend,
+      profilePicture: friend.profilePicture && !friend.profilePicture.startsWith('http') 
+        ? `${req.protocol}://${req.get('host')}${friend.profilePicture}`
+        : friend.profilePicture
+    }));
 
     res.json({
       message: 'Profile fetched successfully',
@@ -100,15 +99,14 @@ router.get('/profile/:userId', protect, async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
-        profilePicture: user.profilePicture,
+        profilePicture: profilePicture,
         bio: user.bio,
         phone: user.phone,
         location: user.location,
         birthday: user.birthday,
         status: user.status,
         lastSeen: user.lastSeen,
-        friends: user.friends,
-        stories: user.stories,
+        friends: friendsWithAbsoluteUrls,
         isOnline: user.status === 'online',
         joinedAt: user.createdAt
       }
