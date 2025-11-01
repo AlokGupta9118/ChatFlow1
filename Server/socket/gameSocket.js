@@ -40,14 +40,7 @@ export default function gameSocket(io) {
       room.players.forEach(player => {
         room.submissionStatus[player.name] = false;
       });
-    } else {
-      // NOT all players have submitted - show waiting screen
-      io.to(roomId).emit("compatibility-waiting-for-players", {
-        submitted: submittedCount,
-        total: room.players.length,
-        waitingFor: waitingFor
-      });
-    }
+    } 
   }
 
   // ✅ Helper function to sync game state to all players
