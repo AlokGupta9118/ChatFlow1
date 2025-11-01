@@ -19,7 +19,7 @@ import gameSocket from "./socket/gameSocket.js";
 import statusRoutes from "./routes/statusRoutes.js";
 import chatRoutes from "./routes/chat.js";
 import SocketService from "./socket/messageSocket.js"; // Your updated SocketService
-import User from "./models/User.js";
+
 
 dotenv.config();
 
@@ -67,76 +67,7 @@ app.use("/api/user", settingRoutes);
 app.get("/api/user/profile", protect, getProfile);
 app.use("/api/status", statusRoutes);
 // Get friends, incoming and outgoing requests
-router.get('/', protect, async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id)
-      .populate('friends', 'name profilePicture status email bio phone location birthday lastSeen')
-      .populate('incomingRequests', 'name profilePicture status email lastSeen')
-      .populate('outgoingRequests', 'name profilePicture status email lastSeen');
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    // Function to convert image URLs to absolute URLs (EXACTLY like profile controller)
-    const getAbsoluteUrl = (path) => {
-      if (!path) return null;
-      if (path.startsWith('http')) {
-        // Replace http with https
-        return path.replace('http://', 'https://');
-      }
-      // For relative paths, use HTTPS
-      return `https://${req.get('host')}${path}`;
-    };
-
-    // Process friends with absolute URLs
-    const processedFriends = (user.friends || []).map(friend => ({
-      _id: friend._id,
-      name: friend.name,
-      email: friend.email,
-      profilePicture: getAbsoluteUrl(friend.profilePicture),
-      status: friend.status,
-      bio: friend.bio || '',
-      phone: friend.phone || '',
-      location: friend.location || '',
-      birthday: friend.birthday || '',
-      lastSeen: friend.lastSeen,
-      isOnline: friend.status === 'online'
-    }));
-
-    // Process incoming requests
-    const processedIncoming = (user.incomingRequests || []).map(reqUser => ({
-      _id: reqUser._id,
-      name: reqUser.name,
-      email: reqUser.email,
-      profilePicture: getAbsoluteUrl(reqUser.profilePicture),
-      status: reqUser.status,
-      lastSeen: reqUser.lastSeen,
-      isOnline: reqUser.status === 'online'
-    }));
-
-    // Process outgoing requests
-    const processedOutgoing = (user.outgoingRequests || []).map(reqUser => ({
-      _id: reqUser._id,
-      name: reqUser.name,
-      email: reqUser.email,
-      profilePicture: getAbsoluteUrl(reqUser.profilePicture),
-      status: reqUser.status,
-      lastSeen: reqUser.lastSeen,
-      isOnline: reqUser.status === 'online'
-    }));
-
-    res.json({
-      friends: processedFriends,
-      incomingRequests: processedIncoming,
-      outgoingRequests: processedOutgoing
-    });
-
-  } catch (error) {
-    console.error('Friends fetch error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
 // HTTP server + SINGLE Socket.IO instance
 const server = http.createServer(app);
 
