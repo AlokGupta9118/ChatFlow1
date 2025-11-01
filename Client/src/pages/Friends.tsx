@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-
 import { motion } from "framer-motion";
 import { 
   UserPlus, 
@@ -15,10 +14,6 @@ import {
   Search,
   Shield,
   Heart,
-  Star,
-  Trophy,
-  Sparkles,
-  Crown,
   X,
   Calendar,
   MapPin,
@@ -26,7 +21,7 @@ import {
   Mail
 } from "lucide-react";
 import { getToken } from "@/utils/getToken";
-import { getSafeImageUrl } from '@/utils/urlUtils';
+
 interface IUser {
   _id: string;
   name: string;
@@ -66,6 +61,15 @@ interface IProfile {
   isOnline: boolean;
   joinedAt: string;
 }
+
+// URL building function (same as profile page)
+const buildImageUrl = (imagePath: string | undefined): string => {
+  if (!imagePath) return "/default-avatar.png";
+  if (imagePath.startsWith("http")) {
+    return imagePath;
+  }
+  return `${import.meta.env.VITE_API_URL}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
+};
 
 const AddFriends: React.FC = () => {
   const navigate = useNavigate();
@@ -116,73 +120,62 @@ const AddFriends: React.FC = () => {
       setLoading(false);
     }
   };
-const fetchUserProfile = async (userId: string) => {
-  setProfileLoading(true);
-  try {
-    const res = await axios.get(
-      `${import.meta.env.VITE_API_URL}/api/profile/${userId}`,
-      axiosConfig
-    );
-    
-    console.log('Profile API Response:', res.data); // Debug log
-    
-    const userData = res.data.user;
-    
-    // Enhanced URL conversion with better error handling
-    const convertToAbsoluteUrl = (url: string | undefined) => {
-      if (!url) return '/default-avatar.png';
-      if (url.startsWith('http')) return url;
-      // Remove double slashes if any
-      const baseUrl = import.meta.env.VITE_API_URL.replace(/\/$/, '');
-      const cleanUrl = url.startsWith('/') ? url : `/${url}`;
-      return `${baseUrl}${cleanUrl}`;
-    };
 
-    const processedUser = {
-  ...userData,
-  profilePicture: getSafeImageUrl(userData.profilePicture),
-  friends: (userData.friends || []).map((friend: any) => ({
-    ...friend,
-    profilePicture: getSafeImageUrl(friend.profilePicture)
-  }))
-};
-
-    console.log('Processed User:', processedUser); // Debug log
-    setSelectedUser(processedUser);
-  } catch (err: any) {
-    console.error("❌ Error fetching user profile:", err);
-    console.error("Error details:", err.response?.data); // Debug log
-    
-    // Enhanced fallback with better error handling
-    const allUsers = [...users, ...friendsData.friends, ...friendsData.incomingRequests, ...friendsData.outgoingRequests];
-    const user = allUsers.find(u => u._id === userId);
-    
-    if (user) {
-      const fallbackUser: IProfile = {
-        _id: user._id,
-        name: user.name,
-        email: user.email || "email@example.com",
-        profilePicture: user.profilePicture || '/default-avatar.png',
-        bio: user.bio || '',
-        phone: user.phone || '',
-        location: user.location || '',
-        birthday: user.birthday || '',
-        status: user.status || 'offline',
-        lastSeen: user.lastSeen || new Date().toISOString(),
-        friends: user.friends || [],
-        stories: user.stories || [],
-        isOnline: user.isOnline || false,
-        joinedAt: user.joinedAt || new Date().toISOString()
+  const fetchUserProfile = async (userId: string) => {
+    setProfileLoading(true);
+    try {
+      const res = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/profile/${userId}`,
+        axiosConfig
+      );
+      
+      const userData = res.data.user;
+      
+      const processedUser = {
+        ...userData,
+        profilePicture: buildImageUrl(userData.profilePicture),
+        friends: (userData.friends || []).map((friend: any) => ({
+          ...friend,
+          profilePicture: buildImageUrl(friend.profilePicture)
+        }))
       };
-      setSelectedUser(fallbackUser);
-    } else {
-      // Show error message to user
-      alert('Failed to load user profile. Please try again.');
+
+      console.log('Processed User with new logic:', processedUser);
+      setSelectedUser(processedUser);
+    } catch (err: any) {
+      console.error("❌ Error fetching user profile:", err);
+      console.error("Error details:", err.response?.data);
+      
+      // Enhanced fallback with the same URL building logic
+      const allUsers = [...users, ...friendsData.friends, ...friendsData.incomingRequests, ...friendsData.outgoingRequests];
+      const user = allUsers.find(u => u._id === userId);
+      
+      if (user) {
+        const fallbackUser: IProfile = {
+          _id: user._id,
+          name: user.name,
+          email: user.email || "email@example.com",
+          profilePicture: buildImageUrl(user.profilePicture),
+          bio: user.bio || '',
+          phone: user.phone || '',
+          location: user.location || '',
+          birthday: user.birthday || '',
+          status: user.status || 'offline',
+          lastSeen: user.lastSeen || new Date().toISOString(),
+          friends: (user.friends || []).map((f: any) => ({
+            ...f,
+            profilePicture: buildImageUrl(f.profilePicture)
+          })),
+          stories: user.stories || [],
+          isOnline: user.isOnline || false,
+          joinedAt: user.joinedAt || new Date().toISOString()
+        };
+        setSelectedUser(fallbackUser);
+      }
+    } finally {
+      setProfileLoading(false);
     }
-  } finally {
-    setProfileLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
     if (!token) {
@@ -352,10 +345,13 @@ const fetchUserProfile = async (userId: string) => {
         <div className="flex items-center gap-4">
           <div className="relative">
             <img
-  src={getSafeImageUrl(user.profilePicture)}
-  alt={user.name}
-  className="w-12 h-12 rounded-2xl border-2 border-white/20 shadow-lg object-cover"
-/>
+              src={buildImageUrl(user.profilePicture)}
+              alt={user.name}
+              className="w-12 h-12 rounded-2xl border-2 border-white/20 shadow-lg object-cover"
+              onError={(e) => {
+                e.target.src = "/default-avatar.png";
+              }}
+            />
             {status === "friend" && (
               <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-1 border-2 border-white">
                 <CheckCircle className="w-3 h-3 text-white" />
@@ -413,21 +409,16 @@ const fetchUserProfile = async (userId: string) => {
                 </button>
                 
                 <div className="absolute -bottom-12 left-8">
-                 <img
-  src={getSafeImageUrl(selectedUser.profilePicture)}
-  alt={selectedUser.name}
-  className="w-24 h-24 rounded-3xl border-4 border-white/20 shadow-2xl object-cover"
-/>
+                  <img
+                    src={buildImageUrl(selectedUser.profilePicture)}
+                    alt={selectedUser.name}
+                    className="w-24 h-24 rounded-3xl border-4 border-white/20 shadow-2xl object-cover"
+                    onError={(e) => {
+                      e.target.src = "/default-avatar.png";
+                    }}
+                  />
                 </div>
               </div>
-            
-{selectedUser && (
-  <div className="bg-red-500/20 p-4 rounded-lg mt-4">
-    <p className="text-red-300 text-sm">Debug Info:</p>
-    <p className="text-red-300 text-xs">Profile Picture: {selectedUser.profilePicture}</p>
-    <p className="text-red-300 text-xs">Has Profile Picture: {!!selectedUser.profilePicture ? 'Yes' : 'No'}</p>
-  </div>
-)}
 
               {/* Content */}
               <div className="pt-16 p-8">
@@ -523,11 +514,14 @@ const fetchUserProfile = async (userId: string) => {
                     <div className="grid grid-cols-3 gap-3">
                       {selectedUser.friends.slice(0, 6).map(friend => (
                         <div key={friend._id} className="text-center">
-                         <img
-  src={getSafeImageUrl(selectedUser.profilePicture)}
-  alt={selectedUser.name}
-  className="w-24 h-24 rounded-3xl border-4 border-white/20 shadow-2xl object-cover"
-/>
+                          <img
+                            src={buildImageUrl(friend.profilePicture)}
+                            alt={friend.name}
+                            className="w-12 h-12 rounded-2xl mx-auto mb-2 object-cover"
+                            onError={(e) => {
+                              e.target.src = "/default-avatar.png";
+                            }}
+                          />
                           <span className="text-white/70 text-sm block truncate">{friend.name}</span>
                         </div>
                       ))}
