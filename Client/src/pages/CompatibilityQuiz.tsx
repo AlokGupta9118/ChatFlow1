@@ -581,7 +581,7 @@ const Compatibility: React.FC = () => {
     const handleWaitingForPlayers = (data: any) => {
       console.log('🔄 Waiting for players:', data.waitingFor);
       setWaitingForPlayers(data.waitingFor || []);
-      
+      setGameStatus('waiting-for-players');
       setIsSubmittingFinal(false);
     };
 
@@ -605,6 +605,7 @@ const Compatibility: React.FC = () => {
     const handleAllSubmitted = () => {
       console.log('🎉 All players have submitted on server side');
       // We'll rely on the local effect to show results when we have both data
+       setGameStatus('results');
     };
 
     // Error handling
