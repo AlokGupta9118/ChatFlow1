@@ -1164,81 +1164,117 @@ export default function gameSocket(io) {
       console.log(`📊 ${player.name} advanced progress: ${room.playerProgress[player.name]}%`);
     });
 
-    // ✅ FIXED: Submit final answers with result submission tracking
-    socket.on("compatibility-submit-final", ({ roomId }) => {
-      const room = rooms[roomId];
-      if (!room || room.gameType !== "compatibility") return;
+  // ✅ FIXED: Submit final answers - only marks submission, doesn't trigger results immediately
+socket.on("compatibility-submit-final", ({ roomId }) => {
+  const room = rooms[roomId];
+  if (!room || room.gameType !== "compatibility") return;
 
-      const player = room.players.find(p => p.socketId === socket.id);
-      if (!player) return;
+  const player = room.players.find(p => p.socketId === socket.id);
+  if (!player) return;
 
-      console.log(`✅ ${player.name} submitted final answers in ${roomId}`);
-      
-      // Mark this player as submitted
-      room.submissionStatus[player.name] = true;
+  console.log(`✅ ${player.name} submitted final answers in ${roomId}`);
+  
+  // Mark this player as submitted
+  room.submissionStatus[player.name] = true;
 
-      // Notify all players about this submission
-      io.to(roomId).emit("compatibility-submission-update", {
-        player: player.name,
-        submitted: true
-      });
+  // Notify all players about this submission
+  io.to(roomId).emit("compatibility-submission-update", {
+    player: player.name,
+    submitted: true
+  });
 
-      console.log(`📋 ${player.name} marked as completed`);
+  console.log(`📋 ${player.name} marked as completed`);
 
-      // Check if all players have submitted
-      checkAllSubmissions(roomId);
+  // Check if all players have submitted final answers
+  const allSubmitted = room.players.every(player => room.submissionStatus[player.name]);
+  
+  if (allSubmitted) {
+    console.log(`🎉 ALL players submitted final answers in ${roomId}`);
+    // Move to waiting-for-results state
+    io.to(roomId).emit("compatibility-waiting-for-players", {
+      waitingFor: [],
+      message: "Both players submitted! Share answers and calculate results..."
     });
-
-    // ✅ NEW: Handle result submission (when user clicks "Show Results")
-    socket.on("compatibility-submit-result", ({ roomId, playerName }) => {
-      const room = rooms[roomId];
-      if (!room || room.gameType !== "compatibility") return;
-
-      console.log(`🎯 ${playerName} submitted result request in ${roomId}`);
-      
-      // Mark this player as ready for results
-      room.resultSubmissions[playerName] = true;
-
-      // Notify all players about this result submission
-      io.to(roomId).emit("compatibility-result-submitted", {
-        playerName: playerName,
-        submitted: true
-      });
-
-      console.log(`📊 ${playerName} ready for results`);
-
-      // Check if both players are ready for results
-      const bothReady = room.players.every(player => room.resultSubmissions[player.name]);
-      
-      if (bothReady) {
-        console.log(`🎉 Both players ready for results in ${roomId}`);
-        // The frontend will handle showing results based on local data
-        // We just need to notify that both are ready
-        io.to(roomId).emit("compatibility-both-ready-for-results");
-      }
+  } else {
+    // Show waiting screen for remaining players
+    const waitingFor = room.players
+      .filter(player => !room.submissionStatus[player.name])
+      .map(player => player.name);
+    
+    io.to(roomId).emit("compatibility-waiting-for-players", {
+      waitingFor: waitingFor,
+      message: `Waiting for ${waitingFor.join(', ')} to submit...`
     });
+    
+    console.log(`⏳ Still waiting for: ${waitingFor.join(', ')}`);
+  }
+});
 
-    // ✅ NEW: Share answers with other player
-    socket.on("compatibility-share-answers", ({ roomId, answers }) => {
-      const room = rooms[roomId];
-      if (!room || room.gameType !== "compatibility") return;
+// ✅ FIXED: Share answers with other player
+socket.on("compatibility-share-answers", ({ roomId, answers }) => {
+  const room = rooms[roomId];
+  if (!room || room.gameType !== "compatibility") return;
 
-      const player = room.players.find(p => p.socketId === socket.id);
-      if (!player) return;
+  const player = room.players.find(p => p.socketId === socket.id);
+  if (!player) return;
 
-      console.log(`📨 ${player.name} sharing answers with other player`);
-      
-      // Send answers to the other player
-      room.players.forEach(p => {
-        if (p.socketId !== socket.id) {
-          io.to(p.socketId).emit("compatibility-other-player-answers", { 
-            answers: answers 
-          });
-          console.log(`📤 Sent answers from ${player.name} to ${p.name}`);
-        }
+  console.log(`📨 ${player.name} sharing answers with other player`);
+  
+  // Store answers in room for server-side calculation if needed
+  room.answers[player.name] = answers;
+  
+  // Send answers to the other player
+  room.players.forEach(p => {
+    if (p.socketId !== socket.id) {
+      io.to(p.socketId).emit("compatibility-other-player-answers", { 
+        answers: answers 
       });
-    });
+      console.log(`📤 Sent answers from ${player.name} to ${p.name}`);
+    }
+  });
+});
 
+// ✅ FIXED: Handle result submission (when user is ready to see results)
+socket.on("compatibility-submit-result", ({ roomId, playerName }) => {
+  const room = rooms[roomId];
+  if (!room || room.gameType !== "compatibility") return;
+
+  console.log(`🎯 ${playerName} submitted result request in ${roomId}`);
+  
+  // Mark this player as ready for results
+  room.resultSubmissions[playerName] = true;
+
+  // Notify all players about this result submission
+  io.to(roomId).emit("compatibility-result-submitted", {
+    playerName: playerName,
+    submitted: true
+  });
+
+  console.log(`📊 ${playerName} ready for results`);
+
+  // Check if both players are ready for results
+  const bothReady = room.players.every(player => room.resultSubmissions[player.name]);
+  
+  if (bothReady) {
+    console.log(`🎉 Both players ready for results in ${roomId}`);
+    
+    // Calculate results on server side (optional - can also be done client-side)
+    const serverResults = calculateCompatibilityResults(room);
+    
+    // Notify both players to show results
+    io.to(roomId).emit("compatibility-both-ready-for-results", {
+      serverCalculated: serverResults // Optional: send server-calculated results
+    });
+    
+    // Reset for potential replay
+    room.players.forEach(player => {
+      room.submissionStatus[player.name] = false;
+      room.resultSubmissions[player.name] = false;
+    });
+  }
+});
+
+   
     // ✅ Submit answers for compatibility game - ENHANCED
     socket.on("submit-answers", ({ roomId, player, answers }) => {
       const room = rooms[roomId];

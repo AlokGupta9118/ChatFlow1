@@ -146,7 +146,7 @@ const Compatibility: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  // NEW: Track result submissions
+  // Track result submissions
   const [resultSubmissions, setResultSubmissions] = useState<{[key: string]: boolean}>({});
 
   // FIXED: Enhanced result calculation with better synchronization
@@ -356,51 +356,80 @@ const Compatibility: React.FC = () => {
     setGameStatus('results');
   }, [calculateResultsIndependently]);
 
-  // FIXED: Enhanced effect to track when both players have submitted for results
+  // FIXED: Enhanced effect to handle the complete flow
   useEffect(() => {
     if (players.length === 2 && gameStatus === 'waiting-for-players') {
-      const allSubmitted = players.every(player => resultSubmissions[player.name]);
+      const allReadyForResults = players.every(player => resultSubmissions[player.name]);
       
-      if (allSubmitted) {
-        console.log('🎉 Both players submitted for results - showing results');
+      if (allReadyForResults) {
+        console.log('🎉 Both players ready for results - showing results');
         // Small delay to ensure all data is synchronized
         setTimeout(() => {
           showResults();
-        }, 1000);
+        }, 1500);
       } else {
-        console.log('⏳ Still waiting for results submission from:', 
+        console.log('⏳ Still waiting for results request from:', 
           players.filter(player => !resultSubmissions[player.name]).map(p => p.name)
         );
       }
     }
   }, [resultSubmissions, players, gameStatus, showResults]);
 
-  // NEW: Effect to handle result submission tracking
+  // NEW: Effect to handle when we have both players' data and can request results
   useEffect(() => {
-    if (!socket) return;
+    // Only proceed if we're in waiting-for-players state and have the other player's data
+    if (gameStatus === 'waiting-for-players' && otherPlayerAnswers) {
+      const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
+      
+      if (bothSubmitted && !resultSubmissions[playerName]) {
+        console.log('📊 Both players submitted, we have all data - can request results');
+        // Auto-request results when we have all data
+        requestResults();
+      }
+    }
+  }, [gameStatus, otherPlayerAnswers, localSubmissionStatus, players, playerName, resultSubmissions]);
 
-    const handleResultSubmission = (data: any) => {
-      console.log(`📊 Result submission from: ${data.playerName}`);
-      setResultSubmissions(prev => ({
-        ...prev,
-        [data.playerName]: true
-      }));
-    };
+  // NEW: Separate function for requesting results
+  const requestResults = () => {
+    console.log('🎯 Requesting results calculation');
+    
+    // Update local result submission status
+    setResultSubmissions(prev => ({
+      ...prev,
+      [playerName]: true
+    }));
 
-    // NEW: Handle when both players are ready for results
-    const handleBothReadyForResults = () => {
-      console.log('🎯 Both players ready for results - showing results');
-      showResults();
-    };
+    // Emit result request
+    socket?.emit('compatibility-submit-result', { 
+      roomId,
+      playerName 
+    });
 
-    socket.on('compatibility-result-submitted', handleResultSubmission);
-    socket.on('compatibility-both-ready-for-results', handleBothReadyForResults);
+    console.log('✅ Result request emitted');
+  };
 
-    return () => {
-      socket.off('compatibility-result-submitted', handleResultSubmission);
-      socket.off('compatibility-both-ready-for-results', handleBothReadyForResults);
-    };
-  }, [socket, showResults]);
+  // FIXED: Enhanced final submission with proper event flow
+  const submitFinal = () => {
+    console.log('🚀 Submitting final answers with local data:', myAnswers);
+    setIsSubmittingFinal(true);
+    
+    // Update local submission status immediately
+    setLocalSubmissionStatus(prev => ({
+      ...prev,
+      [playerName]: true
+    }));
+
+    // Share my answers with other player FIRST
+    socket?.emit('compatibility-share-answers', {
+      roomId,
+      answers: myAnswers
+    });
+
+    // Then submit final answers - this will trigger the waiting screen
+    socket?.emit('compatibility-submit-final', { roomId });
+
+    console.log('✅ Final submission events emitted');
+  };
 
   // Initialize socket connection
   useEffect(() => {
@@ -415,7 +444,7 @@ const Compatibility: React.FC = () => {
     };
   }, []);
 
-  // FIXED: Socket event listeners with all required events
+  // FIXED: Enhanced socket event listeners with all required events
   useEffect(() => {
     if (!socket) return;
 
@@ -560,15 +589,24 @@ const Compatibility: React.FC = () => {
     };
 
     const handleWaitingForPlayers = (data: any) => {
-      setWaitingForPlayers(data.waitingFor);
+      setWaitingForPlayers(data.waitingFor || []);
       setGameStatus('waiting-for-players');
       setIsSubmittingFinal(false);
     };
 
-    // Handle other player's answers
+    // FIXED: Handle other player's answers with enhanced logic
     const handleOtherPlayerAnswers = (data: any) => {
       console.log('📨 Received other player answers:', data);
       setOtherPlayerAnswers(data.answers);
+      
+      // If we're in waiting-for-players and now have both data, we can proceed
+      if (gameStatus === 'waiting-for-players') {
+        const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
+        if (bothSubmitted && !resultSubmissions[playerName]) {
+          console.log('✅ Now have both players data - requesting results');
+          requestResults();
+        }
+      }
     };
 
     // Handle submission updates
@@ -589,6 +627,12 @@ const Compatibility: React.FC = () => {
         ...prev,
         [data.playerName]: data.submitted
       }));
+    };
+
+    // NEW: Handle when server confirms both are ready for results
+    const handleBothReadyForResults = () => {
+      console.log('🎯 Server confirms both players ready for results');
+      showResults();
     };
 
     // Error handling
@@ -614,6 +658,7 @@ const Compatibility: React.FC = () => {
     socket.on('compatibility-other-player-answers', handleOtherPlayerAnswers);
     socket.on('compatibility-submission-update', handleSubmissionUpdate);
     socket.on('compatibility-result-submitted', handleResultSubmissionUpdate);
+    socket.on('compatibility-both-ready-for-results', handleBothReadyForResults);
     socket.on('join-error', handleJoinError);
     socket.on('start-error', handleStartError);
 
@@ -631,10 +676,11 @@ const Compatibility: React.FC = () => {
       socket.off('compatibility-other-player-answers', handleOtherPlayerAnswers);
       socket.off('compatibility-submission-update', handleSubmissionUpdate);
       socket.off('compatibility-result-submitted', handleResultSubmissionUpdate);
+      socket.off('compatibility-both-ready-for-results', handleBothReadyForResults);
       socket.off('join-error', handleJoinError);
       socket.off('start-error', handleStartError);
     };
-  }, [socket, questions.length]);
+  }, [socket, questions.length, gameStatus, players, localSubmissionStatus, playerName, resultSubmissions, showResults]);
 
   // Timer effect
   useEffect(() => {
@@ -774,41 +820,6 @@ const Compatibility: React.FC = () => {
     });
   };
 
-  // FIXED: Enhanced final submission with proper event flow
-  const submitFinal = () => {
-    console.log('🚀 Submitting final answers with local data:', myAnswers);
-    setIsSubmittingFinal(true);
-    
-    // Update local submission status immediately
-    setLocalSubmissionStatus(prev => ({
-      ...prev,
-      [playerName]: true
-    }));
-
-    // Update local result submission status
-    setResultSubmissions(prev => ({
-      ...prev,
-      [playerName]: true
-    }));
-
-    // Share my answers with other player FIRST
-    socket?.emit('compatibility-share-answers', {
-      roomId,
-      answers: myAnswers
-    });
-
-    // Then submit final answers
-    socket?.emit('compatibility-submit-final', { roomId });
-
-    // Then submit result request
-    socket?.emit('compatibility-submit-result', { 
-      roomId,
-      playerName 
-    });
-
-    console.log('✅ All submission events emitted');
-  };
-
   // FIXED: Enhanced screenshot capture with better error handling
   const captureScreenshot = async () => {
     if (!resultsRef.current) {
@@ -935,11 +946,11 @@ const Compatibility: React.FC = () => {
   const getWaitingStatus = () => {
     if (players.length < 2) return ['Waiting for second player...'];
     
-    const waiting = players.filter(player => !resultSubmissions[player.name]);
+    const waiting = players.filter(player => !localSubmissionStatus[player.name]);
     return waiting.map(player => player.name);
   };
 
-  // UI Components (keeping the same render functions as before, but with updated logic)
+  // UI Components
 
   const renderLobby = () => (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center p-4">
@@ -1505,19 +1516,15 @@ const Compatibility: React.FC = () => {
   // FIXED: Enhanced waiting for players with independent result calculation
   const renderWaitingForPlayers = () => {
     const waitingPlayers = getWaitingStatus();
-    const allSubmitted = players.length === 2 && players.every(player => resultSubmissions[player.name]);
+    const hasOtherPlayerData = !!otherPlayerAnswers;
+    const canShowResults = localSubmissionStatus[playerName] && hasOtherPlayerData && !resultSubmissions[playerName];
+    const allReadyForResults = players.every(player => resultSubmissions[player.name]);
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white/10 backdrop-blur-lg rounded-2xl shadow-xl p-6 text-center border border-white/20">
           <Clock className="w-16 h-16 text-white mx-auto mb-4 animate-pulse" />
           <h1 className="text-2xl font-bold text-white mb-3">Calculating Results</h1>
-          <p className="text-white/80 mb-6">
-            {waitingPlayers.length > 0 
-              ? `Waiting for ${waitingPlayers.join(', ')} to submit results...`
-              : 'All players have submitted! Preparing results...'
-            }
-          </p>
           
           <div className="space-y-3 mb-6">
             {players.map(player => (
@@ -1528,31 +1535,70 @@ const Compatibility: React.FC = () => {
                   </div>
                   <span className="text-white font-semibold">{player.name}</span>
                 </div>
-                {resultSubmissions[player.name] ? (
-                  <CheckCircle className="w-6 h-6 text-green-400" />
-                ) : (
-                  <Clock className="w-6 h-6 text-amber-400 animate-pulse" />
-                )}
+                <div className="flex flex-col items-end gap-1">
+                  {localSubmissionStatus[player.name] ? (
+                    <CheckCircle className="w-5 h-5 text-green-400" />
+                  ) : (
+                    <Clock className="w-5 h-5 text-amber-400 animate-pulse" />
+                  )}
+                  {resultSubmissions[player.name] && (
+                    <Star className="w-4 h-4 text-blue-400" />
+                  )}
+                </div>
               </div>
             ))}
           </div>
 
-          {allSubmitted && (
-            <div className="p-4 bg-green-500/20 border border-green-500/30 rounded-xl mb-4">
-              <div className="flex items-center gap-2 justify-center text-green-400">
+          {/* Show appropriate message based on state */}
+          {!canShowResults && !allReadyForResults && (
+            <p className="text-white/80 mb-6">
+              {waitingPlayers.length > 0 
+                ? `Waiting for ${waitingPlayers.join(', ')} to submit...`
+                : 'Processing your answers...'
+              }
+            </p>
+          )}
+
+          {canShowResults && (
+            <div className="mb-6">
+              <p className="text-white/80 mb-4">Ready to see your compatibility results?</p>
+              <button
+                onClick={requestResults}
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3 rounded-xl font-bold hover:from-green-600 hover:to-emerald-600 transition-all duration-200"
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <Sparkles className="w-5 h-5" />
+                  Show Results
+                </div>
+              </button>
+            </div>
+          )}
+
+          {resultSubmissions[playerName] && !allReadyForResults && (
+            <div className="p-4 bg-blue-500/20 border border-blue-500/30 rounded-xl mb-4">
+              <div className="flex items-center gap-2 justify-center text-blue-400">
                 <CheckCircle className="w-5 h-5" />
-                <span className="font-semibold">Both players submitted! Showing results...</span>
+                <span className="font-semibold">Results requested! Waiting for partner...</span>
               </div>
             </div>
           )}
 
-          {/* Show debug info in development */}
+          {allReadyForResults && (
+            <div className="p-4 bg-green-500/20 border border-green-500/30 rounded-xl mb-4">
+              <div className="flex items-center gap-2 justify-center text-green-400">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-semibold">Both players ready! Showing results...</span>
+              </div>
+            </div>
+          )}
+
+          {/* Debug info */}
           {process.env.NODE_ENV === 'development' && (
             <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-white/60">
-              <div>All Submitted: {allSubmitted ? 'Yes' : 'No'}</div>
-              <div>My Data: {myAnswers.regularAnswers.filter(Boolean).length} answers</div>
+              <div>My Submission: {localSubmissionStatus[playerName] ? 'Yes' : 'No'}</div>
               <div>Other Player Data: {otherPlayerAnswers ? 'Available' : 'Not available'}</div>
-              <div>Result Submissions: {JSON.stringify(resultSubmissions)}</div>
+              <div>Can Show Results: {canShowResults ? 'Yes' : 'No'}</div>
+              <div>Result Requests: {JSON.stringify(resultSubmissions)}</div>
               <button 
                 onClick={showResults}
                 className="mt-2 px-3 py-1 bg-blue-500/50 rounded text-white text-xs"
