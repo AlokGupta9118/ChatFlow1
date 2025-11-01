@@ -223,9 +223,6 @@ const Compatibility: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  // Track result submissions
-  const [resultSubmissions, setResultSubmissions] = useState<{[key: string]: boolean}>({});
-
   // Calculate results independently on frontend
   const calculateResultsIndependently = useCallback((): CompatibilityResults => {
     console.log('🎯 Calculating results independently based on local data');
@@ -433,51 +430,20 @@ const Compatibility: React.FC = () => {
     setGameStatus('results');
   }, [calculateResultsIndependently]);
 
-  // Effect to handle when both players are ready for results
-  useEffect(() => {
-    if (players.length === 2 && gameStatus === 'waiting-for-players') {
-      const allReadyForResults = players.every(player => resultSubmissions[player.name]);
-      
-      if (allReadyForResults) {
-        console.log('🎉 Both players ready for results - showing results');
-        // Small delay to ensure all data is synchronized
-        setTimeout(() => {
-          showResults();
-        }, 1000);
-      }
-    }
-  }, [resultSubmissions, players, gameStatus, showResults]);
-
-  // Effect to handle when we have both players' data
+  // FIXED: Automatically show results when both players have submitted and we have both answers
   useEffect(() => {
     if (gameStatus === 'waiting-for-players' && otherPlayerAnswers) {
       const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
       
-      if (bothSubmitted && !resultSubmissions[playerName]) {
-        console.log('📊 Both players submitted, we have all data - auto-requesting results');
-        requestResults();
+      if (bothSubmitted) {
+        console.log('🎉 Both players submitted and we have all data - AUTO SHOWING RESULTS');
+        // Small delay to ensure UI updates properly
+        setTimeout(() => {
+          showResults();
+        }, 1500);
       }
     }
-  }, [gameStatus, otherPlayerAnswers, localSubmissionStatus, players, playerName, resultSubmissions]);
-
-  // Separate function for requesting results
-  const requestResults = () => {
-    console.log('🎯 Requesting results calculation');
-    
-    // Update local result submission status
-    setResultSubmissions(prev => ({
-      ...prev,
-      [playerName]: true
-    }));
-
-    // Emit result request
-    socket?.emit('compatibility-submit-result', { 
-      roomId,
-      playerName 
-    });
-
-    console.log('✅ Result request emitted');
-  };
+  }, [gameStatus, otherPlayerAnswers, localSubmissionStatus, players, showResults]);
 
   // Enhanced final submission with proper event flow
   const submitFinal = () => {
@@ -527,13 +493,10 @@ const Compatibility: React.FC = () => {
       
       // Initialize local submission status
       const initialSubmissionStatus: {[key: string]: boolean} = {};
-      const initialResultSubmissions: {[key: string]: boolean} = {};
       room.players.forEach((player: Player) => {
         initialSubmissionStatus[player.name] = false;
-        initialResultSubmissions[player.name] = false;
       });
       setLocalSubmissionStatus(initialSubmissionStatus);
-      setResultSubmissions(initialResultSubmissions);
       
       // Initialize my answers with empty array for all questions
       setMyAnswers({
@@ -553,13 +516,10 @@ const Compatibility: React.FC = () => {
       
       // Initialize local submission status
       const initialSubmissionStatus: {[key: string]: boolean} = {};
-      const initialResultSubmissions: {[key: string]: boolean} = {};
       room.players.forEach((player: Player) => {
         initialSubmissionStatus[player.name] = false;
-        initialResultSubmissions[player.name] = false;
       });
       setLocalSubmissionStatus(initialSubmissionStatus);
-      setResultSubmissions(initialResultSubmissions);
       
       // Initialize my answers with empty array for all questions
       setMyAnswers({
@@ -585,17 +545,6 @@ const Compatibility: React.FC = () => {
         });
         return updated;
       });
-
-      // Update result submissions for new players
-      setResultSubmissions(prev => {
-        const updated = {...prev};
-        updatedPlayers.forEach(player => {
-          if (!(player.name in updated)) {
-            updated[player.name] = false;
-          }
-        });
-        return updated;
-      });
     };
 
     // Game events
@@ -607,15 +556,6 @@ const Compatibility: React.FC = () => {
       
       // Reset submission tracking when game starts
       setLocalSubmissionStatus(prev => {
-        const reset: {[key: string]: boolean} = {};
-        Object.keys(prev).forEach(key => {
-          reset[key] = false;
-        });
-        return reset;
-      });
-
-      // Reset result submissions
-      setResultSubmissions(prev => {
         const reset: {[key: string]: boolean} = {};
         Object.keys(prev).forEach(key => {
           reset[key] = false;
@@ -661,31 +601,10 @@ const Compatibility: React.FC = () => {
       }));
     };
 
-    // Handle result submission updates
-    const handleResultSubmissionUpdate = (data: any) => {
-      console.log(`📊 Result submission update: ${data.playerName} - ${data.submitted}`);
-      
-      setResultSubmissions(prev => ({
-        ...prev,
-        [data.playerName]: data.submitted
-      }));
-    };
-
-    // Handle when server confirms both are ready for results
-    const handleBothReadyForResults = () => {
-      console.log('🎯 Server confirms both players ready for results');
-      showResults();
-    };
-
-    // Handle when all players have submitted
+    // FIXED: Handle when all players have submitted - auto calculate results
     const handleAllSubmitted = () => {
-      console.log('🎉 All players have submitted, preparing results...');
-      // Automatically request results when all have submitted
-      if (!resultSubmissions[playerName]) {
-        setTimeout(() => {
-          requestResults();
-        }, 1000);
-      }
+      console.log('🎉 All players have submitted on server side');
+      // We'll rely on the local effect to show results when we have both data
     };
 
     // Error handling
@@ -707,8 +626,6 @@ const Compatibility: React.FC = () => {
     socket.on('compatibility-waiting-for-players', handleWaitingForPlayers);
     socket.on('compatibility-other-player-answers', handleOtherPlayerAnswers);
     socket.on('compatibility-submission-update', handleSubmissionUpdate);
-    socket.on('compatibility-result-submitted', handleResultSubmissionUpdate);
-    socket.on('compatibility-both-ready-for-results', handleBothReadyForResults);
     socket.on('compatibility-all-submitted', handleAllSubmitted);
     socket.on('join-error', handleJoinError);
     socket.on('start-error', handleStartError);
@@ -723,13 +640,11 @@ const Compatibility: React.FC = () => {
       socket.off('compatibility-waiting-for-players', handleWaitingForPlayers);
       socket.off('compatibility-other-player-answers', handleOtherPlayerAnswers);
       socket.off('compatibility-submission-update', handleSubmissionUpdate);
-      socket.off('compatibility-result-submitted', handleResultSubmissionUpdate);
-      socket.off('compatibility-both-ready-for-results', handleBothReadyForResults);
       socket.off('compatibility-all-submitted', handleAllSubmitted);
       socket.off('join-error', handleJoinError);
       socket.off('start-error', handleStartError);
     };
-  }, [socket, questions.length, showResults, playerName, resultSubmissions]);
+  }, [socket, questions.length, showResults]);
 
   // Timer effect
   useEffect(() => {
@@ -767,7 +682,6 @@ const Compatibility: React.FC = () => {
     setMyAnswers({ regularAnswers: [], advancedAnswers: {} });
     setOtherPlayerAnswers(null);
     setLocalSubmissionStatus({});
-    setResultSubmissions({});
   };
 
   // Room management
@@ -1417,38 +1331,6 @@ const Compatibility: React.FC = () => {
                 </div>
               ))}
             </div>
-
-            {/* Result submission status */}
-            <div className="mt-4 pt-4 border-t border-white/20">
-              <h4 className="text-sm font-semibold text-white mb-2 text-center">Results Ready Status</h4>
-              <div className="space-y-2">
-                {players.map(player => (
-                  <div key={player.name} className="flex items-center justify-between p-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 bg-gradient-to-r from-blue-400 to-purple-400 rounded-lg flex items-center justify-center text-white font-semibold text-xs">
-                        {player.name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="text-white text-sm">{player.name}</span>
-                    </div>
-                    <div className={`flex items-center gap-2 ${
-                      resultSubmissions[player.name] ? 'text-blue-400' : 'text-amber-400'
-                    }`}>
-                      {resultSubmissions[player.name] ? (
-                        <>
-                          <CheckCircle className="w-4 h-4" />
-                          <span className="text-xs font-semibold">Ready</span>
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="w-4 h-4 animate-pulse" />
-                          <span className="text-xs font-semibold">Waiting...</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
 
@@ -1564,8 +1446,6 @@ const Compatibility: React.FC = () => {
     const waitingPlayers = getWaitingStatus();
     const hasOtherPlayerData = !!otherPlayerAnswers;
     const bothSubmitted = players.every(player => localSubmissionStatus[player.name]);
-    const canShowResults = bothSubmitted && hasOtherPlayerData && !resultSubmissions[playerName];
-    const allReadyForResults = players.every(player => resultSubmissions[player.name]);
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center p-4">
@@ -1588,9 +1468,6 @@ const Compatibility: React.FC = () => {
                   ) : (
                     <Clock className="w-5 h-5 text-amber-400 animate-pulse" />
                   )}
-                  {resultSubmissions[player.name] && (
-                    <Star className="w-4 h-4 text-blue-400" />
-                  )}
                 </div>
               </div>
             ))}
@@ -1598,46 +1475,37 @@ const Compatibility: React.FC = () => {
 
           {/* Show appropriate message based on state */}
           {waitingPlayers.length > 0 && (
-            <p className="text-white/80 mb-6">
-              Waiting for {waitingPlayers.join(', ')} to submit...
-            </p>
-          )}
-
-          {bothSubmitted && !hasOtherPlayerData && (
-            <p className="text-white/80 mb-6">
-              Processing your answers and exchanging data...
-            </p>
-          )}
-
-          {canShowResults && (
-            <div className="mb-6">
-              <p className="text-white/80 mb-4">Ready to see your compatibility results?</p>
-              <button
-                onClick={requestResults}
-                className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-3 rounded-xl font-bold hover:from-green-600 hover:to-emerald-600 transition-all duration-200"
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <Sparkles className="w-5 h-5" />
-                  Show Results
-                </div>
-              </button>
-            </div>
-          )}
-
-          {resultSubmissions[playerName] && !allReadyForResults && (
-            <div className="p-4 bg-blue-500/20 border border-blue-500/30 rounded-xl mb-4">
-              <div className="flex items-center gap-2 justify-center text-blue-400">
-                <CheckCircle className="w-5 h-5" />
-                <span className="font-semibold">Results requested! Waiting for partner...</span>
+            <div>
+              <p className="text-white/80 mb-4">
+                Waiting for {waitingPlayers.join(', ')} to submit...
+              </p>
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/20 rounded-lg border border-amber-500/30">
+                <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
+                <span className="text-amber-400 text-sm">Please wait for your partner</span>
               </div>
             </div>
           )}
 
-          {allReadyForResults && (
-            <div className="p-4 bg-green-500/20 border border-green-500/30 rounded-xl mb-4">
-              <div className="flex items-center gap-2 justify-center text-green-400">
-                <CheckCircle className="w-5 h-5" />
-                <span className="font-semibold">Both players ready! Showing results...</span>
+          {bothSubmitted && !hasOtherPlayerData && (
+            <div>
+              <p className="text-white/80 mb-4">
+                Processing your answers and exchanging data...
+              </p>
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 rounded-lg border border-blue-500/30">
+                <Sparkles className="w-4 h-4 text-blue-400 animate-pulse" />
+                <span className="text-blue-400 text-sm">Preparing your results</span>
+              </div>
+            </div>
+          )}
+
+          {bothSubmitted && hasOtherPlayerData && (
+            <div>
+              <p className="text-white/80 mb-4">
+                Calculating compatibility results...
+              </p>
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-500/20 rounded-lg border border-green-500/30">
+                <CheckCircle className="w-4 h-4 text-green-400" />
+                <span className="text-green-400 text-sm">Results ready! Showing now...</span>
               </div>
             </div>
           )}
