@@ -142,7 +142,7 @@ const AddFriends: React.FC = () => {
     setProfileLoading(true);
     try {
       const res = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/profiles/${userId}`,
+        `${import.meta.env.VITE_API_URL}/api/pfp/${userId}`,
         axiosConfig
       );
       
