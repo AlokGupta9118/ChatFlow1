@@ -77,55 +77,56 @@ export default function gameSocket(io) {
     console.log(`📊 Advanced compatibility calculated: ${finalScore}%`);
     return result;
   }
-  // ✅ FIXED: Check if all players have submitted their final answers
-function checkAllSubmissions(roomId) {
-  const room = rooms[roomId];
-  if (!room) return;
 
-  console.log(`🔍 Checking submissions for room ${roomId}:`, {
-    players: room.players.map(p => p.name),
-    submissionStatus: room.submissionStatus,
-    gameType: room.gameType
-  });
+  // ✅ FIXED: Single checkAllSubmissions function
+  function checkAllSubmissions(roomId) {
+    const room = rooms[roomId];
+    if (!room) return;
 
-  // Count how many players have submitted
-  const submittedCount = room.players.filter(player => 
-    room.submissionStatus[player.name] === true
-  ).length;
-
-  const waitingFor = room.players
-    .filter(player => room.submissionStatus[player.name] !== true)
-    .map(player => player.name);
-
-  console.log(`📊 Room ${roomId}: ${submittedCount}/${room.players.length} players submitted`);
-  console.log(`⏳ Waiting for: ${waitingFor.join(', ') || 'none'}`);
-
-  if (submittedCount === room.players.length) {
-    // ALL players have submitted - calculate and show results
-    console.log(`🎉 ALL players submitted in ${roomId}, calculating results`);
-    
-    const results = calculateCompatibilityResults(room);
-    
-    // Show results to everyone in the room
-    io.to(roomId).emit("compatibility-show-results", results);
-    
-    // Reset submission status for potential replay
-    room.players.forEach(player => {
-      room.submissionStatus[player.name] = false;
+    console.log(`🔍 Checking submissions for room ${roomId}:`, {
+      players: room.players.map(p => p.name),
+      submissionStatus: room.submissionStatus,
+      gameType: room.gameType
     });
-    
-    console.log(`📈 Results shown for ${roomId}`);
-  } else {
-    // NOT all players have submitted - show waiting screen
-    io.to(roomId).emit("compatibility-waiting-for-players", {
-      submitted: submittedCount,
-      total: room.players.length,
-      waitingFor: waitingFor
-    });
-    
-    console.log(`⏳ Still waiting for ${waitingFor.length} player(s): ${waitingFor.join(', ')}`);
+
+    // Count how many players have submitted
+    const submittedCount = room.players.filter(player => 
+      room.submissionStatus[player.name] === true
+    ).length;
+
+    const waitingFor = room.players
+      .filter(player => room.submissionStatus[player.name] !== true)
+      .map(player => player.name);
+
+    console.log(`📊 Room ${roomId}: ${submittedCount}/${room.players.length} players submitted`);
+    console.log(`⏳ Waiting for: ${waitingFor.join(', ') || 'none'}`);
+
+    if (submittedCount === room.players.length) {
+      // ALL players have submitted - calculate and show results
+      console.log(`🎉 ALL players submitted in ${roomId}, calculating results`);
+      
+      const results = calculateCompatibilityResults(room);
+      
+      // Show results to everyone in the room
+      io.to(roomId).emit("compatibility-show-results", results);
+      
+      // Reset submission status for potential replay
+      room.players.forEach(player => {
+        room.submissionStatus[player.name] = false;
+      });
+      
+      console.log(`📈 Results shown for ${roomId}`);
+    } else {
+      // NOT all players have submitted - show waiting screen
+      io.to(roomId).emit("compatibility-waiting-for-players", {
+        submitted: submittedCount,
+        total: room.players.length,
+        waitingFor: waitingFor
+      });
+      
+      console.log(`⏳ Still waiting for ${waitingFor.length} player(s): ${waitingFor.join(', ')}`);
+    }
   }
-}
 
   function calculateAdvancedCompatibility(adv1, adv2) {
     return {
@@ -398,41 +399,6 @@ function checkAllSubmissions(roomId) {
           advancedQuestions: room.advancedQuestions
         });
       }
-    }
-  }
-
-  function checkAllSubmissions(roomId) {
-    const room = rooms[roomId];
-    if (!room) return;
-
-    const submittedPlayers = Object.keys(room.submissionStatus).filter(
-      player => room.submissionStatus[player]
-    ).length;
-
-    if (submittedPlayers === room.players.length) {
-      // All players have submitted - calculate results
-      console.log(`🎉 All players submitted in ${roomId}, calculating results`);
-      
-      const results = calculateCompatibilityResults(room);
-      io.to(roomId).emit("compatibility-show-results", results);
-      
-      // Reset for potential replay
-      room.submissionStatus = {};
-      
-      console.log(`📈 Results shown for ${roomId}`);
-    } else {
-      // Show waiting screen
-      const waitingFor = room.players
-        .filter(p => !room.submissionStatus[p.name])
-        .map(p => p.name);
-      
-      io.to(roomId).emit("compatibility-waiting-for-players", {
-        submitted: submittedPlayers,
-        total: room.players.length,
-        waitingFor: waitingFor
-      });
-      
-      console.log(`⏳ Waiting for: ${waitingFor.join(', ')}`);
     }
   }
 
@@ -756,7 +722,8 @@ function checkAllSubmissions(roomId) {
         playerProgress: {},
         currentQuestion: 0,
         gameStarted: false,
-        submissionStatus: {}
+        submissionStatus: {},
+        resultSubmissions: {} // NEW: Track result submissions separately
       };
 
       // Initialize player data based on game type
@@ -777,6 +744,7 @@ function checkAllSubmissions(roomId) {
         rooms[roomId].playerProgress[playerName] = 0;
         rooms[roomId].answers[playerName] = { regular: [], advancedAnswers: {} };
         rooms[roomId].submissionStatus[playerName] = false;
+        rooms[roomId].resultSubmissions[playerName] = false; // NEW
       }
 
       // 🔥 NEW: Initialize chat for this room
@@ -805,6 +773,7 @@ function checkAllSubmissions(roomId) {
         answers: {},
         playerProgress: {},
         submissionStatus: {},
+        resultSubmissions: {}, // NEW: Track result submissions separately
         timer: null,
         questions: [
           {
@@ -888,6 +857,7 @@ function checkAllSubmissions(roomId) {
       rooms[roomId].playerProgress[playerName] = 0;
       rooms[roomId].answers[playerName] = { regular: [], advancedAnswers: {} };
       rooms[roomId].submissionStatus[playerName] = false;
+      rooms[roomId].resultSubmissions[playerName] = false; // NEW
 
       // Initialize chat for this room
       chatMessages.set(roomId, []);
@@ -923,6 +893,7 @@ function checkAllSubmissions(roomId) {
           room.playerProgress[player.name] = 0;
           room.answers[player.name] = { regular: [], advancedAnswers: {} };
           room.submissionStatus[player.name] = false;
+          room.resultSubmissions[player.name] = false; // NEW
         }
       } else {
         existing.socketId = socket.id;
@@ -951,6 +922,7 @@ function checkAllSubmissions(roomId) {
         gameState.playerProgress = room.playerProgress;
         gameState.currentQuestion = room.currentQuestion;
         gameState.submissionStatus = room.submissionStatus;
+        gameState.resultSubmissions = room.resultSubmissions; // NEW
       }
       
       socket.emit("game-state-update", gameState);
@@ -972,6 +944,7 @@ function checkAllSubmissions(roomId) {
         room.playerProgress[player.name] = 0;
         room.answers[player.name] = { regular: [], advancedAnswers: {} };
         room.submissionStatus[player.name] = false;
+        room.resultSubmissions[player.name] = false; // NEW
       } else {
         existing.socketId = socket.id;
       }
@@ -1021,6 +994,7 @@ function checkAllSubmissions(roomId) {
           gameState.currentQuestion = room.currentQuestion;
           gameState.answers = room.answers;
           gameState.submissionStatus = room.submissionStatus;
+          gameState.resultSubmissions = room.resultSubmissions; // NEW
         } else if (room.gameType === "most-likely") {
           gameState.currentScenario = room.currentScenario;
           gameState.currentRound = room.currentRound;
@@ -1050,10 +1024,12 @@ function checkAllSubmissions(roomId) {
         room.answers = {};
         room.playerProgress = {};
         room.submissionStatus = {};
+        room.resultSubmissions = {}; // NEW
         room.players.forEach(player => {
           room.answers[player.name] = { regular: [], advancedAnswers: {} };
           room.playerProgress[player.name] = 0;
           room.submissionStatus[player.name] = false;
+          room.resultSubmissions[player.name] = false; // NEW
         });
       }
       
@@ -1077,12 +1053,14 @@ function checkAllSubmissions(roomId) {
       room.answers = {};
       room.playerProgress = {};
       room.submissionStatus = {};
+      room.resultSubmissions = {}; // NEW
 
       // Initialize player data
       room.players.forEach(player => {
         room.answers[player.name] = { regular: [], advancedAnswers: {} };
         room.playerProgress[player.name] = 0;
         room.submissionStatus[player.name] = false;
+        room.resultSubmissions[player.name] = false; // NEW
       });
 
       // Start timer for first question
@@ -1186,34 +1164,80 @@ function checkAllSubmissions(roomId) {
       console.log(`📊 ${player.name} advanced progress: ${room.playerProgress[player.name]}%`);
     });
 
-    // ✅ ENHANCED: Submit final answers
-// ✅ FIXED: Submit final answers
+    // ✅ FIXED: Submit final answers with result submission tracking
+    socket.on("compatibility-submit-final", ({ roomId }) => {
+      const room = rooms[roomId];
+      if (!room || room.gameType !== "compatibility") return;
 
-// ✅ FIXED: Check if all players have submitted their final answers
+      const player = room.players.find(p => p.socketId === socket.id);
+      if (!player) return;
 
-socket.on("compatibility-submit-final", ({ roomId }) => {
-  const room = rooms[roomId];
-  if (!room || room.gameType !== "compatibility") return;
+      console.log(`✅ ${player.name} submitted final answers in ${roomId}`);
+      
+      // Mark this player as submitted
+      room.submissionStatus[player.name] = true;
 
-  const player = room.players.find(p => p.socketId === socket.id);
-  if (!player) return;
+      // Notify all players about this submission
+      io.to(roomId).emit("compatibility-submission-update", {
+        player: player.name,
+        submitted: true
+      });
 
-  console.log(`✅ ${player.name} submitted final answers in ${roomId}`);
-  
-  // Mark this player as submitted
-  room.submissionStatus[player.name] = true;
+      console.log(`📋 ${player.name} marked as completed`);
 
-  // Notify all players about this submission
-  io.to(roomId).emit("compatibility-submission-update", {
-    player: player.name,
-    submitted: true
-  });
+      // Check if all players have submitted
+      checkAllSubmissions(roomId);
+    });
 
-  console.log(`📋 ${player.name} marked as completed`);
+    // ✅ NEW: Handle result submission (when user clicks "Show Results")
+    socket.on("compatibility-submit-result", ({ roomId, playerName }) => {
+      const room = rooms[roomId];
+      if (!room || room.gameType !== "compatibility") return;
 
-  // Check if all players have submitted
-  checkAllSubmissions(roomId);
-});
+      console.log(`🎯 ${playerName} submitted result request in ${roomId}`);
+      
+      // Mark this player as ready for results
+      room.resultSubmissions[playerName] = true;
+
+      // Notify all players about this result submission
+      io.to(roomId).emit("compatibility-result-submitted", {
+        playerName: playerName,
+        submitted: true
+      });
+
+      console.log(`📊 ${playerName} ready for results`);
+
+      // Check if both players are ready for results
+      const bothReady = room.players.every(player => room.resultSubmissions[player.name]);
+      
+      if (bothReady) {
+        console.log(`🎉 Both players ready for results in ${roomId}`);
+        // The frontend will handle showing results based on local data
+        // We just need to notify that both are ready
+        io.to(roomId).emit("compatibility-both-ready-for-results");
+      }
+    });
+
+    // ✅ NEW: Share answers with other player
+    socket.on("compatibility-share-answers", ({ roomId, answers }) => {
+      const room = rooms[roomId];
+      if (!room || room.gameType !== "compatibility") return;
+
+      const player = room.players.find(p => p.socketId === socket.id);
+      if (!player) return;
+
+      console.log(`📨 ${player.name} sharing answers with other player`);
+      
+      // Send answers to the other player
+      room.players.forEach(p => {
+        if (p.socketId !== socket.id) {
+          io.to(p.socketId).emit("compatibility-other-player-answers", { 
+            answers: answers 
+          });
+          console.log(`📤 Sent answers from ${player.name} to ${p.name}`);
+        }
+      });
+    });
 
     // ✅ Submit answers for compatibility game - ENHANCED
     socket.on("submit-answers", ({ roomId, player, answers }) => {
@@ -1589,6 +1613,7 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
           delete room.playerProgress[playerName];
           delete room.answers[playerName];
           delete room.submissionStatus[playerName];
+          delete room.resultSubmissions[playerName]; // NEW
         } else if (room.gameType === "most-likely") {
           delete room.scores[playerName];
           delete room.playerStats[playerName];
@@ -1628,6 +1653,7 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
           delete room.playerProgress[leavingPlayer.name];
           delete room.answers[leavingPlayer.name];
           delete room.submissionStatus[leavingPlayer.name];
+          delete room.resultSubmissions[leavingPlayer.name]; // NEW
         } else if (room.gameType === "most-likely") {
           delete room.scores[leavingPlayer.name];
           delete room.playerStats[leavingPlayer.name];
@@ -1655,7 +1681,7 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
       }
     });
 
-    // ✅ Create room for Who's Most Likely - NEW with chat
+    // Create room for Who's Most Likely - NEW with chat
     socket.on("create-mostlikely-room", ({ player }) => {
       if (!player || !player.name) {
         socket.emit("create-error", "Player name missing");
@@ -1718,7 +1744,7 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
       console.log(`🆕 Most Likely room created: ${roomId} by ${player.name}`);
     });
 
-    // ✅ Join Most Likely room - NEW with chat
+    // Join Most Likely room - NEW with chat
     socket.on("join-mostlikely-room", ({ roomId, player }) => {
       const room = rooms[roomId];
       if (!room) return socket.emit("join-error", "Room not found");
@@ -1749,7 +1775,7 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
       console.log(`👥 ${player.name} joined Most Likely room ${roomId}`);
     });
 
-    // ✅ Start Most Likely game - NEW
+    // Start Most Likely game - NEW
     socket.on("start-mostlikely-game", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "most-likely") return;
@@ -1784,7 +1810,7 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
       console.log(`🚀 Most Likely game started in ${roomId}`);
     });
 
-    // ✅ Submit vote - NEW
+    // Submit vote - NEW
     socket.on("submit-mostlikely-vote", ({ roomId, votedFor }) => {
       const room = rooms[roomId];
       if (!room || !room.gameStarted || room.gameType !== "most-likely") return;
@@ -1828,7 +1854,7 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
       }
     });
 
-    // ✅ Next round - NEW
+    // Next round - NEW
     socket.on("next-mostlikely-round", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room || room.gameType !== "most-likely") return;
@@ -1859,7 +1885,7 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
       }
     });
 
-    // ✅ NEW: End game early
+    // NEW: End game early
     socket.on("end-game", ({ roomId }) => {
       const room = rooms[roomId];
       if (!room) return;
@@ -1881,12 +1907,12 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
       console.log(`🛑 Game ended in ${roomId} by host`);
     });
 
-    // ✅ NEW: Ping/pong for connection health
+    // NEW: Ping/pong for connection health
     socket.on("ping", () => {
       socket.emit("pong", { timestamp: Date.now() });
     });
 
-    // ✅ FIXED: Disconnect cleanup
+    // FIXED: Disconnect cleanup
     socket.on("disconnect", async () => {
       console.log("❌ Game socket disconnected:", socket.id);
       
@@ -1908,6 +1934,7 @@ socket.on("compatibility-submit-final", ({ roomId }) => {
             delete room.playerProgress[disconnectedPlayer.name];
             delete room.answers[disconnectedPlayer.name];
             delete room.submissionStatus[disconnectedPlayer.name];
+            delete room.resultSubmissions[disconnectedPlayer.name]; // NEW
           } else if (room.gameType === "most-likely") {
             delete room.scores[disconnectedPlayer.name];
             delete room.playerStats[disconnectedPlayer.name];

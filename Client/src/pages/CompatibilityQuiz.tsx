@@ -387,12 +387,20 @@ const Compatibility: React.FC = () => {
       }));
     };
 
+    // NEW: Handle when both players are ready for results
+    const handleBothReadyForResults = () => {
+      console.log('🎯 Both players ready for results - showing results');
+      showResults();
+    };
+
     socket.on('compatibility-result-submitted', handleResultSubmission);
+    socket.on('compatibility-both-ready-for-results', handleBothReadyForResults);
 
     return () => {
       socket.off('compatibility-result-submitted', handleResultSubmission);
+      socket.off('compatibility-both-ready-for-results', handleBothReadyForResults);
     };
-  }, [socket]);
+  }, [socket, showResults]);
 
   // Initialize socket connection
   useEffect(() => {
@@ -407,7 +415,7 @@ const Compatibility: React.FC = () => {
     };
   }, []);
 
-  // Socket event listeners
+  // FIXED: Socket event listeners with all required events
   useEffect(() => {
     if (!socket) return;
 
@@ -573,6 +581,16 @@ const Compatibility: React.FC = () => {
       }));
     };
 
+    // NEW: Handle result submission updates
+    const handleResultSubmissionUpdate = (data: any) => {
+      console.log(`📊 Result submission update: ${data.playerName} - ${data.submitted}`);
+      
+      setResultSubmissions(prev => ({
+        ...prev,
+        [data.playerName]: data.submitted
+      }));
+    };
+
     // Error handling
     const handleJoinError = (errorMsg: string) => {
       setError(errorMsg);
@@ -595,6 +613,7 @@ const Compatibility: React.FC = () => {
     socket.on('compatibility-waiting-for-players', handleWaitingForPlayers);
     socket.on('compatibility-other-player-answers', handleOtherPlayerAnswers);
     socket.on('compatibility-submission-update', handleSubmissionUpdate);
+    socket.on('compatibility-result-submitted', handleResultSubmissionUpdate);
     socket.on('join-error', handleJoinError);
     socket.on('start-error', handleStartError);
 
@@ -611,6 +630,7 @@ const Compatibility: React.FC = () => {
       socket.off('compatibility-waiting-for-players', handleWaitingForPlayers);
       socket.off('compatibility-other-player-answers', handleOtherPlayerAnswers);
       socket.off('compatibility-submission-update', handleSubmissionUpdate);
+      socket.off('compatibility-result-submitted', handleResultSubmissionUpdate);
       socket.off('join-error', handleJoinError);
       socket.off('start-error', handleStartError);
     };
@@ -754,7 +774,7 @@ const Compatibility: React.FC = () => {
     });
   };
 
-  // FIXED: Enhanced final submission with result submission tracking
+  // FIXED: Enhanced final submission with proper event flow
   const submitFinal = () => {
     console.log('🚀 Submitting final answers with local data:', myAnswers);
     setIsSubmittingFinal(true);
@@ -765,19 +785,28 @@ const Compatibility: React.FC = () => {
       [playerName]: true
     }));
 
-    // Share my answers with other player
+    // Update local result submission status
+    setResultSubmissions(prev => ({
+      ...prev,
+      [playerName]: true
+    }));
+
+    // Share my answers with other player FIRST
     socket?.emit('compatibility-share-answers', {
       roomId,
       answers: myAnswers
     });
 
-    // Emit result submission
+    // Then submit final answers
+    socket?.emit('compatibility-submit-final', { roomId });
+
+    // Then submit result request
     socket?.emit('compatibility-submit-result', { 
       roomId,
       playerName 
     });
 
-    socket?.emit('compatibility-submit-final', { roomId });
+    console.log('✅ All submission events emitted');
   };
 
   // FIXED: Enhanced screenshot capture with better error handling
@@ -1320,6 +1349,38 @@ const Compatibility: React.FC = () => {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Result submission status */}
+            <div className="mt-4 pt-4 border-t border-white/20">
+              <h4 className="text-sm font-semibold text-white mb-2 text-center">Results Ready Status</h4>
+              <div className="space-y-2">
+                {players.map(player => (
+                  <div key={player.name} className="flex items-center justify-between p-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 bg-gradient-to-r from-blue-400 to-purple-400 rounded-lg flex items-center justify-center text-white font-semibold text-xs">
+                        {player.name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-white text-sm">{player.name}</span>
+                    </div>
+                    <div className={`flex items-center gap-2 ${
+                      resultSubmissions[player.name] ? 'text-blue-400' : 'text-amber-400'
+                    }`}>
+                      {resultSubmissions[player.name] ? (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-xs font-semibold">Ready</span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-4 h-4 animate-pulse" />
+                          <span className="text-xs font-semibold">Waiting...</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             
             {/* Debug info */}
