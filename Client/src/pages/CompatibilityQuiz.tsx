@@ -1,1909 +1,1137 @@
-import React, { useState, useEffect, useRef } from "react";
-import { io } from "socket.io-client";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
+// components/Compatibility.tsx
+import React, { useState, useEffect, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
 import { 
-  Heart, Users, LinkIcon, Crown, Sparkles, Timer, Trophy, 
-  Gamepad2, Camera, Volume2, VolumeX, Settings, Zap, Award,
-  Star, Target, TrendingUp, Clock, CheckCircle, PartyPopper,
-  MessageCircle, ThumbsUp, Flame, Medal, Users2, Brain,
-  Smile, Frown, Meh, Laugh, HeartCrack, Loader2, Share2,
-  Download, Image, Copy, Check, MapPin, Calendar, Music,
-  Coffee, Film, BookOpen, Utensils, Mountain, Palette,
-  Zap as Lightning, Moon, Sun, Wifi, WifiOff,
-  BarChart3, GitBranch, Eye, EyeOff, RotateCcw,
-  Smartphone, Monitor, ArrowDown
-} from "lucide-react";
-import html2canvas from "html2canvas";
+  Users, 
+  MessageCircle, 
+  Send, 
+  Clock, 
+  CheckCircle, 
+  X, 
+  ArrowLeft,
+  Share2,
+  Download,
+  Heart,
+  Star,
+  Target,
+  BarChart3,
+  Sparkles,
+  Trophy,
+  ChevronRight,
+  ChevronLeft
+} from 'lucide-react';
 
-const socket = io(import.meta.env.VITE_API_URL || "http://localhost:3001", {
-  transports: ['websocket', 'polling'],
-  timeout: 10000,
-  autoConnect: true
-});
+const DEFAULT_SOCKET_URL = `${import.meta.env.VITE_API_URL}`;
 
-// Enhanced questions with categories, weights, and personality insights
-const questions = [
-  {
-    id: 1,
-    question: "What's your ideal weekend?",
-    options: ["Adventure outdoors", "Cozy at home", "Party with friends", "Exploring new places"],
-    category: "Lifestyle",
-    weight: 1.2,
-    insights: {
-      "Adventure outdoors": "Active, nature-loving, spontaneous",
-      "Cozy at home": "Homebody, introverted, comfort-seeking",
-      "Party with friends": "Social, extroverted, fun-loving",
-      "Exploring new places": "Curious, adventurous, open-minded"
-    }
-  },
-  {
-    id: 2,
-    question: "Pick your favorite food type:",
-    options: ["Italian", "Asian", "Fast food", "Healthy & organic"],
-    category: "Taste",
-    weight: 1.0,
-    insights: {
-      "Italian": "Comfort-seeking, traditional, romantic",
-      "Asian": "Adventurous, diverse tastes, experimental",
-      "Fast food": "Practical, busy lifestyle, casual",
-      "Healthy & organic": "Health-conscious, disciplined, mindful"
-    }
-  },
-  {
-    id: 3,
-    question: "Your dream vacation is:",
-    options: ["Beach paradise", "Mountain retreat", "City exploration", "Cultural experience"],
-    category: "Adventure",
-    weight: 1.3,
-    insights: {
-      "Beach paradise": "Relaxed, sun-loving, peaceful",
-      "Mountain retreat": "Reflective, nature-loving, adventurous",
-      "City exploration": "Energetic, cultural, social",
-      "Cultural experience": "Learning-oriented, curious, historical"
-    }
-  },
-  {
-    id: 4,
-    question: "How do you handle stress?",
-    options: ["Exercise", "Talk to friends", "Watch movies", "Sleep it off"],
-    category: "Emotional",
-    weight: 1.4,
-    insights: {
-      "Exercise": "Active coping, disciplined, physical",
-      "Talk to friends": "Social support, communicative, emotional",
-      "Watch movies": "Escapist, creative, solitary",
-      "Sleep it off": "Restorative, patient, introspective"
-    }
-  },
-  {
-    id: 5,
-    question: "Your favorite type of music:",
-    options: ["Pop", "Rock", "Hip-Hop", "Electronic"],
-    category: "Entertainment",
-    weight: 0.8,
-    insights: {
-      "Pop": "Mainstream, upbeat, social",
-      "Rock": "Energetic, rebellious, emotional",
-      "Hip-Hop": "Urban, confident, rhythmic",
-      "Electronic": "Modern, dance-oriented, experimental"
-    }
-  }
-];
+interface Player {
+  name: string;
+  socketId: string;
+  isHost: boolean;
+  avatar?: string;
+}
 
-// Advanced compatibility parameters
-const advancedCompatibilityFactors = {
-  communicationStyles: ["Direct", "Diplomatic", "Emotional", "Analytical"],
-  loveLanguages: ["Words of Affirmation", "Quality Time", "Gifts", "Acts of Service", "Physical Touch"],
-  conflictResolution: ["Confront immediately", "Take time to cool off", "Seek compromise", "Avoid conflict"],
-  futureGoals: ["Career-focused", "Family-oriented", "Travel and adventure", "Stability and security"],
-  energyLevels: ["Morning Person", "Night Owl", "All Day Energy", "Balanced"],
-  socialPreferences: ["Large Groups", "Small Circles", "One-on-One", "Mixed"]
-};
+interface Question {
+  id: number;
+  text: string;
+  type: 'scale' | 'multiple' | 'text';
+  options?: string[];
+}
 
-export default function AdvancedCompatibilityGame() {
-  // Core states
-  const [roomId, setRoomId] = useState("");
-  const [playerName, setPlayerName] = useState("");
-  const [isHost, setIsHost] = useState(false);
-  const [joined, setJoined] = useState(false);
-  const [players, setPlayers] = useState<any[]>([]);
-  const [gameStarted, setGameStarted] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+interface AdvancedQuestions {
+  personalityTraits: {
+    question: string;
+    type: string;
+    options: string[];
+  };
+  lifestyle: {
+    sleepSchedule: {
+      question: string;
+      options: string[];
+    };
+    socialActivity: {
+      question: string;
+      options: string[];
+    };
+  };
+  communication: {
+    style: {
+      question: string;
+      options: string[];
+    };
+    conflictResolution: {
+      question: string;
+      options: string[];
+    };
+  };
+  interests: {
+    hobbies: {
+      question: string;
+      options: string[];
+    };
+  };
+  values: {
+    family: {
+      question: string;
+      options: string[];
+    };
+    career: {
+      question: string;
+      options: string[];
+    };
+  };
+}
 
-  // Game states - FIXED: Initialize bothAnswers as empty object
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [currentAnswer, setCurrentAnswer] = useState("");
-  const [answers, setAnswers] = useState<any[]>([]);
-  const [bothAnswers, setBothAnswers] = useState<any>({});
-  const [showResults, setShowResults] = useState(false);
+interface CompatibilityResults {
+  score: number;
+  breakdown: {
+    values: number;
+    personality: number;
+    lifestyle: number;
+    communication: number;
+    interests: number;
+  };
+  insights: string[];
+  advancedFactors: any;
+  playerAnswers: any;
+  matchLevel: string;
+  recommendations: string[];
+}
+
+interface ChatMessage {
+  _id: string;
+  sender: string;
+  senderId: string;
+  content: string;
+  timestamp: string;
+  type: string;
+  chatType: string;
+  roomId: string;
+}
+
+const Compatibility: React.FC = () => {
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [roomId, setRoomId] = useState<string>('');
+  const [playerName, setPlayerName] = useState<string>('');
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [isHost, setIsHost] = useState<boolean>(false);
+  const [gameStarted, setGameStarted] = useState<boolean>(false);
+  const [gameStatus, setGameStatus] = useState<'waiting' | 'playing' | 'results'>('waiting');
+  
+  // Game state
+  const [currentQuestion, setCurrentQuestion] = useState<number>(0);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [advancedQuestions, setAdvancedQuestions] = useState<AdvancedQuestions | null>(null);
+  const [answers, setAnswers] = useState<any>({});
+  const [advancedAnswers, setAdvancedAnswers] = useState<any>({});
   const [playerProgress, setPlayerProgress] = useState<{[key: string]: number}>({});
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [playerReactions, setPlayerReactions] = useState<{[key: string]: string}>({});
-  const [connectionStatus, setConnectionStatus] = useState("connected");
+  const [submissionStatus, setSubmissionStatus] = useState<{[key: string]: boolean}>({});
+  
+  // UI state
+  const [showChat, setShowChat] = useState<boolean>(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [newMessage, setNewMessage] = useState<string>('');
+  const [isTyping, setIsTyping] = useState<boolean>(false);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [timeLeft, setTimeLeft] = useState<number>(30);
+  const [results, setResults] = useState<CompatibilityResults | null>(null);
+  const [waitingForPlayers, setWaitingForPlayers] = useState<string[]>([]);
+  
+  // Advanced section state
+  const [currentAdvancedSection, setCurrentAdvancedSection] = useState<string>('');
+  const [advancedProgress, setAdvancedProgress] = useState<number>(0);
+  
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Advanced states
-  const [advancedAnswers, setAdvancedAnswers] = useState({
-    communicationStyle: "",
-    loveLanguage: "",
-    conflictStyle: "",
-    futureGoal: "",
-    energyLevel: "",
-    socialPreference: "",
-    personalityTraits: [] as string[]
-  });
-
-  // UI/UX states
-  const [darkMode, setDarkMode] = useState(true);
-  const [animationsEnabled, setAnimationsEnabled] = useState(true);
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  const [activeTab, setActiveTab] = useState("basic");
-  const [typingIndicator, setTypingIndicator] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [gameState, setGameState] = useState<any>(null);
-
-  // Screenshot sharing states
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [shareSuccess, setShareSuccess] = useState(false);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [showShareModal, setShowShareModal] = useState(false);
-
-  // Input focus states - NEW: Track which input is focused
-  const [focusedInput, setFocusedInput] = useState<string | null>(null);
-
-  // Refs
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const nameInputRef = useRef<HTMLInputElement>(null);
-  const roomInputRef = useRef<HTMLInputElement>(null);
-  const submitTimeoutRef = useRef<NodeJS.Timeout>();
-  const screenshotRef = useRef<HTMLDivElement>(null);
-  const mainContainerRef = useRef<HTMLDivElement>(null);
-  const optionsContainerRef = useRef<HTMLDivElement>(null);
-  const questionContainerRef = useRef<HTMLDivElement>(null);
-
-  // FIXED: Enhanced mobile detection and scroll handling
+  // Initialize socket connection
   useEffect(() => {
-    const checkMobile = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      
-      if (mobile) {
-        document.body.classList.add('mobile-device');
-        // FIX: Better mobile viewport handling
-        document.body.style.overflowX = 'hidden';
-        document.body.style.position = 'relative';
-        document.documentElement.style.overflowX = 'hidden';
-      } else {
-        document.body.classList.remove('mobile-device');
-        document.body.style.overflowX = 'auto';
-        document.body.style.position = 'static';
-        document.documentElement.style.overflowX = 'auto';
-      }
-    };
-
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    window.addEventListener('orientationchange', checkMobile);
+    const newSocket = io(DEFAULT_SOCKET_URL);
+    setSocket(newSocket);
 
     return () => {
-      window.removeEventListener('resize', checkMobile);
-      window.removeEventListener('orientationchange', checkMobile);
-      document.body.classList.remove('mobile-device');
-      document.body.style.overflowX = 'auto';
-      document.body.style.position = 'static';
-      document.documentElement.style.overflowX = 'auto';
+      newSocket.disconnect();
     };
   }, []);
 
-  // FIXED: Enhanced state persistence with proper error handling
+  // Socket event listeners
   useEffect(() => {
-    const savedState = localStorage.getItem('compatibilityGameState');
-    if (savedState) {
-      try {
-        const state = JSON.parse(savedState);
-        setPlayerName(state.playerName || '');
-        setRoomId(state.roomId || '');
-        setDarkMode(state.darkMode !== undefined ? state.darkMode : true);
-        
-        if (state.roomId && state.playerName && state.joined) {
-          setTimeout(() => {
-            if (socket.connected) {
-              socket.emit("rejoin-room", {
-                roomId: state.roomId,
-                playerName: state.playerName
-              });
-            }
-          }, 1000);
-        }
-      } catch (error) {
-        console.error('Error loading saved state:', error);
-        localStorage.removeItem('compatibilityGameState');
-      }
-    }
-  }, []);
+    if (!socket) return;
 
-  // FIXED: Enhanced auto-save with error handling
-  useEffect(() => {
-    try {
-      const state = {
-        playerName,
-        roomId,
-        darkMode,
-        joined,
-        gameStarted,
-        currentQuestion,
-        answers,
-        advancedAnswers,
-        gameState
-      };
-      localStorage.setItem('compatibilityGameState', JSON.stringify(state));
-    } catch (error) {
-      console.error('Error saving state:', error);
-    }
-  }, [playerName, roomId, darkMode, joined, gameStarted, currentQuestion, answers, advancedAnswers, gameState]);
-
-  // FIXED: Enhanced socket connection management
-  useEffect(() => {
-    const handleConnect = () => {
-      setConnectionStatus("connected");
-      console.log("Connected to server");
-    };
-
-    const handleDisconnect = () => {
-      setConnectionStatus("disconnected");
-    };
-
-    const handleReconnect = () => {
-      setConnectionStatus("connected");
-      if (joined && roomId && playerName) {
-        socket.emit("rejoin-room", { 
-          roomId, 
-          playerName 
-        });
-      }
-    };
-
-    socket.on("connect", handleConnect);
-    socket.on("disconnect", handleDisconnect);
-    socket.on("reconnect", handleReconnect);
-
-    return () => {
-      socket.off("connect", handleConnect);
-      socket.off("disconnect", handleDisconnect);
-      socket.off("reconnect", handleReconnect);
-    };
-  }, [joined, roomId, playerName]);
-
-  // FIXED: Enhanced socket event handlers with comprehensive error handling
-  useEffect(() => {
-    const handleRoomCreated = (room: any) => {
-      if (!room) return;
-      setRoomId(room.roomId || '');
+    // Room events
+    socket.on('compatibility-room-created', (room) => {
+      setRoomId(room.roomId);
+      setPlayers(room.players);
       setIsHost(true);
-      setJoined(true);
-      setPlayers(room.players || []);
-      setGameState(room.gameState || null);
-      playSound("success");
-    };
+      setQuestions(room.questions || []);
+      setAdvancedQuestions(room.advancedQuestions || null);
+    });
 
-    const handleRoomJoined = (room: any) => {
-      if (!room) return;
-      setRoomId(room.roomId || '');
-      setPlayers(room.players || []);
-      setJoined(true);
-      setGameState(room.gameState || null);
-      
-      if (room.gameState?.gameStarted) {
-        setGameStarted(true);
-        setCurrentQuestion(room.gameState.currentQuestion || 0);
-        setPlayerProgress(room.gameState.playerProgress || {});
-      }
-      
-      playSound("success");
-    };
+    socket.on('compatibility-room-joined', (room) => {
+      setRoomId(room.roomId);
+      setPlayers(room.players);
+      setIsHost(room.players.find((p: Player) => p.socketId === socket.id)?.isHost || false);
+      setQuestions(room.questions || []);
+      setAdvancedQuestions(room.advancedQuestions || null);
+    });
 
-    const handleRejoinSuccess = (data: any) => {
-      if (!data) return;
-      setRoomId(data.roomId || '');
-      setPlayers(data.players || []);
-      setJoined(true);
-      setGameState(data.gameState || null);
-      
-      if (data.gameState?.gameStarted) {
-        setGameStarted(true);
-        setCurrentQuestion(data.gameState.currentQuestion || 0);
-        setPlayerProgress(data.gameState.playerProgress || {});
-        setAnswers(data.playerAnswers || []);
-      }
-      
-      if (data.gameState?.showResults) {
-        setShowResults(true);
-        setBothAnswers(data.gameState.results || {});
-      }
-      
-      playSound("success");
-    };
+    socket.on('compatibility-update-players', (updatedPlayers) => {
+      setPlayers(updatedPlayers);
+    });
 
-    const handleUpdatePlayers = (playersList: any[]) => {
-      if (!Array.isArray(playersList)) return;
-      setPlayers(playersList);
-    };
+    // Game events
+    socket.on('compatibility-game-started', (data) => {
+      setGameStarted(true);
+      setGameStatus('playing');
+      setCurrentQuestion(data.currentQuestion);
+      setTimeLeft(30);
+    });
 
-    const handlePlayerProgress = (data: {player: string, progress: number}) => {
-      if (!data || !data.player) return;
+    socket.on('compatibility-next-question', (data) => {
+      setCurrentQuestion(data.questionIndex);
+      setTimeLeft(data.timeLeft);
+    });
+
+    socket.on('compatibility-all-answered', (data) => {
+      setCurrentQuestion(data.nextQuestionIndex);
+      setTimeLeft(data.timeLeft);
+    });
+
+    socket.on('compatibility-regular-completed', (data) => {
+      setAdvancedQuestions(data.advancedQuestions);
+      setGameStatus('advanced');
+    });
+
+    socket.on('compatibility-player-progress', (data) => {
       setPlayerProgress(prev => ({
         ...prev,
         [data.player]: data.progress
       }));
-    };
+    });
 
-    const handleGameStarted = (gameState: any) => {
-      setGameStarted(true);
-      setCurrentQuestion(0);
-      setAnswers([]);
-      setCurrentAnswer("");
-      setBothAnswers({});
-      setAdvancedAnswers({
-        communicationStyle: "",
-        loveLanguage: "",
-        conflictStyle: "",
-        futureGoal: "",
-        energyLevel: "",
-        socialPreference: "",
-        personalityTraits: []
-      });
-      setGameState(gameState || null);
-      playSound("success");
-    };
+    socket.on('compatibility-waiting-for-players', (data) => {
+      setWaitingForPlayers(data.waitingFor);
+    });
 
-    const handleQuestionChanged = (data: any) => {
-      if (!data) return;
-      setCurrentQuestion(data.questionIndex || 0);
-      setTimeLeft(data.timeLeft || 25);
-      setGameState(data.gameState || null);
-    };
+    socket.on('compatibility-show-results', (resultsData) => {
+      setResults(resultsData);
+      setGameStatus('results');
+    });
 
-    // FIXED: Critical fix for show-results handler
-    const handleShowResults = (data: any) => {
-      console.log("Show results data received:", data);
-      
-      // Ensure data is always an object
-      const safeData = data || {};
-      
-      // FIXED: Ensure results is always an object, never null or undefined
-      const results = safeData.results || safeData || {};
-      
-      // Validate that results is actually an object
-      if (typeof results !== 'object' || results === null) {
-        console.error("Results is not an object, setting empty object:", results);
-        setBothAnswers({});
-      } else {
-        console.log("Setting bothAnswers to:", results);
-        setBothAnswers(results);
-      }
-      
-      setShowResults(true);
-      setIsSubmitting(false);
-      setGameState(safeData.gameState || null);
-      playSound("victory");
-      triggerConfetti();
-    };
-
-    const handlePlayerReaction = (data: {player: string, reaction: string}) => {
-      if (!data || !data.player) return;
-      setPlayerReactions(prev => ({
+    socket.on('compatibility-submission-update', (data) => {
+      setSubmissionStatus(prev => ({
         ...prev,
-        [data.player]: data.reaction
+        [data.player]: data.submitted
       }));
-      
-      setTimeout(() => {
-        setPlayerReactions(prev => {
-          const newReactions = {...prev};
-          delete newReactions[data.player];
-          return newReactions;
-        });
-      }, 3000);
-    };
+    });
 
-    const handleGameStateUpdate = (newGameState: any) => {
-      setGameState(newGameState || null);
-    };
+    // Chat events
+    socket.on('chat-history', (messages) => {
+      setChatMessages(messages);
+    });
 
-    const handleConnectionError = (error: any) => {
-      setConnectionStatus("disconnected");
-      console.error("Connection error:", error);
-    };
+    socket.on('receive-chat-message', (message) => {
+      setChatMessages(prev => [...prev, message]);
+    });
 
-    // Register event listeners
-    socket.on("room-created", handleRoomCreated);
-    socket.on("room-joined", handleRoomJoined);
-    socket.on("rejoin-success", handleRejoinSuccess);
-    socket.on("update-players", handleUpdatePlayers);
-    socket.on("player-progress", handlePlayerProgress);
-    socket.on("game-started", handleGameStarted);
-    socket.on("question-changed", handleQuestionChanged);
-    socket.on("show-results", handleShowResults);
-    socket.on("player-reaction", handlePlayerReaction);
-    socket.on("game-state-update", handleGameStateUpdate);
-    socket.on("connect_error", handleConnectionError);
+    socket.on('user-typing', (data) => {
+      if (data.isTyping) {
+        setTypingUsers(prev => [...prev.filter(u => u !== data.userName), data.userName]);
+      } else {
+        setTypingUsers(prev => prev.filter(u => u !== data.userName));
+      }
+    });
 
-    return () => {
-      socket.off("room-created", handleRoomCreated);
-      socket.off("room-joined", handleRoomJoined);
-      socket.off("rejoin-success", handleRejoinSuccess);
-      socket.off("update-players", handleUpdatePlayers);
-      socket.off("player-progress", handlePlayerProgress);
-      socket.off("game-started", handleGameStarted);
-      socket.off("question-changed", handleQuestionChanged);
-      socket.off("show-results", handleShowResults);
-      socket.off("player-reaction", handlePlayerReaction);
-      socket.off("game-state-update", handleGameStateUpdate);
-      socket.off("connect_error", handleConnectionError);
-    };
-  }, []);
+    // Time sync
+    socket.on('time-sync', (time) => {
+      setTimeLeft(time);
+    });
 
-  // FIXED: Enhanced timer with proper cleanup
+    // Error handling
+    socket.on('join-error', (error) => {
+      alert(`Join error: ${error}`);
+    });
+
+    socket.on('start-error', (error) => {
+      alert(`Start error: ${error}`);
+    });
+
+  }, [socket]);
+
+  // Auto-scroll chat
   useEffect(() => {
-    if (timeLeft === null || !gameStarted || showResults) return;
-    
-    if (timeLeft <= 0) {
-      handleAutoSubmit();
-      return;
-    }
-    
-    const timer = setTimeout(() => {
-      setTimeLeft(prev => prev !== null ? prev - 1 : null);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  // Timer effect
+  useEffect(() => {
+    if (gameStatus !== 'playing' || timeLeft <= 0) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev - 1);
     }, 1000);
-    
-    return () => clearTimeout(timer);
-  }, [timeLeft, gameStarted, showResults]);
 
-  // FIXED: Start timer when question changes with better mobile scroll
-  useEffect(() => {
-    if (gameStarted && !showResults && currentQuestion < questions.length) {
-      setTimeLeft(25);
-      
-      if (isMobile && questionContainerRef.current) {
-        setTimeout(() => {
-          questionContainerRef.current?.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start' 
-          });
-        }, 100);
-      }
-    }
-  }, [currentQuestion, gameStarted, showResults, isMobile]);
+    return () => clearInterval(timer);
+  }, [gameStatus, timeLeft]);
 
-  // FIXED: Enhanced sound effects with fallback
-  const playSound = (soundName: string) => {
-    if (!soundEnabled) return;
-    
-    try {
-      const sounds: {[key: string]: number} = {
-        select: 800,
-        success: 1200,
-        notification: 600,
-        victory: 1500
-      };
-      
-      const frequency = sounds[soundName];
-      if (frequency && window.AudioContext) {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-        oscillator.type = 'sine';
-        
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.1);
-      }
-    } catch (error) {
-      console.log("Audio not supported");
-    }
-  };
-
-  const handleAutoSubmit = () => {
-    if (currentAnswer) {
-      submitAnswer();
-    } else {
-      const randomOption = questions[currentQuestion].options[
-        Math.floor(Math.random() * questions[currentQuestion].options.length)
-      ];
-      setCurrentAnswer(randomOption);
-      
-      if (submitTimeoutRef.current) {
-        clearTimeout(submitTimeoutRef.current);
-      }
-      
-      submitTimeoutRef.current = setTimeout(() => {
-        submitAnswer();
-      }, 800);
-    }
-  };
-
-  // FIXED: Enhanced mobile screenshot capture
-  const captureScreenshot = async () => {
-    if (!screenshotRef.current) return;
-    
-    setIsCapturing(true);
-    setShareSuccess(false);
-    
-    try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      const canvas = await html2canvas(screenshotRef.current, {
-        backgroundColor: darkMode ? '#0f172a' : '#ffffff',
-        scale: isMobile ? 1 : 1.2,
-        useCORS: true,
-        logging: false,
-        scrollX: 0,
-        scrollY: -window.scrollY,
-        windowWidth: document.documentElement.scrollWidth,
-        windowHeight: document.documentElement.scrollHeight
-      });
-      
-      const imageDataUrl = canvas.toDataURL('image/png', 0.9);
-      setCapturedImage(imageDataUrl);
-      
-      try {
-        if (navigator.clipboard && navigator.clipboard.write) {
-          const blob = await (await fetch(imageDataUrl)).blob();
-          const item = new ClipboardItem({ 'image/png': blob });
-          await navigator.clipboard.write([item]);
-          setShareSuccess(true);
-          setTimeout(() => setShareSuccess(false), 2000);
-        } else {
-          downloadImage(imageDataUrl);
-        }
-      } catch (clipboardError) {
-        downloadImage(imageDataUrl);
-      }
-      
-      setShowShareModal(true);
-    } catch (error) {
-      console.error('Screenshot capture failed:', error);
-    } finally {
-      setIsCapturing(false);
-    }
-  };
-
-  const downloadImage = (dataUrl: string) => {
-    const link = document.createElement('a');
-    link.download = `compatibility-${roomId}-${Date.now()}.png`;
-    link.href = dataUrl;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // FIXED: Enhanced room creation with validation
+  // Room management
   const createRoom = () => {
-    const trimmedName = playerName.trim();
-    if (!trimmedName || trimmedName.length < 2) {
-      alert("Please enter a valid name (at least 2 characters)");
-      nameInputRef.current?.focus();
+    if (!playerName.trim()) {
+      alert('Please enter your name');
       return;
     }
     
-    socket.emit("create-room", { 
-      player: { name: trimmedName },
-      gameType: "advanced-compatibility"
+    socket?.emit('create-compatibility-room', {
+      player: { name: playerName, socketId: socket.id }
     });
   };
 
-  // FIXED: Enhanced room joining with validation
   const joinRoom = () => {
-    const trimmedName = playerName.trim();
-    const trimmedRoomId = roomId.trim();
-    
-    if (!trimmedName || trimmedName.length < 2) {
-      alert("Please enter a valid name (at least 2 characters)");
-      nameInputRef.current?.focus();
+    if (!playerName.trim() || !roomId.trim()) {
+      alert('Please enter your name and room ID');
       return;
     }
-    if (!trimmedRoomId) {
-      alert("Please enter a room code");
-      roomInputRef.current?.focus();
-      return;
-    }
-    
-    socket.emit("join-room", { 
-      roomId: trimmedRoomId, 
-      player: { name: trimmedName } 
+
+    socket?.emit('join-compatibility-room', {
+      roomId,
+      player: { name: playerName, socketId: socket.id }
     });
   };
 
   const startGame = () => {
-    if (players.length < 2) {
-      alert("Need at least 2 players to start");
-      return;
-    }
-    socket.emit("start-game", { roomId });
+    socket?.emit('start-compatibility-game', { roomId });
   };
 
-  // FIXED: Enhanced answer submission with proper validation
-  const submitAnswer = () => {
-    if (!currentAnswer || isSubmitting) return;
-
-    setIsSubmitting(true);
-    playSound("select");
-
-    const newAnswers = [...answers, { 
-      question: questions[currentQuestion].question,
-      answer: currentAnswer,
-      category: questions[currentQuestion].category,
-      weight: questions[currentQuestion].weight,
-      questionId: questions[currentQuestion].id,
-      personalityInsight: questions[currentQuestion].insights?.[currentAnswer] || "No insight available"
-    }];
-    
-    setAnswers(newAnswers);
-
-    const progress = Math.round(((currentQuestion + 1) / questions.length) * 100);
-    socket.emit("player-progress", { roomId, progress });
-
-    setTimeout(() => {
-      if (currentQuestion < questions.length - 1) {
-        socket.emit("answer-submitted", {
-          roomId,
-          playerName,
-          questionIndex: currentQuestion,
-          answer: currentAnswer,
-          advancedAnswers: currentQuestion === questions.length - 1 ? advancedAnswers : null
-        });
-        
-        setCurrentQuestion(prev => prev + 1);
-        setCurrentAnswer("");
-        setIsSubmitting(false);
-      } else {
-        socket.emit("submit-answers", { 
-          roomId, 
-          player: { name: playerName }, 
-          answers: newAnswers,
-          advancedAnswers
-        });
-      }
-    }, 400);
+  // Game actions
+  const submitAnswer = (answer: any) => {
+    socket?.emit('compatibility-answer-submitted', {
+      roomId,
+      questionIndex: currentQuestion,
+      answer
+    });
   };
 
-  const sendReaction = (reaction: string) => {
-    socket.emit("player-reaction", { roomId, reaction });
+  const submitAdvancedAnswer = (category: string, answers: any) => {
+    socket?.emit('compatibility-advanced-answers', {
+      roomId,
+      category,
+      answers
+    });
   };
 
-  const triggerConfetti = () => {
-    if (!animationsEnabled) return;
-    
-    for (let i = 0; i < 75; i++) {
-      setTimeout(() => {
-        const confetti = document.createElement('div');
-        confetti.style.position = 'fixed';
-        confetti.style.width = '12px';
-        confetti.style.height = '12px';
-        confetti.style.background = `hsl(${Math.random() * 360}, 100%, 60%)`;
-        confetti.style.borderRadius = '50%';
-        confetti.style.left = `${Math.random() * 100}%`;
-        confetti.style.top = '-20px';
-        confetti.style.zIndex = '9999';
-        confetti.style.pointerEvents = 'none';
-        confetti.style.animation = `confetti-fall ${1.5 + Math.random() * 2}s ease-out forwards`;
-        
-        document.body.appendChild(confetti);
-        
-        setTimeout(() => {
-          if (document.body.contains(confetti)) {
-            document.body.removeChild(confetti);
-          }
-        }, 4000);
-      }, i * 75);
-    }
+  const submitFinal = () => {
+    socket?.emit('compatibility-submit-final', { roomId });
   };
 
-  // FIXED: Enhanced mobile option selection with better scroll
-  const handleOptionSelect = (option: string) => {
-    setCurrentAnswer(option);
-    playSound("select");
-    
-    if (isMobile) {
-      setTimeout(() => {
-        const submitButton = document.querySelector('button[type="button"]');
-        if (submitButton) {
-          submitButton.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'center' 
-          });
-        }
-      }, 300);
-    }
-  };
+  // Chat functions
+  const sendMessage = () => {
+    if (!newMessage.trim()) return;
 
-  // FIXED: Enhanced compatibility calculation with comprehensive null checks
-  const calculateCompatibility = () => {
-    console.log("Calculating compatibility with bothAnswers:", bothAnswers);
-    
-    // FIXED: Comprehensive check for bothAnswers to prevent TypeError
-    if (!bothAnswers || typeof bothAnswers !== 'object' || bothAnswers === null) {
-      console.error("bothAnswers is invalid, returning default:", bothAnswers);
-      return { 
-        score: 0, 
-        breakdown: {}, 
-        insights: ["No results available yet"], 
-        advancedAnalysis: {}, 
-        advancedFactors: {} 
-      };
-    }
-
-    const allPlayers = Object.keys(bothAnswers);
-    console.log("Players found:", allPlayers);
-    
-    if (allPlayers.length < 2) {
-      return { 
-        score: 0, 
-        breakdown: {}, 
-        insights: ["Waiting for both players to complete the test"], 
-        advancedAnalysis: {}, 
-        advancedFactors: {} 
-      };
-    }
-
-    const [p1, p2] = allPlayers;
-    const ans1 = bothAnswers[p1] || [];
-    const ans2 = bothAnswers[p2] || [];
-    
-    let totalScore = 0;
-    let maxPossibleScore = 0;
-    const categoryScores: {[key: string]: number} = {};
-    const insights: string[] = [];
-    const advancedAnalysis: any = {};
-
-    questions.forEach((question, i) => {
-      const weight = question.weight || 1;
-      maxPossibleScore += weight;
-      
-      const answer1 = Array.isArray(ans1) ? ans1[i]?.answer : null;
-      const answer2 = Array.isArray(ans2) ? ans2[i]?.answer : null;
-      
-      if (answer1 && answer2 && answer1 === answer2) {
-        totalScore += weight;
-        const category = question.category || 'General';
-        categoryScores[category] = (categoryScores[category] || 0) + weight;
-      }
+    socket?.emit('send-gamechat-message', {
+      roomId,
+      message: {
+        sender: playerName,
+        senderId: socket?.id,
+        content: newMessage,
+        type: 'text'
+      },
+      chatType: 'game'
     });
 
-    let advancedScore = 0;
-    let maxAdvancedScore = 0;
-    const advancedMatches: string[] = [];
+    setNewMessage('');
+  };
 
-    const adv1 = (typeof ans1 === 'object' && !Array.isArray(ans1) ? ans1.advancedAnswers : {}) || {};
-    const adv2 = (typeof ans2 === 'object' && !Array.isArray(ans2) ? ans2.advancedAnswers : {}) || {};
-
-    Object.keys(advancedCompatibilityFactors).forEach(factor => {
-      if (adv1[factor] && adv2[factor]) {
-        maxAdvancedScore += 1;
-        if (adv1[factor] === adv2[factor]) {
-          advancedScore += 1;
-          advancedMatches.push(factor);
-        }
-      }
-    });
-
-    const questionScore = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 60 : 0;
-    const advancedFactorScore = maxAdvancedScore > 0 ? (advancedScore / maxAdvancedScore) * 40 : 0;
-    const finalScore = Math.round(questionScore + advancedFactorScore);
-
-    if (finalScore >= 95) {
-      insights.push("💖 Cosmic Connection! You're practically soulmates");
-      insights.push("✨ Perfect harmony in values, communication, and lifestyle");
-    } else if (finalScore >= 85) {
-      insights.push("🌟 Exceptional Match! Your connection is deep and natural");
-      insights.push("⭐ Strong alignment in core values and life goals");
-    } else if (finalScore >= 75) {
-      insights.push("💫 Great Chemistry! You complement each other beautifully");
-      insights.push("🎯 Good balance of similarities and complementary differences");
-    } else if (finalScore >= 65) {
-      insights.push("🌈 Strong Potential! With understanding, this could flourish");
-      insights.push("💡 Your differences create opportunities for growth");
-    } else if (finalScore >= 50) {
-      insights.push("🎭 Interesting Dynamic! You challenge and inspire each other");
-      insights.push("🌱 Unique combination with room for beautiful development");
-    } else {
-      insights.push("🌀 Unconventional Match! You bring fresh perspectives");
-      insights.push("⚡ Your differences create exciting, unpredictable chemistry");
+  const handleTyping = () => {
+    if (!isTyping) {
+      setIsTyping(true);
+      socket?.emit('typing', { roomId, userId: socket.id, userName: playerName });
     }
-
-    advancedAnalysis.matches = advancedMatches;
-    advancedAnalysis.communicationMatch = adv1.communicationStyle === adv2.communicationStyle;
-    advancedAnalysis.loveLanguageMatch = adv1.loveLanguage === adv2.loveLanguage;
-    advancedAnalysis.energyCompatibility = adv1.energyLevel === adv2.energyLevel;
-    advancedAnalysis.socialCompatibility = adv1.socialPreference === adv2.socialPreference;
-
-    const result = {
-      score: finalScore,
-      breakdown: categoryScores,
-      insights,
-      advancedAnalysis,
-      advancedFactors: {
-        communication: adv1.communicationStyle === adv2.communicationStyle ? "Perfect match" : "Different styles",
-        loveLanguages: adv1.loveLanguage === adv2.loveLanguage ? "Same love language" : "Different love languages",
-        energy: adv1.energyLevel === adv2.energyLevel ? "Synced energy" : "Different rhythms",
-        social: adv1.socialPreference === adv2.socialPreference ? "Social harmony" : "Different preferences"
-      }
-    };
-
-    console.log("Final compatibility result:", result);
-    return result;
   };
 
-  const getCompatibilityMessage = (score: number) => {
-    if (score >= 95) return "Cosmic Soulmates! 💫";
-    if (score >= 85) return "Perfect Match! 🌟";
-    if (score >= 75) return "Excellent Chemistry! ⭐";
-    if (score >= 65) return "Great Potential! 💫";
-    if (score >= 50) return "Interesting Connection! ✨";
-    return "Unique Chemistry! 🎭";
+  const handleStopTyping = () => {
+    setIsTyping(false);
+    socket?.emit('chat-typing-stop', { roomId, userId: socket.id });
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 85) return "from-green-400 to-emerald-500";
-    if (score >= 70) return "from-blue-400 to-cyan-500";
-    if (score >= 55) return "from-yellow-400 to-orange-500";
-    return "from-purple-400 to-pink-500";
-  };
-
-  // Enhanced Player Card Component
-  const PlayerCard = ({ player, index }: { player: any, index: number }) => (
-    <div className={`flex items-center justify-between p-3 md:p-4 rounded-xl border transition-all ${
-      darkMode ? 'bg-slate-800/50 hover:bg-slate-700/50 border-slate-600' : 'bg-white/80 hover:bg-white border-gray-200'
-    }`}>
-      <div className="flex items-center space-x-2 md:space-x-3">
-        <Avatar className={`w-8 h-8 md:w-12 md:h-12 border-2 ${index === 0 ? 'border-yellow-400' : 'border-blue-400'}`}>
-          <AvatarFallback className={`text-xs md:text-base ${index === 0 ? 'bg-gradient-to-br from-yellow-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-cyan-600'} text-white font-bold`}>
-            {player.name?.charAt(0)?.toUpperCase() || "?"}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex items-center space-x-1 md:space-x-2">
-          <span className="font-bold text-sm md:text-lg">{player.name || "Unknown"}</span>
-          {index === 0 && <Crown className="w-4 h-4 md:w-5 md:h-5 text-yellow-400 animate-pulse" />}
-        </div>
-      </div>
-      
-      <div className="flex items-center space-x-2 md:space-x-3">
-        {playerProgress[player.name] !== undefined && (
-          <div className="text-right">
-            <div className="text-xs md:text-sm font-bold">{playerProgress[player.name]}%</div>
-            <Progress value={playerProgress[player.name]} className={`w-16 md:w-24 h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`} />
+  // UI Components
+  const renderLobby = () => (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
+      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-6">
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Heart className="text-white w-10 h-10" />
           </div>
-        )}
-        
-        {playerReactions[player.name] && (
-          <div className={`px-2 py-0.5 md:px-3 md:py-1 rounded-full text-base md:text-lg animate-bounce ${
-            darkMode ? 'bg-slate-600' : 'bg-gray-100'
-          }`}>
-            {playerReactions[player.name]}
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Compatibility Test</h1>
+          <p className="text-gray-600">Discover your connection with friends</p>
+        </div>
+
+        <div className="space-y-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Your Name
+            </label>
+            <input
+              type="text"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              placeholder="Enter your name"
+            />
           </div>
-        )}
-      </div>
-    </div>
-  );
 
-  // Connection Status Indicator
-  const ConnectionStatus = () => (
-    <div className={`fixed top-2 md:top-4 right-2 md:right-4 px-2 py-1 md:px-3 md:py-2 rounded-full text-xs md:text-sm font-semibold z-50 backdrop-blur-sm border ${
-      connectionStatus === "connected" 
-        ? `${darkMode ? 'bg-green-500/20 border-green-400/50' : 'bg-green-100 border-green-200'} text-green-700` 
-        : `${darkMode ? 'bg-red-500/20 border-red-400/50' : 'bg-red-100 border-red-200'} text-red-700 animate-pulse`
-    }`}>
-      {connectionStatus === "connected" ? 
-        <><Wifi className="w-3 h-3 md:w-4 md:h-4 inline mr-1 md:mr-2" />Connected</> : 
-        <><WifiOff className="w-3 h-3 md:w-4 md:h-4 inline mr-1 md:mr-2" />Disconnected</>
-      }
-    </div>
-  );
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Room ID (if joining)
+            </label>
+            <input
+              type="text"
+              value={roomId}
+              onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent uppercase"
+              placeholder="Enter room code"
+            />
+          </div>
+        </div>
 
-  // Settings Panel Component
-  const SettingsPanel = () => (
-    <Card className={`p-4 md:p-6 absolute top-12 md:top-16 right-2 md:right-4 w-72 md:w-80 backdrop-blur-sm border ${
-      darkMode ? 'bg-slate-800/90 border-slate-600' : 'bg-white/90 border-gray-200'
-    } shadow-2xl z-40 transition-all duration-300`}>
-      <h3 className="text-base md:text-lg font-bold mb-3 md:mb-4 flex items-center">
-        <Settings className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-        Game Settings
-      </h3>
-      
-      <div className="space-y-3 md:space-y-4">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="dark-mode" className="flex items-center text-sm md:text-base">
-            <Moon className="w-3 h-3 md:w-4 md:h-4 mr-2" />
-            Dark Mode
-          </Label>
-          <Switch
-            id="dark-mode"
-            checked={darkMode}
-            onCheckedChange={setDarkMode}
-          />
-        </div>
-        
-        <div className="flex items-center justify-between">
-          <Label htmlFor="animations" className="flex items-center text-sm md:text-base">
-            <Sparkles className="w-3 h-3 md:w-4 md:h-4 mr-2" />
-            Animations
-          </Label>
-          <Switch
-            id="animations"
-            checked={animationsEnabled}
-            onCheckedChange={setAnimationsEnabled}
-          />
-        </div>
-        
-        <div className="flex items-center justify-between">
-          <Label htmlFor="sound" className="flex items-center text-sm md:text-base">
-            <Volume2 className="w-3 h-3 md:w-4 md:h-4 mr-2" />
-            Sound Effects
-          </Label>
-          <Switch
-            id="sound"
-            checked={soundEnabled}
-            onCheckedChange={setSoundEnabled}
-          />
-        </div>
-        
-        <div className="pt-3 md:pt-4 border-t">
-          <Button
-            onClick={() => setShowAdvancedSettings(false)}
-            className="w-full text-sm md:text-base"
-            variant="outline"
+        <div className="space-y-3">
+          <button
+            onClick={createRoom}
+            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-200 shadow-lg"
           >
-            Close Settings
-          </Button>
+            Create New Room
+          </button>
+          
+          <button
+            onClick={joinRoom}
+            className="w-full border-2 border-purple-500 text-purple-600 py-3 rounded-xl font-semibold hover:bg-purple-50 transition-all duration-200"
+          >
+            Join Existing Room
+          </button>
         </div>
-      </div>
-    </Card>
-  );
 
-  // FIXED: Enhanced ResultsScreen with comprehensive error handling
-  const ResultsScreen = () => {
-    const compatibility = calculateCompatibility();
-    const { score, breakdown, insights, advancedAnalysis, advancedFactors } = compatibility;
-
-    // FIXED: Check if we have valid results to display
-    const hasValidResults = bothAnswers && 
-                           typeof bothAnswers === 'object' && 
-                           bothAnswers !== null && 
-                           Object.keys(bothAnswers).length >= 2;
-
-    if (!hasValidResults) {
-      return (
-        <div className={`min-h-screen flex flex-col items-center justify-center p-6 ${
-          darkMode ? 'bg-slate-900' : 'bg-gray-100'
-        }`}>
-          <Card className={`p-8 max-w-2xl w-full text-center ${
-            darkMode ? 'bg-slate-800' : 'bg-white'
-          }`}>
-            <div className="flex justify-center mb-6">
-              <Loader2 className="w-16 h-16 animate-spin text-purple-500" />
+        {roomId && (
+          <div className="mt-6 p-4 bg-purple-50 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-purple-700">Room Code:</span>
+              <span className="font-mono text-lg font-bold text-purple-900">{roomId}</span>
             </div>
-            <h2 className="text-2xl font-bold mb-4">Processing Results...</h2>
-            <p className={`mb-6 ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-              Please wait while we calculate your compatibility results.
-            </p>
-            <Button 
-              onClick={() => window.location.reload()}
-              className="bg-purple-500 hover:bg-purple-600 text-white"
+            <button
+              onClick={() => navigator.clipboard.writeText(roomId)}
+              className="w-full mt-2 text-sm text-purple-600 hover:text-purple-700 flex items-center justify-center gap-2"
             >
-              Return to Home
-            </Button>
-          </Card>
-        </div>
-      );
-    }
+              <Share2 className="w-4 h-4" />
+              Copy Room Code
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
-    return (
-      <div 
-        ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
-          darkMode 
-            ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
-            : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-        }`}
-      >
-        <ConnectionStatus />
-        
-        {/* Settings Button */}
-        <div className="absolute top-2 md:top-4 left-2 md:left-4">
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-          >
-            <Settings className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
-        </div>
-
-        {/* Screenshot capture area */}
-        <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-6xl">
-          <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
-            darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-          }`}>
-            {/* Header with share button */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-8 gap-4">
-              <div>
-                <h2 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-                  Compatibility Results
-                </h2>
-                <p className={`mt-1 md:mt-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  {Object.keys(bothAnswers).join(" 💞 ")}
-                </p>
-              </div>
-              
-              <Button
-                onClick={captureScreenshot}
-                disabled={isCapturing}
-                size={isMobile ? "sm" : "default"}
-                className={`${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`}
+  const renderWaitingRoom = () => (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
+      <div className="max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => window.location.reload()}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                {isCapturing ? (
-                  <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
-                ) : (
-                  <Share2 className="w-4 h-4 md:w-5 md:h-5" />
-                )}
-              </Button>
-            </div>
-
-            {/* Main Score */}
-            <div className="text-center mb-6 md:mb-8">
-              <div className={`text-5xl md:text-7xl font-black mb-3 md:mb-4 bg-gradient-to-r ${getScoreColor(score)} bg-clip-text text-transparent`}>
-                {score}%
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">Compatibility Test</h1>
+                <p className="text-gray-600">Room: <span className="font-mono font-semibold">{roomId}</span></p>
               </div>
-              <h3 className="text-xl md:text-3xl font-bold mb-1 md:mb-2">{getCompatibilityMessage(score)}</h3>
             </div>
+            <button
+              onClick={() => setShowChat(!showChat)}
+              className="p-3 bg-purple-100 text-purple-600 rounded-xl hover:bg-purple-200 transition-colors relative"
+            >
+              <MessageCircle className="w-6 h-6" />
+              {chatMessages.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {chatMessages.length}
+                </span>
+              )}
+            </button>
+          </div>
 
-            {/* Advanced Factors Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
-              {Object.entries(advancedFactors).map(([key, value]) => (
-                <div key={key} className={`p-3 md:p-4 rounded-xl border text-center ${
-                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-                }`}>
-                  <div className="text-xs md:text-sm font-medium capitalize mb-1">
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
-                  </div>
-                  <div className={`text-base md:text-lg font-semibold ${
-                    typeof value === 'string' && value.includes('match') 
-                      ? 'text-green-500' 
-                      : typeof value === 'string' && value.includes('Different')
-                      ? 'text-orange-500'
-                      : darkMode ? 'text-white' : 'text-gray-800'
-                  }`}>
-                    {value}
+          {/* Players List */}
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="w-5 h-5 text-purple-600" />
+              <h2 className="text-lg font-semibold text-gray-800">
+                Players ({players.length}/2)
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {players.map((player, index) => (
+                <div
+                  key={player.socketId}
+                  className={`p-4 rounded-xl border-2 ${
+                    player.isHost 
+                      ? 'border-purple-500 bg-purple-50' 
+                      : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold">
+                      {player.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800">{player.name}</p>
+                      <p className="text-sm text-gray-600">
+                        {player.isHost ? 'Host' : 'Player'}
+                      </p>
+                    </div>
+                    {player.isHost && (
+                      <Crown className="w-5 h-5 text-yellow-500 ml-auto" />
+                    )}
                   </div>
                 </div>
               ))}
             </div>
+          </div>
 
-            {/* Category Breakdown */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
-              {Object.entries(breakdown).map(([category, catScore]) => (
-                <div key={category} className={`p-3 md:p-4 rounded-xl border ${
-                  darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-                }`}>
-                  <div className="text-xs md:text-sm mb-1 md:mb-2">{category}</div>
-                  <div className="text-xl md:text-2xl font-bold mb-1 md:mb-2">
-                    {Math.round((catScore as number / questions.filter(q => q.category === category).length) * 100)}%
+          {/* Start Game Button */}
+          {isHost && players.length === 2 && (
+            <button
+              onClick={startGame}
+              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-4 rounded-xl font-semibold text-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-lg flex items-center justify-center gap-3"
+            >
+              <Sparkles className="w-6 h-6" />
+              Start Compatibility Test
+            </button>
+          )}
+
+          {isHost && players.length < 2 && (
+            <div className="text-center py-6">
+              <Users className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 font-medium">
+                Waiting for {2 - players.length} more player{2 - players.length > 1 ? 's' : ''} to join...
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Chat Panel */}
+        {showChat && (
+          <div className="bg-white rounded-2xl shadow-lg p-4 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Chat</h3>
+              <button
+                onClick={() => setShowChat(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            <div 
+              ref={chatContainerRef}
+              className="h-64 overflow-y-auto mb-4 space-y-3 p-2"
+            >
+              {chatMessages.map((message) => (
+                <div
+                  key={message._id}
+                  className={`flex ${message.sender === playerName ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                      message.sender === playerName
+                        ? 'bg-purple-500 text-white rounded-br-none'
+                        : 'bg-gray-100 text-gray-800 rounded-bl-none'
+                    }`}
+                  >
+                    <p className="text-sm font-medium">{message.sender}</p>
+                    <p className="text-sm">{message.content}</p>
+                    <p className="text-xs opacity-70 mt-1">
+                      {new Date(message.timestamp).toLocaleTimeString()}
+                    </p>
                   </div>
-                  <Progress 
-                    value={(catScore as number / questions.filter(q => q.category === category).length) * 100} 
-                    className={`h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
-                  />
+                </div>
+              ))}
+              
+              {typingUsers.length > 0 && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-2xl rounded-bl-none">
+                    <p className="text-sm italic">
+                      {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newMessage}
+                onChange={(e) => {
+                  setNewMessage(e.target.value);
+                  handleTyping();
+                }}
+                onBlur={handleStopTyping}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    sendMessage();
+                    handleStopTyping();
+                  }
+                }}
+                placeholder="Type a message..."
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <button
+                onClick={sendMessage}
+                className="px-4 py-2 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderQuestion = (question: Question) => (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
+      <div className="max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">Question {currentQuestion + 1}</h1>
+              <p className="text-gray-600">of {questions.length}</p>
+            </div>
+            <div className="text-right">
+              <div className="flex items-center gap-2 text-orange-500 mb-1">
+                <Clock className="w-5 h-5" />
+                <span className="font-semibold">{timeLeft}s</span>
+              </div>
+              <div className="w-32 bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-green-500 h-2 rounded-full transition-all duration-1000"
+                  style={{ width: `${(timeLeft / 30) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="mb-6">
+            <div className="flex justify-between text-sm text-gray-600 mb-2">
+              <span>Progress</span>
+              <span>{Math.round(((currentQuestion + 1) / questions.length) * 100)}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3">
+              <div 
+                className="bg-purple-500 h-3 rounded-full transition-all duration-500"
+                style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Question */}
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4 text-center">
+              {question.text}
+            </h2>
+            
+            {question.type === 'scale' && question.options && (
+              <div className="space-y-3">
+                {question.options.map((option, index) => (
+                  <button
+                    key={index}
+                    onClick={() => submitAnswer(index)}
+                    className="w-full p-4 text-left bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 font-semibold">
+                        {index + 1}
+                      </div>
+                      <span className="font-medium text-gray-800">{option}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Players Progress */}
+          <div className="border-t pt-4">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Players Progress</h3>
+            <div className="space-y-2">
+              {players.map(player => (
+                <div key={player.name} className="flex items-center justify-between">
+                  <span className="text-sm text-gray-800">{player.name}</span>
+                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${playerProgress[player.name] || 0}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Chat Toggle */}
+        <button
+          onClick={() => setShowChat(!showChat)}
+          className="fixed bottom-6 right-6 w-14 h-14 bg-purple-500 text-white rounded-full shadow-lg hover:bg-purple-600 transition-colors flex items-center justify-center"
+        >
+          <MessageCircle className="w-6 h-6" />
+        </button>
+      </div>
+
+      {/* Chat Panel */}
+      {showChat && renderChatPanel()}
+    </div>
+  );
+
+  const renderAdvancedSection = () => (
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-teal-50 p-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+          <div className="text-center mb-8">
+            <Sparkles className="w-12 h-12 text-purple-500 mx-auto mb-4" />
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Advanced Compatibility</h1>
+            <p className="text-gray-600">Dive deeper into your personality and preferences</p>
+          </div>
+
+          {/* Progress */}
+          <div className="mb-8">
+            <div className="flex justify-between text-sm text-gray-600 mb-2">
+              <span>Advanced Section Progress</span>
+              <span>{advancedProgress}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3">
+              <div 
+                className="bg-teal-500 h-3 rounded-full transition-all duration-500"
+                style={{ width: `${advancedProgress}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Sections */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {advancedQuestions && Object.entries(advancedQuestions).map(([section, data]) => (
+              <button
+                key={section}
+                onClick={() => setCurrentAdvancedSection(section)}
+                className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${
+                  currentAdvancedSection === section
+                    ? 'border-purple-500 bg-purple-50'
+                    : 'border-gray-200 bg-white hover:border-purple-300'
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    currentAdvancedSection === section 
+                      ? 'bg-purple-500 text-white' 
+                      : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {getSectionIcon(section)}
+                  </div>
+                  <h3 className="font-semibold text-gray-800 capitalize">
+                    {section.replace(/([A-Z])/g, ' $1').trim()}
+                  </h3>
+                </div>
+                <p className="text-sm text-gray-600">
+                  {Object.keys(advancedAnswers[section] || {}).length > 0 
+                    ? 'Completed' 
+                    : 'Click to answer'
+                  }
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Advanced Questions */}
+        {currentAdvancedSection && advancedQuestions && (
+          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <div className="flex items-center gap-3 mb-6">
+              <button
+                onClick={() => setCurrentAdvancedSection('')}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              <h2 className="text-xl font-bold text-gray-800 capitalize">
+                {currentAdvancedSection.replace(/([A-Z])/g, ' $1').trim()}
+              </h2>
+            </div>
+
+            {renderAdvancedQuestions(currentAdvancedSection, advancedQuestions[currentAdvancedSection])}
+          </div>
+        )}
+
+        {/* Submit Button */}
+        <div className="text-center">
+          <button
+            onClick={submitFinal}
+            className="bg-gradient-to-r from-green-500 to-teal-500 text-white py-4 px-8 rounded-xl font-semibold text-lg hover:from-green-600 hover:to-teal-600 transition-all duration-200 shadow-lg flex items-center gap-3 mx-auto"
+          >
+            <CheckCircle className="w-6 h-6" />
+            Complete Compatibility Test
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAdvancedQuestions = (section: string, questions: any) => {
+    if (section === 'personalityTraits') {
+      return (
+        <div className="space-y-6">
+          <h3 className="text-lg font-semibold text-gray-800">{questions.question}</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {questions.options.map((trait: string, index: number) => (
+              <button
+                key={trait}
+                onClick={() => {
+                  const currentTraits = advancedAnswers[section]?.traits || [];
+                  const newTraits = currentTraits.includes(trait)
+                    ? currentTraits.filter((t: string) => t !== trait)
+                    : [...currentTraits, trait];
+                  
+                  submitAdvancedAnswer(section, { traits: newTraits });
+                }}
+                className={`p-3 rounded-xl border-2 text-center transition-all duration-200 ${
+                  (advancedAnswers[section]?.traits || []).includes(trait)
+                    ? 'border-purple-500 bg-purple-50 text-purple-700'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-purple-300'
+                }`}
+              >
+                {trait}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Render other sections similarly...
+    return (
+      <div className="space-y-6">
+        {Object.entries(questions).map(([key, subQuestion]: [string, any]) => (
+          <div key={key} className="space-y-3">
+            <h4 className="font-medium text-gray-800">{subQuestion.question}</h4>
+            <div className="space-y-2">
+              {subQuestion.options.map((option: string, index: number) => (
+                <button
+                  key={option}
+                  onClick={() => {
+                    submitAdvancedAnswer(section, {
+                      ...advancedAnswers[section],
+                      [key]: option
+                    });
+                  }}
+                  className={`w-full p-3 text-left rounded-xl border-2 transition-all duration-200 ${
+                    advancedAnswers[section]?.[key] === option
+                      ? 'border-purple-500 bg-purple-50 text-purple-700'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-purple-300'
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderWaitingScreen = () => (
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 p-4">
+      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8 text-center">
+        <Clock className="w-16 h-16 text-orange-500 mx-auto mb-6 animate-pulse" />
+        <h1 className="text-2xl font-bold text-gray-800 mb-4">Waiting for Players</h1>
+        <p className="text-gray-600 mb-6">
+          Waiting for {waitingForPlayers.join(', ')} to complete the test...
+        </p>
+        
+        <div className="space-y-4">
+          {players.map(player => (
+            <div key={player.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+              <span className="font-medium text-gray-800">{player.name}</span>
+              {submissionStatus[player.name] ? (
+                <CheckCircle className="w-6 h-6 text-green-500" />
+              ) : (
+                <Clock className="w-6 h-6 text-orange-500 animate-pulse" />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderResults = () => {
+    if (!results) return null;
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="bg-white rounded-2xl shadow-lg p-8 text-center mb-6">
+            <div className="w-24 h-24 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Trophy className="w-12 h-12 text-white" />
+            </div>
+            <h1 className="text-4xl font-bold text-gray-800 mb-2">Compatibility Results</h1>
+            <p className="text-xl text-gray-600 mb-6">{results.matchLevel}</p>
+            
+            {/* Score Circle */}
+            <div className="relative inline-block mb-8">
+              <div className="w-48 h-48 rounded-full border-8 border-gray-200 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="text-5xl font-bold text-purple-600">{results.score}%</div>
+                  <div className="text-sm text-gray-600">Compatibility Score</div>
+                </div>
+              </div>
+              <div 
+                className="absolute top-0 left-0 w-48 h-48 rounded-full border-8 border-transparent border-t-purple-500 border-r-pink-500 transform -rotate-45"
+                style={{
+                  clipPath: `conic-gradient(transparent 0%, transparent ${100 - results.score}%, purple ${100 - results.score}%, pink 100%)`
+                }}
+              />
+            </div>
+
+            {/* Breakdown */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+              {Object.entries(results.breakdown).map(([category, score]) => (
+                <div key={category} className="text-center">
+                  <div className="w-16 h-16 mx-auto mb-2 relative">
+                    <svg className="w-full h-full" viewBox="0 0 36 36">
+                      <path
+                        d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        stroke="#eee"
+                        strokeWidth="3"
+                      />
+                      <path
+                        d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        stroke="#8b5cf6"
+                        strokeWidth="3"
+                        strokeDasharray={`${score}, 100`}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-sm font-bold text-gray-800">{score}%</span>
+                    </div>
+                  </div>
+                  <p className="text-xs font-medium text-gray-700 capitalize">
+                    {category}
+                  </p>
                 </div>
               ))}
             </div>
 
             {/* Insights */}
-            <div className={`p-4 md:p-6 rounded-xl border mb-6 md:mb-8 ${
-              darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-            }`}>
-              <h3 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center justify-center">
-                <Brain className="w-4 h-4 md:w-5 md:h-5 mr-2 text-purple-500" />
-                Relationship Insights
-              </h3>
-              <div className="space-y-2 md:space-y-3">
-                {insights.map((insight, index) => (
-                  <div key={index} className={`flex items-start space-x-2 md:space-x-3 p-2 md:p-3 rounded-lg ${
-                    darkMode ? 'bg-slate-600/50' : 'bg-white'
-                  }`}>
-                    <Sparkles className="w-3 h-3 md:w-4 md:h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm md:text-base">{insight}</span>
+            <div className="mb-8">
+              <h3 className="text-xl font-semibold text-gray-800 mb-4">Key Insights</h3>
+              <div className="space-y-3">
+                {results.insights.map((insight, index) => (
+                  <div key={index} className="flex items-start gap-3 p-3 bg-blue-50 rounded-xl">
+                    <Sparkles className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-gray-800 text-left">{insight}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-3 md:gap-4 flex-col sm:flex-row">
-              <Button 
-                onClick={() => window.location.reload()} 
-                size={isMobile ? "sm" : "lg"}
-                className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white"
-              >
-                <RotateCcw className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                Play Again
-              </Button>
-              <Button 
-                onClick={captureScreenshot}
-                disabled={isCapturing}
-                size={isMobile ? "sm" : "lg"}
-                className="flex-1 py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white"
-              >
-                {isCapturing ? (
-                  <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-2 animate-spin" />
-                ) : (
-                  <Share2 className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                )}
-                {isCapturing ? 'Capturing...' : 'Share Results'}
-              </Button>
-            </div>
-          </Card>
-        </div>
-
-        {showAdvancedSettings && <SettingsPanel />}
-        {showShareModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 md:p-4">
-            <Card className="max-w-2xl w-full bg-white/95 backdrop-blur-sm shadow-2xl rounded-xl md:rounded-2xl border-0 max-h-[90vh] overflow-y-auto">
-              <div className="p-4 md:p-6">
-                <div className="flex justify-between items-center mb-3 md:mb-4">
-                  <h3 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center">
-                    <Share2 className="w-5 h-5 md:w-6 md:h-6 mr-2 text-blue-600" />
-                    Share Your Results
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size={isMobile ? "sm" : "default"}
-                    onClick={() => setShowShareModal(false)}
-                  >
-                    ✕
-                  </Button>
-                </div>
-                
-                <div className="space-y-3 md:space-y-4">
-                  {capturedImage && (
-                    <div className="text-center">
-                      <img
-                        src={capturedImage}
-                        alt="Compatibility Results"
-                        className="w-full h-auto max-h-48 md:max-h-96 object-contain border rounded-lg"
-                      />
-                    </div>
-                  )}
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
-                    <Button
-                      onClick={() => capturedImage && downloadImage(capturedImage)}
-                      size={isMobile ? "sm" : "default"}
-                      className="py-3 md:py-4"
-                    >
-                      <Download className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                      Download
-                    </Button>
-                    
-                    <Button
-                      onClick={() => capturedImage && navigator.clipboard?.writeText(`Check out our compatibility score: ${score}%! 🎉`)}
-                      size={isMobile ? "sm" : "default"}
-                      className="py-3 md:py-4"
-                    >
-                      <Copy className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                      Copy Text
-                    </Button>
+            {/* Recommendations */}
+            <div>
+              <h3 className="text-xl font-semibold text-gray-800 mb-4">Recommendations</h3>
+              <div className="space-y-3">
+                {results.recommendations.map((recommendation, index) => (
+                  <div key={index} className="flex items-start gap-3 p-3 bg-green-50 rounded-xl">
+                    <Target className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-gray-800 text-left">{recommendation}</p>
                   </div>
-                </div>
+                ))}
               </div>
-            </Card>
+            </div>
           </div>
-        )}
+
+          {/* Action Buttons */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button
+              onClick={() => window.location.reload()}
+              className="p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 transition-colors text-center"
+            >
+              <ArrowLeft className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+              <span className="font-medium text-gray-800">New Test</span>
+            </button>
+            
+            <button
+              onClick={() => {/* Implement share functionality */}}
+              className="p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 transition-colors text-center"
+            >
+              <Share2 className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+              <span className="font-medium text-gray-800">Share Results</span>
+            </button>
+            
+            <button
+              onClick={() => {/* Implement screenshot functionality */}}
+              className="p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 transition-colors text-center"
+            >
+              <Download className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+              <span className="font-medium text-gray-800">Save Results</span>
+            </button>
+          </div>
+        </div>
       </div>
     );
   };
 
-  // Waiting Screen Component
-  const WaitingScreen = () => (
-    <div 
-      ref={mainContainerRef}
-      className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
-        darkMode 
-          ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
-          : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-      }`}
-    >
-      <ConnectionStatus />
-      
-      {/* Settings Button */}
-      <div className="absolute top-2 md:top-4 left-2 md:left-4">
-        <Button
-          variant="ghost"
-          size={isMobile ? "sm" : "default"}
-          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-          className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-        >
-          <Settings className="w-4 h-4 md:w-5 md:h-5" />
-        </Button>
+  const renderChatPanel = () => (
+    <div className="fixed bottom-20 right-6 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200">
+      <div className="p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-800">Game Chat</h3>
+          <button
+            onClick={() => setShowChat(false)}
+            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-4 h-4 text-gray-600" />
+          </button>
+        </div>
       </div>
 
-      {/* Screenshot capture area */}
-      <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-2xl">
-        <Card className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 ${
-          darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-        }`}>
-          {/* Header */}
-          <div className="text-center mb-6 md:mb-8">
-            <div className="flex justify-center mb-4 md:mb-6">
-              <div className="relative">
-                <Heart className="w-16 h-16 md:w-20 md:h-20 text-pink-500 animate-pulse" />
-                <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-500 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-spin" />
-              </div>
-            </div>
-            
-            <h2 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-              Advanced Compatibility
-            </h2>
-            <p className={`text-base md:text-lg ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-              Room Code: <span className="font-mono font-bold text-xl md:text-2xl">{roomId}</span>
-            </p>
-          </div>
-
-          {/* Players */}
-          <div className="grid grid-cols-1 gap-3 md:gap-4 mb-6 md:mb-8">
-            {players.map((player, index) => (
-              <PlayerCard key={player.name || index} player={player} index={index} />
-            ))}
-          </div>
-
-          {/* Status Message */}
-          {players.length === 1 && (
-            <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 text-center ${
-              darkMode ? 'bg-yellow-500/20 border-yellow-400/30' : 'bg-yellow-100 border-yellow-200'
-            }`}>
-              <div className="flex items-center justify-center space-x-1 md:space-x-2">
-                <Users className="w-4 h-4 md:w-5 md:h-5 text-yellow-600" />
-                <span className={`text-sm md:text-base ${darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
-                  Waiting for partner to join...
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Action Button */}
-          {isHost ? (
-            <Button 
-              onClick={startGame} 
-              disabled={players.length < 2}
-              size={isMobile ? "sm" : "lg"}
-              className="w-full py-4 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-2xl disabled:opacity-50"
+      <div className="h-64 overflow-y-auto p-4 space-y-3">
+        {chatMessages.map((message) => (
+          <div
+            key={message._id}
+            className={`flex ${message.sender === playerName ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-xs px-3 py-2 rounded-2xl ${
+                message.sender === playerName
+                  ? 'bg-purple-500 text-white rounded-br-none'
+                  : 'bg-gray-100 text-gray-800 rounded-bl-none'
+              }`}
             >
-              <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-              Start Compatibility Test {players.length < 2 && `(Need ${2 - players.length} more)`}
-            </Button>
-          ) : (
-            <div className={`p-3 md:p-4 rounded-xl border text-center ${
-              darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
-            }`}>
-              <div className="flex items-center justify-center space-x-1 md:space-x-2">
-                <Clock className="w-4 h-4 md:w-5 md:h-5 text-blue-500 animate-pulse" />
-                <span className={`text-sm md:text-base ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
-                  Waiting for host to start the test...
-                </span>
-              </div>
+              <p className="text-xs font-medium opacity-80">{message.sender}</p>
+              <p className="text-sm">{message.content}</p>
+              <p className="text-xs opacity-70 mt-1">
+                {new Date(message.timestamp).toLocaleTimeString([], { 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                })}
+              </p>
             </div>
-          )}
-
-          {/* Quick Copy */}
-          <div className="mt-4 md:mt-6 text-center">
-            <Button
-              onClick={() => navigator.clipboard?.writeText(roomId)}
-              variant="outline"
-              size={isMobile ? "sm" : "default"}
-              className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
-            >
-              <LinkIcon className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-              Copy Room Code
-            </Button>
           </div>
-        </Card>
+        ))}
+        
+        {typingUsers.length > 0 && (
+          <div className="flex justify-start">
+            <div className="bg-gray-100 text-gray-800 px-3 py-2 rounded-2xl rounded-bl-none">
+              <p className="text-sm italic">
+                {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+              </p>
+            </div>
+          </div>
+        )}
+        
+        <div ref={messagesEndRef} />
       </div>
 
-      {showAdvancedSettings && <SettingsPanel />}
+      <div className="p-4 border-t border-gray-200">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => {
+              setNewMessage(e.target.value);
+              handleTyping();
+            }}
+            onBlur={handleStopTyping}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                sendMessage();
+                handleStopTyping();
+              }
+            }}
+            placeholder="Type a message..."
+            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+          <button
+            onClick={sendMessage}
+            className="px-3 py-2 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 
-  // FIXED: Enhanced Game Screen with mobile scroll handling
-  const GameScreen = () => {
-    const currentQ = questions[currentQuestion];
-    
-    const handleSubmit = () => {
-      if (!currentAnswer) {
-        alert("Please select an answer before submitting");
-        return;
-      }
-      submitAnswer();
+  const getSectionIcon = (section: string) => {
+    const icons: { [key: string]: React.ReactNode } = {
+      personalityTraits: <Star className="w-5 h-5" />,
+      lifestyle: <Heart className="w-5 h-5" />,
+      communication: <MessageCircle className="w-5 h-5" />,
+      interests: <Sparkles className="w-5 h-5" />,
+      values: <Target className="w-5 h-5" />
     };
-
-    return (
-      <div 
-        ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
-          darkMode 
-            ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
-            : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-        }`}
-      >
-        <ConnectionStatus />
-        
-        {/* Settings Button */}
-        <div className="absolute top-2 md:top-4 left-2 md:left-4">
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-          >
-            <Settings className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
-        </div>
-
-        {/* Screenshot capture area */}
-        <div ref={screenshotRef} data-screenshot="true" className="w-full max-w-4xl">
-          {/* Header */}
-          <div className="mb-4 md:mb-6">
-            <div className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 md:p-6 rounded-xl border backdrop-blur-sm gap-3 md:gap-0 ${
-              darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-            }`}>
-              <div>
-                <h2 className="text-lg md:text-xl font-bold">Room: {roomId}</h2>
-                <div className={`flex items-center space-x-1 md:space-x-2 text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  <Users className="w-3 h-3 md:w-4 md:h-4" />
-                  <span>{players.map(p => p.name).join(" & ")}</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-4 md:space-x-6 w-full md:w-auto justify-between md:justify-normal">
-                {/* Progress */}
-                <div className="text-right md:text-left">
-                  <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Progress</div>
-                  <div className="text-base md:text-lg font-bold">
-                    {currentQuestion + 1} / {questions.length}
-                  </div>
-                </div>
-                
-                {/* Timer */}
-                {timeLeft !== null && (
-                  <div className="text-right md:text-left">
-                    <div className={`text-xs md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>Time Left</div>
-                    <div className={`text-base md:text-lg font-bold flex items-center ${
-                      timeLeft <= 10 ? 'text-red-500 animate-pulse' : ''
-                    }`}>
-                      <Timer className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                      {timeLeft}s
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Player Progress */}
-          <div className="grid grid-cols-1 gap-3 md:gap-4 mb-4 md:mb-6">
-            {players.map((player) => (
-              <div key={player.name} className={`p-3 md:p-4 rounded-xl border backdrop-blur-sm ${
-                darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-              }`}>
-                <div className="flex items-center justify-between mb-1 md:mb-2">
-                  <div className="flex items-center space-x-2 md:space-x-3">
-                    <Avatar className="w-8 h-8 md:w-10 md:h-10">
-                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-600 text-white text-xs md:text-base">
-                        {player.name?.charAt(0)?.toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="font-semibold text-sm md:text-base">{player.name}</span>
-                  </div>
-                  <div className="text-base md:text-lg font-bold">
-                    {playerProgress[player.name] || 0}%
-                  </div>
-                </div>
-                <Progress 
-                  value={playerProgress[player.name] || 0} 
-                  className={`h-1.5 md:h-2 ${darkMode ? 'bg-slate-600' : 'bg-gray-200'}`}
-                />
-              </div>
-            ))}
-          </div>
-
-          {/* Question Card */}
-          <Card 
-            ref={questionContainerRef}
-            className={`p-4 md:p-8 backdrop-blur-sm border transition-all duration-300 mb-4 md:mb-6 ${
-              darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-            }`}
-          >
-            <div className="text-center mb-6 md:mb-8">
-              <Badge className={`mb-2 md:mb-3 text-xs md:text-sm ${darkMode ? 'bg-purple-500/20 text-purple-300 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>
-                {currentQ.category} • Weight: {currentQ.weight}x
-              </Badge>
-              <h3 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">
-                {currentQ.question}
-              </h3>
-              <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                Question {currentQuestion + 1} of {questions.length}
-              </p>
-            </div>
-
-            {/* Options */}
-            <div 
-              ref={optionsContainerRef}
-              className="space-y-3 md:space-y-4 mb-6 md:mb-8"
-            >
-              {currentQ.options.map((option, index) => (
-                <div 
-                  key={index} 
-                  className={`flex items-center space-x-3 md:space-x-4 p-3 md:p-4 rounded-xl border transition-all cursor-pointer ${
-                    currentAnswer === option 
-                      ? 'bg-purple-500/20 border-purple-400/50 scale-105 shadow-lg' 
-                      : `${darkMode ? 'bg-slate-700/50 hover:bg-slate-600/50 border-slate-600' : 'bg-white hover:bg-gray-50 border-gray-200'} hover:scale-102`
-                  }`}
-                  onClick={() => handleOptionSelect(option)}
-                >
-                  <div className={`w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center ${
-                    currentAnswer === option 
-                      ? 'border-purple-400 bg-purple-400' 
-                      : 'border-gray-400'
-                  }`}>
-                    {currentAnswer === option && (
-                      <div className="w-2 h-2 md:w-3 md:h-3 rounded-full bg-white"></div>
-                    )}
-                  </div>
-                  <Label className="flex-1 cursor-pointer font-semibold text-base md:text-lg">
-                    {option}
-                  </Label>
-                </div>
-              ))}
-            </div>
-
-            {/* Personality Insight */}
-            {currentAnswer && currentQ.insights && (
-              <div className={`p-3 md:p-4 rounded-xl border mb-4 md:mb-6 ${
-                darkMode ? 'bg-blue-500/20 border-blue-400/30' : 'bg-blue-100 border-blue-200'
-              }`}>
-                <div className="flex items-center space-x-2">
-                  <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
-                  <span className="font-medium text-sm md:text-base">
-                    This suggests: {currentQ.insights[currentAnswer]}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex justify-between items-center">
-              <Button
-                variant="outline"
-                size={isMobile ? "sm" : "default"}
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className={darkMode ? 'border-slate-600 hover:bg-slate-700' : ''}
-              >
-                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-              </Button>
-
-              <Button
-                onClick={handleSubmit}
-                disabled={!currentAnswer || isSubmitting}
-                size={isMobile ? "sm" : "default"}
-                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 md:px-8 py-2 md:py-3 text-base md:text-lg disabled:opacity-50 transition-all"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2 animate-spin" />
-                    Submitting...
-                  </>
-                ) : currentQuestion === questions.length - 1 ? (
-                  <>
-                    <CheckCircle className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
-                    Finish Test
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
-                    Next Question
-                  </>
-                )}
-              </Button>
-            </div>
-          </Card>
-
-          {/* Quick Reactions */}
-          <div className="flex justify-center space-x-1 md:space-x-2">
-            {['❤️', '😂', '😮', '👏', '🎉'].map(reaction => (
-              <Button
-                key={reaction}
-                variant="outline"
-                size={isMobile ? "sm" : "default"}
-                onClick={() => sendReaction(reaction)}
-                className={`text-base md:text-lg h-10 w-10 md:h-12 md:w-12 ${
-                  darkMode ? 'bg-slate-700 border-slate-600 hover:bg-slate-600' : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                {reaction}
-              </Button>
-            ))}
-          </div>
-
-          {/* Mobile Scroll Helper */}
-          {isMobile && (
-            <div className="fixed bottom-4 right-4 z-30">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const submitButton = document.querySelector('button[type="button"]');
-                  submitButton?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }}
-                className="rounded-full bg-black/50 text-white border-white/20 backdrop-blur-sm"
-              >
-                <ArrowDown className="w-4 h-4" />
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {showAdvancedSettings && <SettingsPanel />}
-      </div>
-    );
+    return icons[section] || <Star className="w-5 h-5" />;
   };
-
-  // FIXED: Enhanced Join/Create Screen with proper input handling
-  const JoinCreateScreen = () => {
-    // FIXED: Handle input focus properly
-    const handleNameFocus = () => {
-      setFocusedInput('name');
-      if (isMobile) {
-        setTimeout(() => {
-          nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
-      }
-    };
-
-    const handleRoomFocus = () => {
-      setFocusedInput('room');
-      if (isMobile) {
-        setTimeout(() => {
-          roomInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
-      }
-    };
-
-    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setPlayerName(e.target.value);
-    };
-
-    const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setRoomId(e.target.value.toUpperCase());
-    };
-
-    return (
-      <div 
-        ref={mainContainerRef}
-        className={`min-h-screen flex flex-col items-center justify-center p-3 md:p-6 transition-colors duration-300 overflow-x-hidden ${
-          darkMode 
-            ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800' 
-            : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-        }`}
-      >
-        <ConnectionStatus />
-        
-        {/* Settings Button */}
-        <div className="absolute top-2 md:top-4 left-2 md:left-4">
-          <Button
-            variant="ghost"
-            size={isMobile ? "sm" : "default"}
-            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-            className={`rounded-full ${darkMode ? 'bg-slate-800 hover:bg-slate-700' : 'bg-white hover:bg-gray-100'}`}
-          >
-            <Settings className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
-        </div>
-
-        <Card className={`p-4 md:p-8 max-w-md w-full backdrop-blur-sm border transition-all duration-300 ${
-          darkMode ? 'bg-slate-800/50 border-slate-600' : 'bg-white/80 border-gray-200'
-        }`}>
-          <div className="text-center mb-6 md:mb-8">
-            <div className="flex justify-center mb-4 md:mb-6">
-              <div className="relative">
-                <Heart className="w-12 h-12 md:w-16 md:h-16 text-pink-500" />
-                <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-yellow-500 absolute -top-1 -right-1 md:-top-2 md:-right-2 animate-spin" />
-              </div>
-            </div>
-            
-            <h1 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-              Advanced Compatibility
-            </h1>
-            <p className={`text-sm md:text-base ${darkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-              Discover your deep connection with someone special
-            </p>
-          </div>
-
-          <div className="space-y-3 md:space-y-4 mb-4 md:mb-6">
-            <div>
-              <Label htmlFor="playerName" className="font-medium mb-1 md:mb-2 block text-sm md:text-base">
-                Your Name
-              </Label>
-              <Input
-                ref={nameInputRef}
-                id="playerName"
-                placeholder="Enter your name"
-                value={playerName}
-                onChange={handleNameChange}
-                onFocus={handleNameFocus}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && playerName.trim() && !roomId.trim()) {
-                    createRoom();
-                  } else if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
-                    joinRoom();
-                  }
-                }}
-                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'} ${
-                  focusedInput === 'name' ? 'ring-2 ring-purple-500' : ''
-                }`}
-                autoComplete="name"
-                autoFocus={!isMobile} // Don't auto-focus on mobile to prevent keyboard issues
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="roomId" className="font-medium mb-1 md:mb-2 block text-sm md:text-base">
-                Room Code (optional)
-              </Label>
-              <Input
-                ref={roomInputRef}
-                id="roomId"
-                placeholder="Enter room code to join"
-                value={roomId}
-                onChange={handleRoomChange}
-                onFocus={handleRoomFocus}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && playerName.trim() && roomId.trim()) {
-                    joinRoom();
-                  }
-                }}
-                className={`text-sm md:text-base ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-200'} ${
-                  focusedInput === 'room' ? 'ring-2 ring-blue-500' : ''
-                }`}
-                autoComplete="off"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2 md:space-y-3">
-            <Button
-              onClick={createRoom}
-              disabled={!playerName.trim()}
-              size={isMobile ? "sm" : "lg"}
-              className="w-full py-3 md:py-6 text-base md:text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white disabled:opacity-50 transition-all"
-            >
-              <Crown className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
-              Create New Room
-            </Button>
-
-            <Button
-              onClick={joinRoom}
-              disabled={!playerName.trim() || !roomId.trim()}
-              size={isMobile ? "sm" : "lg"}
-              className="w-full py-3 md:py-6 text-base md:text-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white disabled:opacity-50 transition-all"
-            >
-              <Users className="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" />
-              Join Existing Room
-            </Button>
-          </div>
-
-          <div className={`mt-4 md:mt-6 p-3 md:p-4 rounded-lg border ${
-            darkMode ? 'bg-slate-700/50 border-slate-600' : 'bg-white/50 border-gray-200'
-          }`}>
-            <h4 className="font-semibold mb-1 md:mb-2 flex items-center justify-center text-sm md:text-base">
-              <Sparkles className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2 text-yellow-500" />
-              Advanced Features
-            </h4>
-            <ul className="text-xs md:text-sm space-y-0.5 md:space-y-1 text-left">
-              <li>• Personality-based matching algorithm</li>
-              <li>• Advanced compatibility factors</li>
-              <li>• Real-time progress tracking</li>
-              <li>• Interactive results with insights</li>
-              <li>• Dark/Light mode support</li>
-              <li>• Mobile & Desktop optimized</li>
-            </ul>
-          </div>
-
-          {/* Device Indicator */}
-          <div className="mt-3 text-center">
-            <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
-              darkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'
-            }`}>
-              {isMobile ? (
-                <>
-                  <Smartphone className="w-3 h-3" />
-                  <span>Mobile Mode</span>
-                </>
-              ) : (
-                <>
-                  <Monitor className="w-3 h-3" />
-                  <span>Desktop Mode</span>
-                </>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {showAdvancedSettings && <SettingsPanel />}
-      </div>
-    );
-  };
-
-  // Add enhanced CSS for mobile optimizations
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes confetti-fall {
-        0% {
-          transform: translateY(-20px) rotate(0deg) scale(1);
-          opacity: 1;
-        }
-        100% {
-          transform: translateY(100vh) rotate(720deg) scale(0.5);
-          opacity: 0;
-        }
-      }
-      
-      /* Enhanced Mobile Optimizations */
-      @media (max-width: 768px) {
-        .mobile-text-sm {
-          font-size: 0.875rem;
-        }
-        .mobile-p-3 {
-          padding: 0.75rem;
-        }
-        .mobile-space-y-2 > * + * {
-          margin-top: 0.5rem;
-        }
-        
-        /* FIXED: Better mobile viewport handling */
-        body.mobile-device {
-          overflow-x: hidden !important;
-          position: relative !important;
-          width: 100% !important;
-          height: 100% !important;
-          -webkit-overflow-scrolling: touch;
-        }
-        
-        html {
-          overflow-x: hidden;
-          height: 100%;
-        }
-        
-        /* FIXED: Prevent horizontal scroll */
-        .overflow-x-hidden {
-          overflow-x: hidden !important;
-        }
-        
-        /* FIXED: Better scrolling for all screens */
-        .min-h-screen {
-          min-height: 100vh;
-          min-height: 100dvh; /* Dynamic viewport height for mobile */
-          overflow-y: auto;
-          -webkit-overflow-scrolling: touch;
-        }
-        
-        /* FIXED: Better touch targets for mobile */
-        button, [role="button"] {
-          min-height: 44px;
-          min-width: 44px;
-        }
-        
-        /* FIXED: Improved input handling */
-        input {
-          font-size: 16px !important; /* Prevent zoom on iOS */
-          min-height: 44px;
-        }
-        
-        /* FIXED: Ensure options are easily tappable */
-        .option-item {
-          min-height: 60px;
-          display: flex;
-          align-items: center;
-        }
-        
-        /* FIXED: Better text sizing for mobile */
-        .mobile-text-lg {
-          font-size: 1.125rem;
-        }
-        
-        .mobile-text-xl {
-          font-size: 1.25rem;
-        }
-        
-        /* FIXED: Prevent content shift when keyboard appears */
-        @media (max-height: 500px) {
-          .min-h-screen {
-            min-height: auto;
-            padding: 1rem 0;
-          }
-        }
-      }
-      
-      /* Desktop enhancements */
-      @media (min-width: 769px) {
-        .game-container {
-          min-height: 100vh;
-          overflow-y: auto;
-        }
-      }
-      
-      /* Smooth transitions for all interactive elements */
-      * {
-        transition: all 0.2s ease-in-out;
-      }
-      
-      /* FIXED: Better focus states for accessibility */
-      input:focus {
-        outline: none;
-        ring: 2px;
-      }
-    `;
-    document.head.appendChild(style);
-
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
-
-  // Enhanced cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (submitTimeoutRef.current) {
-        clearTimeout(submitTimeoutRef.current);
-      }
-      
-      const confettiElements = document.querySelectorAll('div[style*="confetti-fall"]');
-      confettiElements.forEach(el => {
-        if (document.body.contains(el)) {
-          document.body.removeChild(el);
-        }
-      });
-    };
-  }, []);
 
   // Main render logic
-  if (showResults) {
-    return <ResultsScreen />;
+  if (!roomId) {
+    return renderLobby();
   }
 
-  if (gameStarted) {
-    return <GameScreen />;
+  if (!gameStarted) {
+    return renderWaitingRoom();
   }
 
-  if (joined) {
-    return <WaitingScreen />;
+  if (gameStatus === 'results') {
+    return renderResults();
   }
 
-  return <JoinCreateScreen />;
-}
+  if (waitingForPlayers.length > 0) {
+    return renderWaitingScreen();
+  }
+
+  if (gameStatus === 'advanced') {
+    return renderAdvancedSection();
+  }
+
+  if (questions[currentQuestion]) {
+    return renderQuestion(questions[currentQuestion]);
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-purple-500 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading...</p>
+      </div>
+    </div>
+  );
+};
+
+// Helper component for crown icon
+const Crown: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2L8 7 3 4 5 14 12 12 19 14 21 4 16 7 12 2Z"/>
+  </svg>
+);
+
+export default Compatibility;
