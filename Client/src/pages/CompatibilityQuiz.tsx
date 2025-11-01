@@ -605,7 +605,9 @@ const Compatibility: React.FC = () => {
     const handleAllSubmitted = () => {
       console.log('🎉 All players have submitted on server side');
       // We'll rely on the local effect to show results when we have both data
+       showResults();
        setGameStatus('results');
+
     };
 
     // Error handling
