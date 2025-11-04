@@ -108,6 +108,12 @@ const ChatWindow = ({
     // Join the chat room
     socket.emit("join_chat", selectedChat._id);
 
+    // Emit chat open event when user opens the chat
+    socket.emit("chat:open", { 
+      chatRoomId: selectedChat._id, 
+      userId: userId 
+    });
+
     // Message events
     const handleNewMessage = (message) => {
       console.log('📨 New message received:', message);
@@ -228,8 +234,6 @@ const ChatWindow = ({
       }
     };
 
-    
-
     const handleUserStatusChange = (data) => {
       console.log('🔵 User status changed:', data);
       setOnlineUsers(prev => {
@@ -243,6 +247,20 @@ const ChatWindow = ({
       });
     };
 
+    // NEW: Handle messages read event to update ticks in UI
+    const handleMessagesRead = ({ chatRoomId, readerId }) => {
+      console.log('📖 Messages read by user:', { chatRoomId, readerId });
+      if (chatRoomId === selectedChat._id) {
+        setMessages((prevMessages) =>
+          prevMessages.map((msg) =>
+            msg.sender._id !== readerId
+              ? { ...msg, status: "read" }
+              : msg
+          )
+        );
+      }
+    };
+
     // Register all event listeners
     socket.on("new_message", handleNewMessage);
     socket.on("message_updated", handleMessageUpdated);
@@ -253,8 +271,7 @@ const ChatWindow = ({
     socket.on("user_typing", handleUserTyping);
     socket.on("user_stop_typing", handleUserStopTyping);
     socket.on("user_status_changed", handleUserStatusChange);
-    // When user opens a chat room
-
+    socket.on("messages:read", handleMessagesRead); // NEW: Register messages read listener
 
     return () => {
       console.log('🧹 Cleaning up socket events for chat:', selectedChat._id);
@@ -269,10 +286,7 @@ const ChatWindow = ({
         socket.off("user_typing", handleUserTyping);
         socket.off("user_stop_typing", handleUserStopTyping);
         socket.off("user_status_changed", handleUserStatusChange);
-        socket.off("messages:read", ({ chatRoomId, readerId }) => {
-  
-});
-
+        socket.off("messages:read", handleMessagesRead); // NEW: Clean up messages read listener
       }
     };
   }, [socket, selectedChat, isConnected, userId]);
@@ -305,22 +319,10 @@ const ChatWindow = ({
   // Load messages and group data
   const loadMessages = useCallback(async (pageNum = 1) => {
     if (!selectedChat || !token) return;
-    
+
     setLoading(true);
+
     try {
-          socket.emit("chat:open", { chatRoomId, userId });
-
-// Listen for "messages:read" to update ticks in UI
-socket.on("messages:read", ({ chatRoomId, readerId }) => {
-  setMessages((prevMessages) =>
-    prevMessages.map((msg) =>
-      msg.sender._id !== readerId
-        ? { ...msg, status: "read" }
-        : msg
-    )
-  );
-});
-
       const [messagesRes, membersRes] = await Promise.all([
         fetch(
           `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
@@ -627,60 +629,59 @@ socket.on("messages:read", ({ chatRoomId, readerId }) => {
   };
 
   // Delete message functionality - FIXED: Better error handling for 500 errors
-// Replace the handleDeleteMessage function with this improved version
-const handleDeleteMessage = async (messageId) => {
-  if (!messageId || !token) {
-    toast.error("Cannot delete message");
-    return;
-  }
+  const handleDeleteMessage = async (messageId) => {
+    if (!messageId || !token) {
+      toast.error("Cannot delete message");
+      return;
+    }
 
-  try {
-    console.log(`🗑️ Attempting to delete message: ${messageId}`);
-    
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/chatroom/messages/${messageId}`,
-      {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+    try {
+      console.log(`🗑️ Attempting to delete message: ${messageId}`);
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/chatroom/messages/${messageId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      // Handle different response statuses
+      if (response.status === 404) {
+        throw new Error("Message not found");
+      } else if (response.status === 403) {
+        throw new Error("You don't have permission to delete this message");
+      } else if (response.status === 500) {
+        throw new Error("Server error - please try again later");
+      } else if (!response.ok) {
+        throw new Error(`Delete failed with status ${response.status}`);
       }
-    );
 
-    // Handle different response statuses
-    if (response.status === 404) {
-      throw new Error("Message not found");
-    } else if (response.status === 403) {
-      throw new Error("You don't have permission to delete this message");
-    } else if (response.status === 500) {
-      throw new Error("Server error - please try again later");
-    } else if (!response.ok) {
-      throw new Error(`Delete failed with status ${response.status}`);
-    }
+      const result = await response.json();
 
-    const result = await response.json();
-
-    if (result.success) {
-      console.log("✅ Message deletion initiated");
-      // The socket event will update the message in real-time
-    } else {
-      throw new Error(result.message || "Delete failed");
+      if (result.success) {
+        console.log("✅ Message deletion initiated");
+        // The socket event will update the message in real-time
+      } else {
+        throw new Error(result.message || "Delete failed");
+      }
+    } catch (error) {
+      console.error("❌ Error deleting message:", error);
+      
+      // Show specific error messages based on error type
+      if (error.message.includes("permission")) {
+        toast.error("You don't have permission to delete this message");
+      } else if (error.message.includes("not found")) {
+        toast.error("Message not found");
+      } else if (error.message.includes("Server error")) {
+        toast.error("Server error - please try again later");
+      } else {
+        toast.error(error.message || "Failed to delete message");
+      }
     }
-  } catch (error) {
-    console.error("❌ Error deleting message:", error);
-    
-    // Show specific error messages based on error type
-    if (error.message.includes("permission")) {
-      toast.error("You don't have permission to delete this message");
-    } else if (error.message.includes("not found")) {
-      toast.error("Message not found");
-    } else if (error.message.includes("Server error")) {
-      toast.error("Server error - please try again later");
-    } else {
-      toast.error(error.message || "Failed to delete message");
-    }
-  }
-};
+  };
 
   // Message context menu
   const handleMessageRightClick = (e, message) => {
