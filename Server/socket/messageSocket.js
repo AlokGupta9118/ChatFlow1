@@ -25,6 +25,7 @@ class SocketService {
         console.log(`📨 User ${socket.userId} joined chat: ${chatRoomId}`);
       });
  
+       // When a user opens a chat, mark messages as read
   socket.on("chat:open", async ({ chatRoomId, userId }) => {
     await Message.updateMany(
       {
@@ -42,9 +43,9 @@ class SocketService {
       }
     );
 
+    // Emit event so the sender sees "read" status
     io.to(chatRoomId).emit("messages:read", { chatRoomId, readerId: userId });
   });
-
 
       // Leave chat room
       socket.on("leave_chat", (chatRoomId) => {

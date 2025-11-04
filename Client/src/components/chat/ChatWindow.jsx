@@ -254,18 +254,6 @@ const ChatWindow = ({
     socket.on("user_stop_typing", handleUserStopTyping);
     socket.on("user_status_changed", handleUserStatusChange);
     // When user opens a chat room
-  socket.emit("chat:open", { chatRoomId, userId });
-
-// Listen for "messages:read" to update ticks in UI
-socket.on("messages:read", ({ chatRoomId, readerId }) => {
-  setMessages((prev) =>
-    prev.map((msg) =>
-      msg.sender._id !== readerId
-        ? { ...msg, status: "read" }
-        : msg
-    )
-  );
-});
 
 
     return () => {
@@ -320,6 +308,19 @@ socket.on("messages:read", ({ chatRoomId, readerId }) => {
     
     setLoading(true);
     try {
+          socket.emit("chat:open", { chatRoomId, userId });
+
+// Listen for "messages:read" to update ticks in UI
+socket.on("messages:read", ({ chatRoomId, readerId }) => {
+  setMessages((prevMessages) =>
+    prevMessages.map((msg) =>
+      msg.sender._id !== readerId
+        ? { ...msg, status: "read" }
+        : msg
+    )
+  );
+});
+
       const [messagesRes, membersRes] = await Promise.all([
         fetch(
           `${import.meta.env.VITE_API_URL}/chatroom/messages/${selectedChat._id}?page=${pageNum}&limit=50`,
