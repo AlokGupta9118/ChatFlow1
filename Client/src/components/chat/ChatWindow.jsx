@@ -280,8 +280,11 @@ socket.on("messages:read", ({ chatRoomId, readerId }) => {
         socket.off("role_updated", handleRoleUpdated);
         socket.off("user_typing", handleUserTyping);
         socket.off("user_stop_typing", handleUserStopTyping);
-        socket.off("message_read", handleMessageRead);
         socket.off("user_status_changed", handleUserStatusChange);
+        socket.off("messages:read", ({ chatRoomId, readerId }) => {
+  
+});
+
       }
     };
   }, [socket, selectedChat, isConnected, userId]);

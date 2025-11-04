@@ -44,7 +44,6 @@ class SocketService {
 
     io.to(chatRoomId).emit("messages:read", { chatRoomId, readerId: userId });
   });
-});
 
 
       // Leave chat room
@@ -76,10 +75,6 @@ class SocketService {
         });
       });
 
-      // Message read receipt
-      socket.on("message_read", async (data) => {
-        await this.handleMessageRead(socket, data);
-      });
 
       socket.on("disconnect", () => {
         this.handleDisconnect(socket);
