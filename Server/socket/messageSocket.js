@@ -24,6 +24,28 @@ class SocketService {
         socket.join(chatRoomId);
         console.log(`📨 User ${socket.userId} joined chat: ${chatRoomId}`);
       });
+ 
+  socket.on("chat:open", async ({ chatRoomId, userId }) => {
+    await Message.updateMany(
+      {
+        chatRoom: chatRoomId,
+        sender: { $ne: userId },
+        deleted: false,
+        $or: [
+          { readBy: { $size: 0 } },
+          { readBy: { $not: { $elemMatch: { user: userId } } } }
+        ]
+      },
+      {
+        $push: { readBy: { user: userId, readAt: new Date() } },
+        $set: { status: "read" }
+      }
+    );
+
+    io.to(chatRoomId).emit("messages:read", { chatRoomId, readerId: userId });
+  });
+});
+
 
       // Leave chat room
       socket.on("leave_chat", (chatRoomId) => {

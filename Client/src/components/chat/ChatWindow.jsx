@@ -228,14 +228,7 @@ const ChatWindow = ({
       }
     };
 
-    const handleMessageRead = (data) => {
-      console.log('📖 Message read:', data);
-      setMessages(prev => prev.map(msg => 
-        msg._id === data.messageId 
-          ? { ...msg, readBy: [...(msg.readBy || []), { user: data.readBy, readAt: data.readAt }] }
-          : msg
-      ));
-    };
+    
 
     const handleUserStatusChange = (data) => {
       console.log('🔵 User status changed:', data);
@@ -259,8 +252,21 @@ const ChatWindow = ({
     socket.on("role_updated", handleRoleUpdated);
     socket.on("user_typing", handleUserTyping);
     socket.on("user_stop_typing", handleUserStopTyping);
-    socket.on("message_read", handleMessageRead);
     socket.on("user_status_changed", handleUserStatusChange);
+    // When user opens a chat room
+  socket.emit("chat:open", { chatRoomId, userId });
+
+// Listen for "messages:read" to update ticks in UI
+socket.on("messages:read", ({ chatRoomId, readerId }) => {
+  setMessages((prev) =>
+    prev.map((msg) =>
+      msg.sender._id !== readerId
+        ? { ...msg, status: "read" }
+        : msg
+    )
+  );
+});
+
 
     return () => {
       console.log('🧹 Cleaning up socket events for chat:', selectedChat._id);
