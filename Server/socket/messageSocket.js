@@ -24,28 +24,6 @@ class SocketService {
         socket.join(chatRoomId);
         console.log(`📨 User ${socket.userId} joined chat: ${chatRoomId}`);
       });
- 
-       // When a user opens a chat, mark messages as read
-  socket.on("chat:open", async ({ chatRoomId, userId }) => {
-    await Message.updateMany(
-      {
-        chatRoom: chatRoomId,
-        sender: { $ne: userId },
-        deleted: false,
-        $or: [
-          { readBy: { $size: 0 } },
-          { readBy: { $not: { $elemMatch: { user: userId } } } }
-        ]
-      },
-      {
-        $push: { readBy: { user: userId, readAt: new Date() } },
-        $set: { status: "read" }
-      }
-    );
-
-    // Emit event so the sender sees "read" status
-    io.to(chatRoomId).emit("messages:read", { chatRoomId, readerId: userId });
-  });
 
       // Leave chat room
       socket.on("leave_chat", (chatRoomId) => {
@@ -76,6 +54,10 @@ class SocketService {
         });
       });
 
+      // Message read receipt
+      socket.on("message_read", async (data) => {
+        await this.handleMessageRead(socket, data);
+      });
 
       socket.on("disconnect", () => {
         this.handleDisconnect(socket);

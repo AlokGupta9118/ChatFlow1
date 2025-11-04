@@ -1134,105 +1134,170 @@ export const getMessages = async (req, res) => {
 export const getChatPreviews = async (req, res) => {
   try {
     const userId = req.user._id;
+    
+    // Get user's chat rooms (both direct and group)
+    const chatRooms = await ChatRoom.find({
+      "participants.user": userId
+    
+    })
+    .populate("participants.user", "name profilePicture status lastSeen")
+    .populate("lastMessage")
+    .populate("createdBy", "name profilePicture");
 
-    const rooms = await ChatRoom.find({ "participants.user": userId })
-      .populate("participants.user", "name profilePic")
-      .populate({
-        path: "lastMessage",
-        populate: { path: "sender", select: "name profilePic" },
-      })
-      .lean();
+    const lastMessages = {};
+    const unreadCounts = {};
 
-    const previews = await Promise.all(
-      rooms.map(async (room) => {
-        const unreadCount = await Message.countDocuments({
+    for (const room of chatRooms) {
+      // Get last message if not already populated
+      let lastMessage = room.lastMessage;
+      if (!lastMessage) {
+        lastMessage = await Message.findOne({ 
           chatRoom: room._id,
+          deleted: false
+        })
+        .populate("sender", "name profilePicture")
+        .sort({ createdAt: -1 });
+      }
+
+      if (lastMessage) {
+        lastMessages[room._id] = {
+          content: lastMessage.content,
+          type: lastMessage.type,
+          timestamp: lastMessage.createdAt,
+          senderName: lastMessage.sender?.name,
+          senderId: lastMessage.sender?._id
+        };
+      }
+
+      // Get unread message count
+      const unreadCount = await Message.countDocuments({
+        chatRoom: room._id,
+        sender: { $ne: userId },
+        "readBy.user": { $ne: userId },
+        deleted: false
+      });
+
+      unreadCounts[room._id] = unreadCount;
+    }
+
+    // Also handle direct chat previews for friends
+    const userWithFriends = await User.findById(userId).populate("friends", "name profilePicture status");
+    
+    for (const friend of userWithFriends.friends || []) {
+      // Find existing private chat room with this friend
+      const privateRoom = await ChatRoom.findOne({
+        type: "direct",
+        "participants.user": { $all: [userId, friend._id] }
+        
+      });
+
+      if (privateRoom) {
+        // Use the room ID for consistency
+        const roomId = privateRoom._id;
+        
+        // Get last message for this private chat
+        const lastMessage = await Message.findOne({ 
+          chatRoom: roomId,
+          deleted: false
+        })
+        .populate("sender", "name profilePicture")
+        .sort({ createdAt: -1 });
+
+        if (lastMessage) {
+          lastMessages[roomId] = {
+            content: lastMessage.content,
+            type: lastMessage.type,
+            timestamp: lastMessage.createdAt,
+            senderName: lastMessage.sender?.name,
+            senderId: lastMessage.sender?._id
+          };
+        }
+
+        // Get unread count for this private chat
+        const unreadCount = await Message.countDocuments({
+          chatRoom: roomId,
           sender: { $ne: userId },
-          deleted: false,
-          $or: [
-            { readBy: { $size: 0 } },
-            { readBy: { $not: { $elemMatch: { user: userId } } } }
-          ],
+          "readBy.user": { $ne: userId },
+          deleted: false
         });
 
-        return {
-          roomId: room._id,
-          name:
-            room.type === "direct"
-              ? room.participants.find((p) => p.user._id.toString() !== userId.toString())?.user.name
-              : room.name,
-          lastMessage: room.lastMessage,
-          unreadCount,
-        };
-      })
-    );
+        unreadCounts[roomId] = unreadCount;
+        
+        // Also store under friend ID for easy access
+        lastMessages[friend._id] = lastMessages[roomId];
+        unreadCounts[friend._id] = unreadCounts[roomId];
+      }
+    }
 
-    res.json(previews);
-  } catch (err) {
-    console.error("Error fetching chat previews:", err);
-    res.status(500).json({ message: "Server error" });
+    res.json({
+      success: true,
+      lastMessages,
+      unreadCounts
+    });
+  } catch (error) {
+    console.error("Error fetching chat previews:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch chat previews" 
+    });
   }
 };
 
-
-
+// Mark messages as read for a chat room
 export const markChatAsRead = async (req, res) => {
   try {
     const { chatRoomId } = req.params;
     const userId = req.user._id;
 
-    // 1️⃣ Update all unread messages for this user
+    // Mark all unread messages as read
     const result = await Message.updateMany(
       {
         chatRoom: chatRoomId,
         sender: { $ne: userId },
-        deleted: false,
-        $or: [
-          { readBy: { $size: 0 } },
-          { readBy: { $not: { $elemMatch: { user: userId } } } }
-        ]
+        "readBy.user": { $ne: userId },
+        deleted: false
       },
       {
-        $push: { readBy: { user: userId, readAt: new Date() } },
-        $set: { status: "read" }
-      }
-    );
-
-    // 2️⃣ Update ChatRoom's readReceipts array (optional, for analytics / group read)
-    await ChatRoom.updateOne(
-      { _id: chatRoomId },
-      {
         $push: {
-          readReceipts: {
-            $each: [
-              {
-                messageId: null, // or you can track latest message id
-                userId,
-                readAt: new Date()
-              }
-            ]
+          readBy: {
+            user: userId,
+            readAt: new Date()
           }
+        },
+        $set: {
+          status: "read"
         }
       }
     );
 
-    // 3️⃣ Emit event via Socket.IO (so sender sees ✅✅ instantly)
-    req.io.to(chatRoomId.toString()).emit("messages:read", {
-      chatRoomId,
-      readerId: userId,
+    // Get updated unread count
+    const unreadCount = await Message.countDocuments({
+      chatRoom: chatRoomId,
+      sender: { $ne: userId },
+      "readBy.user": { $ne: userId },
+      deleted: false
     });
 
-    res.status(200).json({
-      success: true,
-      updatedCount: result.modifiedCount,
-      message: "Chat marked as read",
+    // Emit socket event to update other clients
+    const io = req.app.get('io');
+    if (io) {
+      io.to(chatRoomId).emit('messages_read', {
+        chatRoomId,
+        count: result.modifiedCount,
+        readBy: userId
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      markedRead: result.modifiedCount,
+      unreadCount 
     });
   } catch (error) {
-    console.error("Error in markChatAsRead:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error while marking as read",
+    console.error("Error marking messages as read:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to mark messages as read" 
     });
   }
 };
-
