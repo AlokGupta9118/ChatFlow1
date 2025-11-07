@@ -11,14 +11,48 @@ import { toast } from "sonner";
 const socket = io(import.meta.env.VITE_API_URL);
 
 const ChatList = ({ onSelectChat, selectedChat }) => {
-  const [chats, setChats] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [unreadCounts, setUnreadCounts] = useState({});
+  const [lastMessages, setLastMessages] = useState({});
   const [activeCategory, setActiveCategory] = useState("all");
   const [showAdminPanel, setShowAdminPanel] = useState(null);
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
-  // Fetch all chat previews with last messages and unread counts
+  const fetchFriends = async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/friends`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setFriends(res.data.friends || []);
+    } catch (err) {
+      console.error("Error fetching friends:", err);
+      setFriends([]);
+    }
+  };
+
+  const fetchGroups = async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/chatroom/mygroups`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const safeGroups = (res.data.groups || []).filter(
+        (g) => Array.isArray(g.participants)
+      );
+      setGroups(safeGroups);
+    } catch (err) {
+      console.error("Error fetching groups:", err);
+      setGroups([]);
+    }
+  };
+
+  // Fetch chat previews with last messages and unread counts
   const fetchChatPreviews = async () => {
     const token = getToken();
     if (!token || !currentUser?._id) return;
@@ -32,54 +66,32 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       );
 
       if (res.data.success) {
-        console.log("📱 Chat previews response:", res.data);
+        const { lastMessages: newLastMessages, unreadCounts: newUnreadCounts } = res.data;
         
-        // Transform the backend response to include all needed data
-        const transformedChats = res.data.chats.map(chat => ({
-          ...chat,
-          // For frontend compatibility
-          _id: chat.chatId, // Use chatId as _id for frontend
-          name: chat.chatInfo.name,
-          avatar: chat.chatInfo.avatar || chat.chatInfo.profilePicture,
-          profilePicture: chat.chatInfo.profilePicture,
-          status: chat.chatInfo.status,
-          type: chat.chatInfo.type,
-          participants: chat.chatInfo.participants || [],
-          lastMessage: chat.lastMessage,
-          unreadCount: chat.unreadCount
-        }));
-
-        console.log("🔄 Transformed chats:", transformedChats);
-        setChats(transformedChats);
+        setLastMessages(prev => ({ ...prev, ...newLastMessages }));
+        setUnreadCounts(prev => ({ ...prev, ...newUnreadCounts }));
       }
     } catch (error) {
       console.error("Error fetching chat previews:", error);
-      setChats([]);
     }
   };
 
   // Mark chat as read
-  const markChatAsRead = async (roomId) => {
+  const markChatAsRead = async (chatRoomId) => {
     const token = getToken();
     if (!token) return;
 
     try {
       await axios.post(
-        `${import.meta.env.VITE_API_URL}/chatroom/${roomId}/mark-as-read`,
+        `${import.meta.env.VITE_API_URL}/chatroom/${chatRoomId}/mark-as-read`,
         {},
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
       
-      console.log(`✅ Marked chat room ${roomId} as read`);
-      
       // Update local state immediately
-      setChats(prev => prev.map(chat => 
-        chat.roomId === roomId 
-          ? { ...chat, unreadCount: 0 }
-          : chat
-      ));
+      setUnreadCounts(prev => ({ ...prev, [chatRoomId]: 0 }));
     } catch (error) {
       console.error("Error marking chat as read:", error);
     }
@@ -90,7 +102,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     
     const initializeData = async () => {
       setLoading(true);
-      await fetchChatPreviews();
+      await Promise.all([fetchFriends(), fetchGroups(), fetchChatPreviews()]);
       if (mounted) setLoading(false);
     };
 
@@ -103,62 +115,62 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       const senderId = msg.sender?._id || msg.senderId;
       const chatRoomId = msg.chatRoom?._id || msg.chatRoom;
       
-      console.log("📨 New message received:", { 
-        msg, 
-        chatRoomId,
-        currentUser: currentUser._id,
-        senderId 
-      });
-
       // Don't count your own messages as unread
       if (senderId === currentUser._id) return;
 
-      // Update the chat list with new message
-      setChats(prev => {
-        const updatedChats = prev.map(chat => {
-          if (chat.roomId === chatRoomId) {
-            return {
-              ...chat,
-              lastMessage: {
-                content: msg.content,
-                type: msg.type,
-                timestamp: msg.createdAt || new Date(),
-                senderName: msg.sender?.name || "Unknown",
-                senderId: msg.sender?._id
-              },
-              unreadCount: (chat.unreadCount || 0) + 1
-            };
-          }
-          return chat;
-        });
+      const key = chatRoomId;
 
-        // If this is a new chat room, add it to the list
-        const existingChat = prev.find(chat => chat.roomId === chatRoomId);
-        if (!existingChat) {
-          // For new chats, we'd need to fetch the chat info
-          // For now, just refetch the entire list
-          setTimeout(() => fetchChatPreviews(), 100);
+      // Update unread count
+      setUnreadCounts((prev) => ({ 
+        ...prev, 
+        [key]: (prev[key] || 0) + 1 
+      }));
+
+      // Update last message preview
+      setLastMessages((prev) => ({
+        ...prev,
+        [key]: {
+          content: msg.content,
+          type: msg.type,
+          timestamp: msg.createdAt || new Date(),
+          senderName: msg.sender?.name || "Unknown",
+          senderId: msg.sender?._id
         }
+      }));
 
-        return updatedChats;
-      });
+      // If this is a private chat, also update under friend ID
+      const chatRoom = msg.chatRoom;
+      if (chatRoom && !chatRoom.isGroup && chatRoom.type === "direct") {
+        const otherParticipant = chatRoom.participants?.find(
+          p => p.user?._id !== currentUser._id
+        );
+        if (otherParticipant?.user?._id) {
+          setLastMessages((prev) => ({
+            ...prev,
+            [otherParticipant.user._id]: {
+              content: msg.content,
+              type: msg.type,
+              timestamp: msg.createdAt || new Date(),
+              senderName: msg.sender?.name || "Unknown",
+              senderId: msg.sender?._id
+            }
+          }));
+        }
+      }
     });
 
     // Listen for message read events
     socket.on("messages_read", ({ chatRoomId, count }) => {
-      setChats(prev => prev.map(chat => 
-        chat.roomId === chatRoomId 
-          ? { ...chat, unreadCount: Math.max(0, (chat.unreadCount || 0) - count) }
-          : chat
-      ));
+      setUnreadCounts((prev) => ({ 
+        ...prev, 
+        [chatRoomId]: Math.max(0, (prev[chatRoomId] || 0) - count) 
+      }));
     });
 
     socket.on("update_status", ({ userId, status }) => {
-      setChats(prev => prev.map(chat => 
-        chat.type === "friend" && chat.chatId === userId 
-          ? { ...chat, status }
-          : chat
-      ));
+      setFriends((prev) =>
+        prev.map((f) => (f._id === userId ? { ...f, status } : f))
+      );
     });
 
     return () => {
@@ -171,39 +183,37 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
 
   const normalize = (s) => (typeof s === "string" ? s : "");
 
-  const filteredChats = chats.filter((chat) =>
-    normalize(chat?.name).toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredFriends = friends.filter((f) =>
+    normalize(f?.name).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredFriends = filteredChats.filter(chat => chat.type === "friend");
-  const filteredGroups = filteredChats.filter(chat => chat.type === "group");
+  const filteredGroups = groups.filter((g) =>
+    normalize(g?.name).toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const handleSelect = async (chat) => {
+  const handleSelect = async (chat, isGroup = false) => {
     console.log("🎯 ChatList: handleSelect called", {
       chat: chat?.name,
-      isGroup: chat.type === "group",
-      chatId: chat.chatId,
-      roomId: chat.roomId,
-      unreadCount: chat.unreadCount
+      isGroup,
+      chatType: isGroup ? "GROUP" : "PRIVATE"
     });
 
-    const isGroup = chat.type === "group";
+    const key = chat._id;
     
     // Clear unread count when chat is selected
-    if (chat.unreadCount > 0) {
-      console.log(`📥 Clearing ${chat.unreadCount} unread messages for chat ${chat.chatId}`);
-      await markChatAsRead(chat.roomId);
+    if (unreadCounts[key] > 0) {
+      await markChatAsRead(key);
     }
 
     if (isGroup) {
       if (onSelectChat) {
-        onSelectChat(chat, true);
+        onSelectChat(chat, isGroup);
       }
     } else {
       try {
         const token = getToken();
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/chatroom/private/${chat.chatId}`,
+          `${import.meta.env.VITE_API_URL}/chatroom/private/${chat._id}`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -216,7 +226,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
         if (data.success && data.chatRoom) {
           console.log("✅ Found/Created chat room:", data.chatRoom);
           if (onSelectChat) {
-            onSelectChat(data.chatRoom, false);
+            onSelectChat(data.chatRoom, isGroup);
           }
         } else {
           console.error("❌ Failed to get/create chat room:", data.message);
@@ -247,12 +257,12 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     }
   };
 
-  const getLastMessagePreview = (chat) => {
-    const lastMessage = chat.lastMessage;
+  const getLastMessagePreview = (chatId, isGroup = false) => {
+    const lastMessage = lastMessages[chatId];
     if (!lastMessage) return "No messages yet";
     
     const isCurrentUserSender = lastMessage.senderId === currentUser._id;
-    const prefix = chat.type === "group" && !isCurrentUserSender && lastMessage.senderName 
+    const prefix = isGroup && !isCurrentUserSender && lastMessage.senderName 
       ? `${lastMessage.senderName}: ` 
       : isCurrentUserSender ? "You: " : "";
     
@@ -269,8 +279,8 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     }
   };
 
-  const getMessageTime = (chat) => {
-    const lastMessage = chat.lastMessage;
+  const getMessageTime = (chatId) => {
+    const lastMessage = lastMessages[chatId];
     if (!lastMessage?.timestamp) return "";
     
     const messageTime = new Date(lastMessage.timestamp);
@@ -312,17 +322,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     ? filteredGroups 
     : activeCategory === "friends" 
     ? filteredFriends 
-    : filteredChats;
-
-  // Debug info
-  console.log("🎯 Current state:", {
-    totalChats: chats.length,
-    displayedItems: displayedItems.length,
-    unreadCounts: chats.reduce((acc, chat) => {
-      acc[chat.name] = chat.unreadCount;
-      return acc;
-    }, {})
-  });
+    : [...filteredFriends, ...filteredGroups];
 
   return (
     <div className="w-full h-full bg-transparent flex flex-col">
@@ -333,7 +333,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
             Messages
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {filteredFriends.length} friends • {filteredGroups.length} groups
+            {friends.length} friends • {groups.length} groups
           </p>
         </div>
 
@@ -381,29 +381,25 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
           </div>
         ) : displayedItems.length > 0 ? (
           <AnimatePresence mode="popLayout">
-            {displayedItems.map((chat, index) => {
-              const isGroup = chat.type === "group";
-              const itemName = chat?.name || "Unnamed";
-              const isSelected = selectedChat?._id === chat._id || selectedChat?._id === chat.chatId;
-              const unread = chat.unreadCount || 0;
-              const lastMessagePreview = getLastMessagePreview(chat);
-              const messageTime = getMessageTime(chat);
-
-              console.log(`👤 Rendering ${isGroup ? 'group' : 'friend'}:`, {
-                name: itemName,
-                id: chat.chatId,
-                unread,
-                hasLastMessage: !!chat.lastMessage
-              });
+            {displayedItems.map((item, index) => {
+              const isGroup = item.participants && item.type === "group";
+              const itemName = item?.name || "Unnamed";
+              const isSelected = selectedChat?._id === item._id;
+              const unread = unreadCounts[item._id] || 0;
+              const lastMessagePreview = getLastMessagePreview(item._id, isGroup);
+              const messageTime = getMessageTime(item._id);
 
               if (isGroup) {
-                const role = getUserRoleInGroup(chat);
-                const memberCount = chat.participants?.length || 0;
-                const isAdmin = isGroupAdmin(chat);
+                const participant = item.participants.find(
+                  (p) => String(p.user?._id || p.user) === String(currentUser._id)
+                );
+                const role = participant?.role || "Member";
+                const memberCount = item.participants?.length || 0;
+                const isAdmin = isGroupAdmin(item);
 
                 return (
                   <motion.div
-                    key={chat.roomId}
+                    key={item._id}
                     layout
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -417,7 +413,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                     className="px-2"
                   >
                     <div
-                      onClick={() => handleSelect(chat)}
+                      onClick={() => handleSelect(item, true)}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
@@ -428,7 +424,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                       <div className="flex items-center gap-3 lg:gap-4">
                         <div className="relative flex-shrink-0">
                           <Avatar className="w-12 h-12 lg:w-14 lg:h-14 shadow-lg border-2 border-white/80 dark:border-gray-700/80">
-                            <AvatarImage src={chat.avatar || "/default-avatar.png"} />
+                            <AvatarImage src={item.avatar || "/default-avatar.png"} />
                             <AvatarFallback className="bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold text-lg">
                               {itemName[0]?.toUpperCase()}
                             </AvatarFallback>
@@ -460,7 +456,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                               )}
                               {isAdmin && activeCategory === "groups" && (
                                 <button
-                                  onClick={(e) => toggleAdminPanel(chat.chatId, e)}
+                                  onClick={(e) => toggleAdminPanel(item._id, e)}
                                   className="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-200"
                                 >
                                   <Settings className="w-4 h-4" />
@@ -502,7 +498,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                 // Private chat (friend)
                 return (
                   <motion.div
-                    key={chat.roomId}
+                    key={item._id}
                     layout
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -516,7 +512,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                     className="px-2"
                   >
                     <div
-                      onClick={() => handleSelect(chat)}
+                      onClick={() => handleSelect(item, false)}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
@@ -527,12 +523,12 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                       <div className="flex items-center gap-3 lg:gap-4">
                         <div className="relative flex-shrink-0">
                           <Avatar className="w-12 h-12 lg:w-14 lg:h-14 shadow-lg border-2 border-white/80 dark:border-gray-700/80">
-                            <AvatarImage src={chat.profilePicture || "/default-avatar.png"} />
+                            <AvatarImage src={item.profilePicture || "/default-avatar.png"} />
                             <AvatarFallback className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold text-lg">
                               {itemName[0]?.toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <div className={`absolute -bottom-1 -right-1 w-3 h-3 lg:w-4 lg:h-4 rounded-full border-2 border-white dark:border-gray-900 ${getStatusColor(chat.status)}`} />
+                          <div className={`absolute -bottom-1 -right-1 w-3 h-3 lg:w-4 lg:h-4 rounded-full border-2 border-white dark:border-gray-900 ${getStatusColor(item.status)}`} />
                         </div>
                         
                         <div className="flex-1 min-w-0">
@@ -568,9 +564,9 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                           </p>
                           
                           <div className="flex items-center gap-2 text-xs lg:text-sm">
-                            <span className={`w-2 h-2 rounded-full ${getStatusColor(chat.status)}`} />
+                            <span className={`w-2 h-2 rounded-full ${getStatusColor(item.status)}`} />
                             <span className="text-gray-500 dark:text-gray-400">
-                              {getStatusText(chat.status)}
+                              {getStatusText(item.status)}
                             </span>
                           </div>
                         </div>

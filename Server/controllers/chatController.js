@@ -1147,73 +1147,113 @@ export const getChatPreviews = async (req, res) => {
       .populate("lastMessage")
       .populate("createdBy", "name profilePicture");
 
-    const chatPreviews = [];
+    const lastMessages = {};
+    const unreadCounts = {};
 
-    // Process each chat room
-    for (const room of chatRooms) {
-      // Last message
-      let lastMessage = room.lastMessage;
-      if (!lastMessage) {
-        lastMessage = await Message.findOne({
-          chatRoom: room._id,
-          deleted: false
-        })
-          .populate("sender", "name profilePicture")
-          .sort({ createdAt: -1 });
-      }
-
-      // Unread count
-      const unreadCount = await Message.countDocuments({
-        chatRoom: room._id,
-        sender: { $ne: userId },
-        deleted: false,
-        readBy: { $ne: userId }
-      });
-
-      // Get chat info based on room type
-      let chatInfo = {};
-      if (room.type === "direct") {
-        const otherParticipant = room.participants.find(
-          p => p.user._id.toString() !== userId.toString()
-        );
-        if (otherParticipant && otherParticipant.user) {
-          chatInfo = {
-            id: otherParticipant.user._id,
-            name: otherParticipant.user.name,
-            profilePicture: otherParticipant.user.profilePicture,
-            status: otherParticipant.user.status,
-            type: "friend"
-          };
+    // Run all chat room computations in parallel for performance
+    await Promise.all(
+      chatRooms.map(async (room) => {
+        // Last message
+        let lastMessage = room.lastMessage;
+        if (!lastMessage) {
+          lastMessage = await Message.findOne({
+            chatRoom: room._id,
+            deleted: false
+          })
+            .populate("sender", "name profilePicture")
+            .sort({ createdAt: -1 });
         }
-      } else if (room.type === "group") {
-        chatInfo = {
-          id: room._id,
-          name: room.name,
-          avatar: room.avatar,
-          type: "group",
-          participants: room.participants
-        };
-      }
 
-      if (lastMessage && chatInfo.id) {
-        chatPreviews.push({
-          roomId: room._id,
-          chatId: chatInfo.id,
-          lastMessage: {
+        if (lastMessage) {
+          lastMessages[room._id] = {
             content: lastMessage.content,
             type: lastMessage.type,
             timestamp: lastMessage.createdAt,
             senderName: lastMessage.sender?.name,
             senderId: lastMessage.sender?._id
-          },
-          unreadCount: unreadCount,
-          chatInfo: chatInfo
-        });
-      }
-    }
+          };
+        }
 
-    // Sort by last message timestamp (newest first)
-    chatPreviews.sort((a, b) => new Date(b.lastMessage.timestamp) - new Date(a.lastMessage.timestamp));
+        const unreadCount = await Message.countDocuments({
+  chatRoom: room._id,
+  sender: { $ne: userId },
+  deleted: false,
+  $or: [
+    { readBy: { $exists: false } },
+    { readBy: { $size: 0 } },
+    { readBy: { $not: { $elemMatch: { user: userId } } } }
+  ]
+});
+
+
+        unreadCounts[room._id] = unreadCount;
+      })
+    );
+
+    // Fetch friends list (for direct chats)
+    const userWithFriends = await User.findById(userId).populate(
+      "friends",
+      "name profilePicture status"
+    );
+
+    await Promise.all(
+      (userWithFriends.friends || []).map(async (friend) => {
+        // Check for existing direct chat
+        const privateRoom = await ChatRoom.findOne({
+          type: "direct",
+          "participants.user": { $all: [userId, friend._id] }
+        });
+
+        if (privateRoom) {
+          const roomId = privateRoom._id;
+
+          // Skip if we already processed this room above
+          if (!lastMessages[roomId]) {
+            const lastMessage = await Message.findOne({
+              chatRoom: roomId,
+              deleted: false
+            })
+              .populate("sender", "name profilePicture")
+              .sort({ createdAt: -1 });
+
+            if (lastMessage) {
+              lastMessages[roomId] = {
+                content: lastMessage.content,
+                type: lastMessage.type,
+                timestamp: lastMessage.createdAt,
+                senderName: lastMessage.sender?.name,
+                senderId: lastMessage.sender?._id
+              };
+            }
+
+                 const unreadCount = await Message.countDocuments({
+  chatRoom: room._id,
+  sender: { $ne: userId },
+  deleted: false,
+  $or: [
+    { readBy: { $exists: false } },
+    { readBy: { $size: 0 } },
+    { readBy: { $not: { $elemMatch: { user: userId } } } }
+  ]
+});
+
+
+            unreadCounts[roomId] = unreadCount;
+          }
+        }
+      })
+    );
+
+    // Sort by last message timestamp (optional but useful)
+    const sortedRooms = Object.entries(lastMessages).sort(
+      (a, b) => new Date(b[1].timestamp) - new Date(a[1].timestamp)
+    );
+
+    const chatPreviews = sortedRooms.map(([roomId, message]) => ({
+      roomId,
+      lastMessage: message,
+      unreadCount: unreadCounts[roomId] || 0
+    }));
 
     res.json({
       success: true,
