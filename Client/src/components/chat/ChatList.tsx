@@ -11,49 +11,14 @@ import { toast } from "sonner";
 const socket = io(import.meta.env.VITE_API_URL);
 
 const ChatList = ({ onSelectChat, selectedChat }) => {
-  const [friends, setFriends] = useState([]);
-  const [groups, setGroups] = useState([]);
+  const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [unreadCounts, setUnreadCounts] = useState({});
-  const [lastMessages, setLastMessages] = useState({});
   const [activeCategory, setActiveCategory] = useState("all");
   const [showAdminPanel, setShowAdminPanel] = useState(null);
-  const [roomMappings, setRoomMappings] = useState({}); // Maps roomId to chatId
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
-  const fetchFriends = async () => {
-    const token = getToken();
-    if (!token) return;
-    try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/friends`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setFriends(res.data.friends || []);
-    } catch (err) {
-      console.error("Error fetching friends:", err);
-      setFriends([]);
-    }
-  };
-
-  const fetchGroups = async () => {
-    const token = getToken();
-    if (!token) return;
-    try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/chatroom/mygroups`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const safeGroups = (res.data.groups || []).filter(
-        (g) => Array.isArray(g.participants)
-      );
-      setGroups(safeGroups);
-    } catch (err) {
-      console.error("Error fetching groups:", err);
-      setGroups([]);
-    }
-  };
-
-  // Fetch chat previews with last messages and unread counts
+  // Fetch all chat previews with last messages and unread counts
   const fetchChatPreviews = async () => {
     const token = getToken();
     if (!token || !currentUser?._id) return;
@@ -69,64 +34,55 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       if (res.data.success) {
         console.log("📱 Chat previews response:", res.data);
         
-        const newLastMessages = {};
-        const newUnreadCounts = {};
-        const newRoomMappings = {};
+        // Transform the backend response to include all needed data
+        const transformedChats = res.data.chats.map(chat => ({
+          ...chat,
+          // For frontend compatibility
+          _id: chat.chatId, // Use chatId as _id for frontend
+          name: chat.chatInfo.name,
+          avatar: chat.chatInfo.avatar || chat.chatInfo.profilePicture,
+          profilePicture: chat.chatInfo.profilePicture,
+          status: chat.chatInfo.status,
+          type: chat.chatInfo.type,
+          participants: chat.chatInfo.participants || [],
+          lastMessage: chat.lastMessage,
+          unreadCount: chat.unreadCount
+        }));
 
-        // Process the chats array from backend
-        res.data.chats.forEach(chat => {
-          if (chat.chatId && chat.lastMessage) {
-            newLastMessages[chat.chatId] = chat.lastMessage;
-            newUnreadCounts[chat.chatId] = chat.unreadCount || 0;
-            newRoomMappings[chat.roomId] = chat.chatId;
-            
-            console.log(`💬 Processed chat: ${chat.chatId}, unread: ${chat.unreadCount}`);
-          }
-        });
-
-        console.log("🔄 Processed data:", { 
-          newLastMessages, 
-          newUnreadCounts,
-          newRoomMappings 
-        });
-        
-        setLastMessages(newLastMessages);
-        setUnreadCounts(newUnreadCounts);
-        setRoomMappings(newRoomMappings);
+        console.log("🔄 Transformed chats:", transformedChats);
+        setChats(transformedChats);
       }
     } catch (error) {
       console.error("Error fetching chat previews:", error);
+      setChats([]);
     }
   };
 
   // Mark chat as read
-  const markChatAsRead = async (chatRoomId) => {
+  const markChatAsRead = async (roomId) => {
     const token = getToken();
     if (!token) return;
 
     try {
       await axios.post(
-        `${import.meta.env.VITE_API_URL}/chatroom/${chatRoomId}/mark-as-read`,
+        `${import.meta.env.VITE_API_URL}/chatroom/${roomId}/mark-as-read`,
         {},
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
       
-      console.log(`✅ Marked chat room ${chatRoomId} as read`);
+      console.log(`✅ Marked chat room ${roomId} as read`);
+      
+      // Update local state immediately
+      setChats(prev => prev.map(chat => 
+        chat.roomId === roomId 
+          ? { ...chat, unreadCount: 0 }
+          : chat
+      ));
     } catch (error) {
       console.error("Error marking chat as read:", error);
     }
-  };
-
-  // Get room ID from chat ID
-  const getRoomIdFromChatId = (chatId) => {
-    for (const [roomId, mappedChatId] of Object.entries(roomMappings)) {
-      if (mappedChatId === chatId) {
-        return roomId;
-      }
-    }
-    return chatId; // Fallback to chatId if no mapping found
   };
 
   useEffect(() => {
@@ -134,7 +90,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     
     const initializeData = async () => {
       setLoading(true);
-      await Promise.all([fetchFriends(), fetchGroups(), fetchChatPreviews()]);
+      await fetchChatPreviews();
       if (mounted) setLoading(false);
     };
 
@@ -147,51 +103,62 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       const senderId = msg.sender?._id || msg.senderId;
       const chatRoomId = msg.chatRoom?._id || msg.chatRoom;
       
-      // Don't count your own messages as unread
-      if (senderId === currentUser._id) return;
-
-      const chatId = roomMappings[chatRoomId] || chatRoomId;
-
       console.log("📨 New message received:", { 
         msg, 
-        chatRoomId, 
-        chatId,
+        chatRoomId,
         currentUser: currentUser._id,
         senderId 
       });
 
-      // Update unread count
-      setUnreadCounts((prev) => ({ 
-        ...prev, 
-        [chatId]: (prev[chatId] || 0) + 1 
-      }));
+      // Don't count your own messages as unread
+      if (senderId === currentUser._id) return;
 
-      // Update last message preview
-      setLastMessages((prev) => ({
-        ...prev,
-        [chatId]: {
-          content: msg.content,
-          type: msg.type,
-          timestamp: msg.createdAt || new Date(),
-          senderName: msg.sender?.name || "Unknown",
-          senderId: msg.sender?._id
+      // Update the chat list with new message
+      setChats(prev => {
+        const updatedChats = prev.map(chat => {
+          if (chat.roomId === chatRoomId) {
+            return {
+              ...chat,
+              lastMessage: {
+                content: msg.content,
+                type: msg.type,
+                timestamp: msg.createdAt || new Date(),
+                senderName: msg.sender?.name || "Unknown",
+                senderId: msg.sender?._id
+              },
+              unreadCount: (chat.unreadCount || 0) + 1
+            };
+          }
+          return chat;
+        });
+
+        // If this is a new chat room, add it to the list
+        const existingChat = prev.find(chat => chat.roomId === chatRoomId);
+        if (!existingChat) {
+          // For new chats, we'd need to fetch the chat info
+          // For now, just refetch the entire list
+          setTimeout(() => fetchChatPreviews(), 100);
         }
-      }));
+
+        return updatedChats;
+      });
     });
 
     // Listen for message read events
     socket.on("messages_read", ({ chatRoomId, count }) => {
-      const chatId = roomMappings[chatRoomId] || chatRoomId;
-      setUnreadCounts((prev) => ({ 
-        ...prev, 
-        [chatId]: Math.max(0, (prev[chatId] || 0) - count) 
-      }));
+      setChats(prev => prev.map(chat => 
+        chat.roomId === chatRoomId 
+          ? { ...chat, unreadCount: Math.max(0, (chat.unreadCount || 0) - count) }
+          : chat
+      ));
     });
 
     socket.on("update_status", ({ userId, status }) => {
-      setFriends((prev) =>
-        prev.map((f) => (f._id === userId ? { ...f, status } : f))
-      );
+      setChats(prev => prev.map(chat => 
+        chat.type === "friend" && chat.chatId === userId 
+          ? { ...chat, status }
+          : chat
+      ));
     });
 
     return () => {
@@ -200,46 +167,43 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       socket.off("messages_read");
       socket.off("update_status");
     };
-  }, [roomMappings]);
+  }, []);
 
   const normalize = (s) => (typeof s === "string" ? s : "");
 
-  const filteredFriends = friends.filter((f) =>
-    normalize(f?.name).toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredChats = chats.filter((chat) =>
+    normalize(chat?.name).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredGroups = groups.filter((g) =>
-    normalize(g?.name).toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredFriends = filteredChats.filter(chat => chat.type === "friend");
+  const filteredGroups = filteredChats.filter(chat => chat.type === "group");
 
-  const handleSelect = async (chat, isGroup = false) => {
+  const handleSelect = async (chat) => {
     console.log("🎯 ChatList: handleSelect called", {
       chat: chat?.name,
-      isGroup,
-      chatId: chat._id,
-      unreadCount: unreadCounts[chat._id]
+      isGroup: chat.type === "group",
+      chatId: chat.chatId,
+      roomId: chat.roomId,
+      unreadCount: chat.unreadCount
     });
 
-    const chatId = chat._id;
-    const roomId = getRoomIdFromChatId(chatId);
+    const isGroup = chat.type === "group";
     
     // Clear unread count when chat is selected
-    if (unreadCounts[chatId] > 0) {
-      console.log(`📥 Clearing ${unreadCounts[chatId]} unread messages for chat ${chatId}`);
-      await markChatAsRead(roomId);
-      // Update local state immediately
-      setUnreadCounts(prev => ({ ...prev, [chatId]: 0 }));
+    if (chat.unreadCount > 0) {
+      console.log(`📥 Clearing ${chat.unreadCount} unread messages for chat ${chat.chatId}`);
+      await markChatAsRead(chat.roomId);
     }
 
     if (isGroup) {
       if (onSelectChat) {
-        onSelectChat(chat, isGroup);
+        onSelectChat(chat, true);
       }
     } else {
       try {
         const token = getToken();
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/chatroom/private/${chat._id}`,
+          `${import.meta.env.VITE_API_URL}/chatroom/private/${chat.chatId}`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -252,7 +216,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
         if (data.success && data.chatRoom) {
           console.log("✅ Found/Created chat room:", data.chatRoom);
           if (onSelectChat) {
-            onSelectChat(data.chatRoom, isGroup);
+            onSelectChat(data.chatRoom, false);
           }
         } else {
           console.error("❌ Failed to get/create chat room:", data.message);
@@ -283,12 +247,12 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     }
   };
 
-  const getLastMessagePreview = (chatId, isGroup = false) => {
-    const lastMessage = lastMessages[chatId];
+  const getLastMessagePreview = (chat) => {
+    const lastMessage = chat.lastMessage;
     if (!lastMessage) return "No messages yet";
     
     const isCurrentUserSender = lastMessage.senderId === currentUser._id;
-    const prefix = isGroup && !isCurrentUserSender && lastMessage.senderName 
+    const prefix = chat.type === "group" && !isCurrentUserSender && lastMessage.senderName 
       ? `${lastMessage.senderName}: ` 
       : isCurrentUserSender ? "You: " : "";
     
@@ -305,8 +269,8 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     }
   };
 
-  const getMessageTime = (chatId) => {
-    const lastMessage = lastMessages[chatId];
+  const getMessageTime = (chat) => {
+    const lastMessage = chat.lastMessage;
     if (!lastMessage?.timestamp) return "";
     
     const messageTime = new Date(lastMessage.timestamp);
@@ -348,16 +312,16 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     ? filteredGroups 
     : activeCategory === "friends" 
     ? filteredFriends 
-    : [...filteredFriends, ...filteredGroups];
+    : filteredChats;
 
   // Debug info
   console.log("🎯 Current state:", {
-    unreadCounts,
-    displayedItems: displayedItems.map(item => ({
-      id: item._id,
-      name: item.name,
-      unread: unreadCounts[item._id]
-    }))
+    totalChats: chats.length,
+    displayedItems: displayedItems.length,
+    unreadCounts: chats.reduce((acc, chat) => {
+      acc[chat.name] = chat.unreadCount;
+      return acc;
+    }, {})
   });
 
   return (
@@ -369,7 +333,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
             Messages
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {friends.length} friends • {groups.length} groups
+            {filteredFriends.length} friends • {filteredGroups.length} groups
           </p>
         </div>
 
@@ -417,32 +381,29 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
           </div>
         ) : displayedItems.length > 0 ? (
           <AnimatePresence mode="popLayout">
-            {displayedItems.map((item, index) => {
-              const isGroup = item.participants && item.type === "group";
-              const itemName = item?.name || "Unnamed";
-              const isSelected = selectedChat?._id === item._id;
-              const unread = unreadCounts[item._id] || 0;
-              const lastMessagePreview = getLastMessagePreview(item._id, isGroup);
-              const messageTime = getMessageTime(item._id);
+            {displayedItems.map((chat, index) => {
+              const isGroup = chat.type === "group";
+              const itemName = chat?.name || "Unnamed";
+              const isSelected = selectedChat?._id === chat._id || selectedChat?._id === chat.chatId;
+              const unread = chat.unreadCount || 0;
+              const lastMessagePreview = getLastMessagePreview(chat);
+              const messageTime = getMessageTime(chat);
 
               console.log(`👤 Rendering ${isGroup ? 'group' : 'friend'}:`, {
                 name: itemName,
-                id: item._id,
+                id: chat.chatId,
                 unread,
-                hasLastMessage: !!lastMessages[item._id]
+                hasLastMessage: !!chat.lastMessage
               });
 
               if (isGroup) {
-                const participant = item.participants.find(
-                  (p) => String(p.user?._id || p.user) === String(currentUser._id)
-                );
-                const role = participant?.role || "Member";
-                const memberCount = item.participants?.length || 0;
-                const isAdmin = isGroupAdmin(item);
+                const role = getUserRoleInGroup(chat);
+                const memberCount = chat.participants?.length || 0;
+                const isAdmin = isGroupAdmin(chat);
 
                 return (
                   <motion.div
-                    key={item._id}
+                    key={chat.roomId}
                     layout
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -456,7 +417,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                     className="px-2"
                   >
                     <div
-                      onClick={() => handleSelect(item, true)}
+                      onClick={() => handleSelect(chat)}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
@@ -467,7 +428,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                       <div className="flex items-center gap-3 lg:gap-4">
                         <div className="relative flex-shrink-0">
                           <Avatar className="w-12 h-12 lg:w-14 lg:h-14 shadow-lg border-2 border-white/80 dark:border-gray-700/80">
-                            <AvatarImage src={item.avatar || "/default-avatar.png"} />
+                            <AvatarImage src={chat.avatar || "/default-avatar.png"} />
                             <AvatarFallback className="bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold text-lg">
                               {itemName[0]?.toUpperCase()}
                             </AvatarFallback>
@@ -499,7 +460,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                               )}
                               {isAdmin && activeCategory === "groups" && (
                                 <button
-                                  onClick={(e) => toggleAdminPanel(item._id, e)}
+                                  onClick={(e) => toggleAdminPanel(chat.chatId, e)}
                                   className="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-200"
                                 >
                                   <Settings className="w-4 h-4" />
@@ -541,7 +502,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                 // Private chat (friend)
                 return (
                   <motion.div
-                    key={item._id}
+                    key={chat.roomId}
                     layout
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -555,7 +516,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                     className="px-2"
                   >
                     <div
-                      onClick={() => handleSelect(item, false)}
+                      onClick={() => handleSelect(chat)}
                       className={`p-4 rounded-2xl cursor-pointer transition-all duration-300 group backdrop-blur-xl border ${
                         isSelected
                           ? "bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border-indigo-200 dark:border-indigo-800 shadow-2xl shadow-indigo-500/20 transform scale-105"
@@ -566,12 +527,12 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                       <div className="flex items-center gap-3 lg:gap-4">
                         <div className="relative flex-shrink-0">
                           <Avatar className="w-12 h-12 lg:w-14 lg:h-14 shadow-lg border-2 border-white/80 dark:border-gray-700/80">
-                            <AvatarImage src={item.profilePicture || "/default-avatar.png"} />
+                            <AvatarImage src={chat.profilePicture || "/default-avatar.png"} />
                             <AvatarFallback className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold text-lg">
                               {itemName[0]?.toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <div className={`absolute -bottom-1 -right-1 w-3 h-3 lg:w-4 lg:h-4 rounded-full border-2 border-white dark:border-gray-900 ${getStatusColor(item.status)}`} />
+                          <div className={`absolute -bottom-1 -right-1 w-3 h-3 lg:w-4 lg:h-4 rounded-full border-2 border-white dark:border-gray-900 ${getStatusColor(chat.status)}`} />
                         </div>
                         
                         <div className="flex-1 min-w-0">
@@ -607,9 +568,9 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                           </p>
                           
                           <div className="flex items-center gap-2 text-xs lg:text-sm">
-                            <span className={`w-2 h-2 rounded-full ${getStatusColor(item.status)}`} />
+                            <span className={`w-2 h-2 rounded-full ${getStatusColor(chat.status)}`} />
                             <span className="text-gray-500 dark:text-gray-400">
-                              {getStatusText(item.status)}
+                              {getStatusText(chat.status)}
                             </span>
                           </div>
                         </div>
