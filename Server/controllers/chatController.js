@@ -1226,16 +1226,17 @@ export const getChatPreviews = async (req, res) => {
               };
             }
 
-            const unreadCount = await Message.countDocuments({
-              chatRoom: roomId,
-              sender: { $ne: userId },
-              deleted: false,
-              $or: [
-                { readBy: { $exists: false } },
-                { readBy: { $size: 0 } },
-                { "readBy.user": { $ne: userId } }
-              ]
-            });
+                 const unreadCount = await Message.countDocuments({
+  chatRoom: room._id,
+  sender: { $ne: userId },
+  deleted: false,
+  $or: [
+    { readBy: { $exists: false } },
+    { readBy: { $size: 0 } },
+    { readBy: { $not: { $elemMatch: { user: userId } } } }
+  ]
+});
+
 
             unreadCounts[roomId] = unreadCount;
           }
@@ -1296,12 +1297,17 @@ export const markChatAsRead = async (req, res) => {
     );
 
     // Get updated unread count
-    const unreadCount = await Message.countDocuments({
-      chatRoom: chatRoomId,
-      sender: { $ne: userId },
-      "readBy.user": { $ne: userId },
-      deleted: false
-    });
+          const unreadCount = await Message.countDocuments({
+  chatRoom: room._id,
+  sender: { $ne: userId },
+  deleted: false,
+  $or: [
+    { readBy: { $exists: false } },
+    { readBy: { $size: 0 } },
+    { readBy: { $not: { $elemMatch: { user: userId } } } }
+  ]
+});
+
 
     // Emit socket event to update other clients
     const io = req.app.get('io');
