@@ -53,6 +53,8 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   };
 
   // Fetch chat previews with last messages and unread counts
+ // ...existing code...
+  // Fetch chat previews with last messages and unread counts
   const fetchChatPreviews = async () => {
     const token = getToken();
     if (!token || !currentUser?._id) return;
@@ -65,16 +67,26 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
         }
       );
 
-      if (res.data.success) {
-        const { lastMessages: newLastMessages, unreadCounts: newUnreadCounts } = res.data;
-        
-        setLastMessages(prev => ({ ...prev, ...newLastMessages }));
-        setUnreadCounts(prev => ({ ...prev, ...newUnreadCounts }));
+      // Backend returns { success: true, chats: [...] }
+      if (res.data.success && Array.isArray(res.data.chats)) {
+        const newLastMessages = {};
+        const newUnreadCounts = {};
+
+        res.data.chats.forEach((c) => {
+          const id = c.roomId;
+          if (!id) return;
+          newLastMessages[id] = c.lastMessage || {};
+          newUnreadCounts[id] = typeof c.unreadCount === "number" ? c.unreadCount : 0;
+        });
+
+        setLastMessages((prev) => ({ ...prev, ...newLastMessages }));
+        setUnreadCounts((prev) => ({ ...prev, ...newUnreadCounts }));
       }
     } catch (error) {
       console.error("Error fetching chat previews:", error);
     }
   };
+// ...existing code...
 
   // Mark chat as read
   const markChatAsRead = async (chatRoomId) => {
