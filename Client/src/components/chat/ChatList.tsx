@@ -228,7 +228,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
     const lastMessage = lastMessages[chatId];
     if (!lastMessage) return "No messages yet";
     const isCurrentUserSender = lastMessage.senderId === currentUser._id;
-    let prefix = isCurrentUserSender ? "You: " : "";
+    const prefix = isCurrentUserSender ? "You: " : "";
     if (lastMessage.type === "image") return `${prefix}📷 Image`;
     if (lastMessage.type === "file") return `${prefix}📎 File`;
     if (lastMessage.type === "voice") return `${prefix}🎤 Voice message`;
