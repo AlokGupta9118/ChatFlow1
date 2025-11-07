@@ -53,12 +53,9 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   };
 
   // Fetch chat previews with last messages and unread counts
- // ...existing code...
-  // Fetch chat previews with last messages and unread counts
   const fetchChatPreviews = async () => {
     const token = getToken();
     if (!token || !currentUser?._id) return;
-
     try {
       const res = await axios.get(
         `${import.meta.env.VITE_API_URL}/chatroom/chat-previews`,
@@ -66,19 +63,15 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-
-      // Backend returns { success: true, chats: [...] }
       if (res.data.success && Array.isArray(res.data.chats)) {
         const newLastMessages = {};
         const newUnreadCounts = {};
-
         res.data.chats.forEach((c) => {
           const id = c.roomId;
           if (!id) return;
           newLastMessages[id] = c.lastMessage || {};
           newUnreadCounts[id] = typeof c.unreadCount === "number" ? c.unreadCount : 0;
         });
-
         setLastMessages((prev) => ({ ...prev, ...newLastMessages }));
         setUnreadCounts((prev) => ({ ...prev, ...newUnreadCounts }));
       }
@@ -86,13 +79,11 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       console.error("Error fetching chat previews:", error);
     }
   };
-// ...existing code...
 
   // Mark chat as read
   const markChatAsRead = async (chatRoomId) => {
     const token = getToken();
     if (!token) return;
-
     try {
       await axios.post(
         `${import.meta.env.VITE_API_URL}/chatroom/${chatRoomId}/mark-as-read`,
@@ -101,8 +92,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-      
-      // Update local state immediately
       setUnreadCounts(prev => ({ ...prev, [chatRoomId]: 0 }));
     } catch (error) {
       console.error("Error marking chat as read:", error);
@@ -111,7 +100,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
 
   useEffect(() => {
     let mounted = true;
-    
+
     const initializeData = async () => {
       setLoading(true);
       await Promise.all([fetchFriends(), fetchGroups(), fetchChatPreviews()]);
@@ -120,25 +109,16 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
 
     initializeData();
 
-    // Socket event for new messages
     socket.on("new_message", (msg) => {
       if (!currentUser?._id) return;
-      
       const senderId = msg.sender?._id || msg.senderId;
       const chatRoomId = msg.chatRoom?._id || msg.chatRoom;
-      
-      // Don't count your own messages as unread
       if (senderId === currentUser._id) return;
-
       const key = chatRoomId;
-
-      // Update unread count
       setUnreadCounts((prev) => ({ 
         ...prev, 
         [key]: (prev[key] || 0) + 1 
       }));
-
-      // Update last message preview
       setLastMessages((prev) => ({
         ...prev,
         [key]: {
@@ -149,8 +129,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
           senderId: msg.sender?._id
         }
       }));
-
-      // If this is a private chat, also update under friend ID
       const chatRoom = msg.chatRoom;
       if (chatRoom && !chatRoom.isGroup && chatRoom.type === "direct") {
         const otherParticipant = chatRoom.participants?.find(
@@ -171,7 +149,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
       }
     });
 
-    // Listen for message read events
     socket.on("messages_read", ({ chatRoomId, count }) => {
       setUnreadCounts((prev) => ({ 
         ...prev, 
@@ -204,19 +181,10 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   );
 
   const handleSelect = async (chat, isGroup = false) => {
-    console.log("🎯 ChatList: handleSelect called", {
-      chat: chat?.name,
-      isGroup,
-      chatType: isGroup ? "GROUP" : "PRIVATE"
-    });
-
     const key = chat._id;
-    
-    // Clear unread count when chat is selected
     if (unreadCounts[key] > 0) {
       await markChatAsRead(key);
     }
-
     if (isGroup) {
       if (onSelectChat) {
         onSelectChat(chat, isGroup);
@@ -232,73 +200,48 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
             },
           }
         );
-
         const data = await response.json();
-
         if (data.success && data.chatRoom) {
-          console.log("✅ Found/Created chat room:", data.chatRoom);
           if (onSelectChat) {
             onSelectChat(data.chatRoom, isGroup);
           }
         } else {
-          console.error("❌ Failed to get/create chat room:", data.message);
           toast.error("Failed to start chat");
         }
       } catch (error) {
-        console.error("❌ Error getting chat room:", error);
         toast.error("Failed to load chat");
       }
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "online": return "bg-green-500";
-      case "away": return "bg-yellow-400";
-      case "busy": return "bg-red-500";
-      default: return "bg-gray-400";
-    }
+  // MODERNIZED: Only online/offline, green/gray
+  const getStatusDotColor = (status) => {
+    return status === "online" ? "bg-green-500" : "bg-gray-400";
   };
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case "online": return "Online";
-      case "away": return "Away";
-      case "busy": return "Busy";
-      default: return "Offline";
-    }
+  const getStatusDotText = (status) => {
+    return status === "online" ? "Online" : "Offline";
   };
 
-  const getLastMessagePreview = (chatId, isGroup = false) => {
+  // MODERNIZED: WhatsApp/Instagram style prefix
+  const getLastMessagePreviewModern = (chatId) => {
     const lastMessage = lastMessages[chatId];
     if (!lastMessage) return "No messages yet";
-    
     const isCurrentUserSender = lastMessage.senderId === currentUser._id;
-    const prefix = isGroup && !isCurrentUserSender && lastMessage.senderName 
-      ? `${lastMessage.senderName}: ` 
-      : isCurrentUserSender ? "You: " : "";
-    
-    if (lastMessage.type === "image") {
-      return `${prefix}📷 Image`;
-    } else if (lastMessage.type === "file") {
-      return `${prefix}📎 File`;
-    } else if (lastMessage.type === "voice") {
-      return `${prefix}🎤 Voice message`;
-    } else {
-      // Truncate long messages
-      const content = lastMessage.content || "";
-      return `${prefix}${content.length > 40 ? content.substring(0, 40) + '...' : content}`;
-    }
+    let prefix = isCurrentUserSender ? "You: " : "";
+    if (lastMessage.type === "image") return `${prefix}📷 Image`;
+    if (lastMessage.type === "file") return `${prefix}📎 File`;
+    if (lastMessage.type === "voice") return `${prefix}🎤 Voice message`;
+    const content = lastMessage.content || "";
+    return `${prefix}${content.length > 40 ? content.substring(0, 40) + '...' : content}`;
   };
 
   const getMessageTime = (chatId) => {
     const lastMessage = lastMessages[chatId];
     if (!lastMessage?.timestamp) return "";
-    
     const messageTime = new Date(lastMessage.timestamp);
     const now = new Date();
     const diffInHours = (now - messageTime) / (1000 * 60 * 60);
-    
     if (diffInHours < 24) {
       return messageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (diffInHours < 48) {
@@ -326,7 +269,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   };
 
   const handleAdminAction = (action, groupId) => {
-    console.log(`Admin action: ${action} for group: ${groupId}`);
     setShowAdminPanel(null);
   };
 
@@ -348,8 +290,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
             {friends.length} friends • {groups.length} groups
           </p>
         </div>
-
-        {/* Search Bar */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 lg:w-5 lg:h-5" />
           <Input
@@ -359,8 +299,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
             className="pl-10 lg:pl-12 pr-4 h-12 lg:h-14 bg-white/70 dark:bg-gray-800/70 border-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 backdrop-blur-xl shadow-sm text-base"
           />
         </div>
-
-        {/* Category Tabs */}
         <div className="flex space-x-2 bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl p-2 backdrop-blur-xl">
           {[
             { key: "all", label: "All", icon: MessageCircle },
@@ -383,7 +321,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
           ))}
         </div>
       </div>
-
       {/* Chat List */}
       <div className="flex-1 min-h-0 overflow-y-auto px-3 lg:px-6 pb-4 space-y-3" style={{ WebkitOverflowScrolling: 'touch' }}>
         {loading ? (
@@ -398,7 +335,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
               const itemName = item?.name || "Unnamed";
               const isSelected = selectedChat?._id === item._id;
               const unread = unreadCounts[item._id] || 0;
-              const lastMessagePreview = getLastMessagePreview(item._id, isGroup);
+              const lastMessagePreview = getLastMessagePreviewModern(item._id);
               const messageTime = getMessageTime(item._id);
 
               if (isGroup) {
@@ -408,7 +345,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                 const role = participant?.role || "Member";
                 const memberCount = item.participants?.length || 0;
                 const isAdmin = isGroupAdmin(item);
-
                 return (
                   <motion.div
                     key={item._id}
@@ -445,7 +381,6 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                             <Users className="w-3 h-3 text-white" />
                           </div>
                         </div>
-                        
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
                             <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm lg:text-base">
@@ -461,7 +396,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                                 <motion.span
                                   initial={{ scale: 0 }}
                                   animate={{ scale: 1 }}
-                                  className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg min-w-6 text-center"
+                                  className="bg-green-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow min-w-6 text-center"
                                 >
                                   {unread}
                                 </motion.span>
@@ -476,16 +411,13 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                               )}
                             </div>
                           </div>
-                          
-                          {/* Last Message Preview */}
                           <p className={`text-sm truncate mb-2 ${
                             unread > 0 
-                              ? "text-gray-900 dark:text-gray-100 font-medium" 
-                              : "text-gray-600 dark:text-gray-400"
+                              ? "font-semibold text-gray-900 dark:text-gray-100" 
+                              : "text-gray-500 dark:text-gray-400"
                           }`}>
                             {lastMessagePreview}
                           </p>
-                          
                           <div className="flex items-center gap-2 text-xs lg:text-sm">
                             <span className={`px-2 py-1 rounded-full font-medium ${
                               role === "owner" 
@@ -540,9 +472,8 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                               {itemName[0]?.toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <div className={`absolute -bottom-1 -right-1 w-3 h-3 lg:w-4 lg:h-4 rounded-full border-2 border-white dark:border-gray-900 ${getStatusColor(item.status)}`} />
+                          <div className={`absolute -bottom-1 -right-1 w-3 h-3 lg:w-4 lg:h-4 rounded-full border-2 border-white dark:border-gray-900 ${getStatusDotColor(item.status)}`} />
                         </div>
-                        
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
                             <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate text-sm lg:text-base">
@@ -558,27 +489,24 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
                                 <motion.span
                                   initial={{ scale: 0 }}
                                   animate={{ scale: 1 }}
-                                  className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium shadow-lg min-w-6 text-center"
+                                  className="bg-green-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow min-w-6 text-center"
                                 >
                                   {unread}
                                 </motion.span>
                               )}
                             </div>
                           </div>
-                          
-                          {/* Last Message Preview */}
                           <p className={`text-sm truncate mb-2 ${
                             unread > 0 
-                              ? "text-gray-900 dark:text-gray-100 font-medium" 
-                              : "text-gray-600 dark:text-gray-400"
+                              ? "font-semibold text-gray-900 dark:text-gray-100" 
+                              : "text-gray-500 dark:text-gray-400"
                           }`}>
                             {lastMessagePreview}
                           </p>
-                          
                           <div className="flex items-center gap-2 text-xs lg:text-sm">
-                            <span className={`w-2 h-2 rounded-full ${getStatusColor(item.status)}`} />
+                            <span className={`w-2 h-2 rounded-full ${getStatusDotColor(item.status)}`} />
                             <span className="text-gray-500 dark:text-gray-400">
-                              {getStatusText(item.status)}
+                              {getStatusDotText(item.status)}
                             </span>
                           </div>
                         </div>
