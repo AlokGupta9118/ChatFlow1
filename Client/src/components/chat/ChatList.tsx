@@ -53,28 +53,42 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   };
 
   // Fetch chat previews with last messages and unread counts
-  const fetchChatPreviews = async () => {
-    const token = getToken();
-    if (!token || !currentUser?._id) return;
+ // Fetch chat previews with last messages and unread counts
+const fetchChatPreviews = async () => {
+  const token = getToken();
+  if (!token || !currentUser?._id) return;
 
-    try {
-      const res = await axios.get(
-        `${import.meta.env.VITE_API_URL}/chatroom/chat-previews`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      if (res.data.success) {
-        const { lastMessages: newLastMessages, unreadCounts: newUnreadCounts } = res.data;
-        
-        setLastMessages(prev => ({ ...prev, ...newLastMessages }));
-        setUnreadCounts(prev => ({ ...prev, ...newUnreadCounts }));
+  try {
+    const res = await axios.get(
+      `${import.meta.env.VITE_API_URL}/chatroom/chat-previews`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
       }
-    } catch (error) {
-      console.error("Error fetching chat previews:", error);
+    );
+
+    if (res.data.success) {
+      console.log("📱 Chat previews response:", res.data); // Debug log
+      
+      const newLastMessages = {};
+      const newUnreadCounts = {};
+
+      // Process the chats array from backend
+      res.data.chats.forEach(chat => {
+        if (chat.roomId && chat.lastMessage) {
+          newLastMessages[chat.roomId] = chat.lastMessage;
+          newUnreadCounts[chat.roomId] = chat.unreadCount || 0;
+        }
+      });
+
+      console.log("🔄 Processed data:", { newLastMessages, newUnreadCounts }); // Debug log
+      
+      setLastMessages(newLastMessages);
+      setUnreadCounts(newUnreadCounts);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching chat previews:", error);
+  }
+};
 
   // Mark chat as read
   const markChatAsRead = async (chatRoomId) => {
@@ -108,57 +122,38 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
 
     initializeData();
 
-    // Socket event for new messages
-    socket.on("new_message", (msg) => {
-      if (!currentUser?._id) return;
-      
-      const senderId = msg.sender?._id || msg.senderId;
-      const chatRoomId = msg.chatRoom?._id || msg.chatRoom;
-      
-      // Don't count your own messages as unread
-      if (senderId === currentUser._id) return;
+  // Socket event for new messages
+socket.on("new_message", (msg) => {
+  if (!currentUser?._id) return;
+  
+  const senderId = msg.sender?._id || msg.senderId;
+  const chatRoomId = msg.chatRoom?._id || msg.chatRoom;
+  
+  // Don't count your own messages as unread
+  if (senderId === currentUser._id) return;
 
-      const key = chatRoomId;
+  const key = chatRoomId;
 
-      // Update unread count
-      setUnreadCounts((prev) => ({ 
-        ...prev, 
-        [key]: (prev[key] || 0) + 1 
-      }));
+  console.log("📨 New message received:", { msg, key, unreadCounts }); // Debug log
 
-      // Update last message preview
-      setLastMessages((prev) => ({
-        ...prev,
-        [key]: {
-          content: msg.content,
-          type: msg.type,
-          timestamp: msg.createdAt || new Date(),
-          senderName: msg.sender?.name || "Unknown",
-          senderId: msg.sender?._id
-        }
-      }));
+  // Update unread count
+  setUnreadCounts((prev) => ({ 
+    ...prev, 
+    [key]: (prev[key] || 0) + 1 
+  }));
 
-      // If this is a private chat, also update under friend ID
-      const chatRoom = msg.chatRoom;
-      if (chatRoom && !chatRoom.isGroup && chatRoom.type === "direct") {
-        const otherParticipant = chatRoom.participants?.find(
-          p => p.user?._id !== currentUser._id
-        );
-        if (otherParticipant?.user?._id) {
-          setLastMessages((prev) => ({
-            ...prev,
-            [otherParticipant.user._id]: {
-              content: msg.content,
-              type: msg.type,
-              timestamp: msg.createdAt || new Date(),
-              senderName: msg.sender?.name || "Unknown",
-              senderId: msg.sender?._id
-            }
-          }));
-        }
-      }
-    });
-
+  // Update last message preview
+  setLastMessages((prev) => ({
+    ...prev,
+    [key]: {
+      content: msg.content,
+      type: msg.type,
+      timestamp: msg.createdAt || new Date(),
+      senderName: msg.sender?.name || "Unknown",
+      senderId: msg.sender?._id
+    }
+  }));
+});
     // Listen for message read events
     socket.on("messages_read", ({ chatRoomId, count }) => {
       setUnreadCounts((prev) => ({ 
