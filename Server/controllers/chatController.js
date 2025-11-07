@@ -500,6 +500,7 @@ export const removeParticipant = async (req, res) => {
 
 // ✅ Get all pending join requests for a group
 
+
 export const getPendingRequests = async (req, res) => {
   try {
     const groupId = req.params.groupId;
@@ -820,7 +821,9 @@ export const getOrCreatePrivateChat = async (req, res) => {
   }
 };
 
+
 // Alternative: Just get existing private chat room (don't create)
+
 export const getPrivateChatRoom = async (req, res) => {
   try {
     const { participantId } = req.params;
@@ -1171,17 +1174,17 @@ export const getChatPreviews = async (req, res) => {
           };
         }
 
-        // Unread count (handles empty or missing readBy)
         const unreadCount = await Message.countDocuments({
-          chatRoom: room._id,
-          sender: { $ne: userId },
-          deleted: false,
-          $or: [
-            { readBy: { $exists: false } },
-            { readBy: { $size: 0 } },
-            { "readBy.user": { $ne: userId } }
-          ]
-        });
+  chatRoom: room._id,
+  sender: { $ne: userId },
+  deleted: false,
+  $or: [
+    { readBy: { $exists: false } },
+    { readBy: { $size: 0 } },
+    { readBy: { $not: { $elemMatch: { user: userId } } } }
+  ]
+});
+
 
         unreadCounts[room._id] = unreadCount;
       })
