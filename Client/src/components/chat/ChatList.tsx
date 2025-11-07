@@ -19,6 +19,7 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   const [lastMessages, setLastMessages] = useState({});
   const [activeCategory, setActiveCategory] = useState("all");
   const [showAdminPanel, setShowAdminPanel] = useState(null);
+  const [roomMappings, setRoomMappings] = useState({}); // Maps roomId to chatId
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
   const fetchFriends = async () => {
@@ -53,42 +54,50 @@ const ChatList = ({ onSelectChat, selectedChat }) => {
   };
 
   // Fetch chat previews with last messages and unread counts
- // Fetch chat previews with last messages and unread counts
-const fetchChatPreviews = async () => {
-  const token = getToken();
-  if (!token || !currentUser?._id) return;
+  const fetchChatPreviews = async () => {
+    const token = getToken();
+    if (!token || !currentUser?._id) return;
 
-  try {
-    const res = await axios.get(
-      `${import.meta.env.VITE_API_URL}/chatroom/chat-previews`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    if (res.data.success) {
-      console.log("📱 Chat previews response:", res.data); // Debug log
-      
-      const newLastMessages = {};
-      const newUnreadCounts = {};
-
-      // Process the chats array from backend
-      res.data.chats.forEach(chat => {
-        if (chat.roomId && chat.lastMessage) {
-          newLastMessages[chat.roomId] = chat.lastMessage;
-          newUnreadCounts[chat.roomId] = chat.unreadCount || 0;
+    try {
+      const res = await axios.get(
+        `${import.meta.env.VITE_API_URL}/chatroom/chat-previews`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
         }
-      });
+      );
 
-      console.log("🔄 Processed data:", { newLastMessages, newUnreadCounts }); // Debug log
-      
-      setLastMessages(newLastMessages);
-      setUnreadCounts(newUnreadCounts);
+      if (res.data.success) {
+        console.log("📱 Chat previews response:", res.data);
+        
+        const newLastMessages = {};
+        const newUnreadCounts = {};
+        const newRoomMappings = {};
+
+        // Process the chats array from backend
+        res.data.chats.forEach(chat => {
+          if (chat.chatId && chat.lastMessage) {
+            newLastMessages[chat.chatId] = chat.lastMessage;
+            newUnreadCounts[chat.chatId] = chat.unreadCount || 0;
+            newRoomMappings[chat.roomId] = chat.chatId;
+            
+            console.log(`💬 Processed chat: ${chat.chatId}, unread: ${chat.unreadCount}`);
+          }
+        });
+
+        console.log("🔄 Processed data:", { 
+          newLastMessages, 
+          newUnreadCounts,
+          newRoomMappings 
+        });
+        
+        setLastMessages(newLastMessages);
+        setUnreadCounts(newUnreadCounts);
+        setRoomMappings(newRoomMappings);
+      }
+    } catch (error) {
+      console.error("Error fetching chat previews:", error);
     }
-  } catch (error) {
-    console.error("Error fetching chat previews:", error);
-  }
-};
+  };
 
   // Mark chat as read
   const markChatAsRead = async (chatRoomId) => {
@@ -104,11 +113,20 @@ const fetchChatPreviews = async () => {
         }
       );
       
-      // Update local state immediately
-      setUnreadCounts(prev => ({ ...prev, [chatRoomId]: 0 }));
+      console.log(`✅ Marked chat room ${chatRoomId} as read`);
     } catch (error) {
       console.error("Error marking chat as read:", error);
     }
+  };
+
+  // Get room ID from chat ID
+  const getRoomIdFromChatId = (chatId) => {
+    for (const [roomId, mappedChatId] of Object.entries(roomMappings)) {
+      if (mappedChatId === chatId) {
+        return roomId;
+      }
+    }
+    return chatId; // Fallback to chatId if no mapping found
   };
 
   useEffect(() => {
@@ -122,43 +140,51 @@ const fetchChatPreviews = async () => {
 
     initializeData();
 
-  // Socket event for new messages
-socket.on("new_message", (msg) => {
-  if (!currentUser?._id) return;
-  
-  const senderId = msg.sender?._id || msg.senderId;
-  const chatRoomId = msg.chatRoom?._id || msg.chatRoom;
-  
-  // Don't count your own messages as unread
-  if (senderId === currentUser._id) return;
+    // Socket event for new messages
+    socket.on("new_message", (msg) => {
+      if (!currentUser?._id) return;
+      
+      const senderId = msg.sender?._id || msg.senderId;
+      const chatRoomId = msg.chatRoom?._id || msg.chatRoom;
+      
+      // Don't count your own messages as unread
+      if (senderId === currentUser._id) return;
 
-  const key = chatRoomId;
+      const chatId = roomMappings[chatRoomId] || chatRoomId;
 
-  console.log("📨 New message received:", { msg, key, unreadCounts }); // Debug log
+      console.log("📨 New message received:", { 
+        msg, 
+        chatRoomId, 
+        chatId,
+        currentUser: currentUser._id,
+        senderId 
+      });
 
-  // Update unread count
-  setUnreadCounts((prev) => ({ 
-    ...prev, 
-    [key]: (prev[key] || 0) + 1 
-  }));
-
-  // Update last message preview
-  setLastMessages((prev) => ({
-    ...prev,
-    [key]: {
-      content: msg.content,
-      type: msg.type,
-      timestamp: msg.createdAt || new Date(),
-      senderName: msg.sender?.name || "Unknown",
-      senderId: msg.sender?._id
-    }
-  }));
-});
-    // Listen for message read events
-    socket.on("messages_read", ({ chatRoomId, count }) => {
+      // Update unread count
       setUnreadCounts((prev) => ({ 
         ...prev, 
-        [chatRoomId]: Math.max(0, (prev[chatRoomId] || 0) - count) 
+        [chatId]: (prev[chatId] || 0) + 1 
+      }));
+
+      // Update last message preview
+      setLastMessages((prev) => ({
+        ...prev,
+        [chatId]: {
+          content: msg.content,
+          type: msg.type,
+          timestamp: msg.createdAt || new Date(),
+          senderName: msg.sender?.name || "Unknown",
+          senderId: msg.sender?._id
+        }
+      }));
+    });
+
+    // Listen for message read events
+    socket.on("messages_read", ({ chatRoomId, count }) => {
+      const chatId = roomMappings[chatRoomId] || chatRoomId;
+      setUnreadCounts((prev) => ({ 
+        ...prev, 
+        [chatId]: Math.max(0, (prev[chatId] || 0) - count) 
       }));
     });
 
@@ -174,7 +200,7 @@ socket.on("new_message", (msg) => {
       socket.off("messages_read");
       socket.off("update_status");
     };
-  }, []);
+  }, [roomMappings]);
 
   const normalize = (s) => (typeof s === "string" ? s : "");
 
@@ -190,14 +216,19 @@ socket.on("new_message", (msg) => {
     console.log("🎯 ChatList: handleSelect called", {
       chat: chat?.name,
       isGroup,
-      chatType: isGroup ? "GROUP" : "PRIVATE"
+      chatId: chat._id,
+      unreadCount: unreadCounts[chat._id]
     });
 
-    const key = chat._id;
+    const chatId = chat._id;
+    const roomId = getRoomIdFromChatId(chatId);
     
     // Clear unread count when chat is selected
-    if (unreadCounts[key] > 0) {
-      await markChatAsRead(key);
+    if (unreadCounts[chatId] > 0) {
+      console.log(`📥 Clearing ${unreadCounts[chatId]} unread messages for chat ${chatId}`);
+      await markChatAsRead(roomId);
+      // Update local state immediately
+      setUnreadCounts(prev => ({ ...prev, [chatId]: 0 }));
     }
 
     if (isGroup) {
@@ -319,6 +350,16 @@ socket.on("new_message", (msg) => {
     ? filteredFriends 
     : [...filteredFriends, ...filteredGroups];
 
+  // Debug info
+  console.log("🎯 Current state:", {
+    unreadCounts,
+    displayedItems: displayedItems.map(item => ({
+      id: item._id,
+      name: item.name,
+      unread: unreadCounts[item._id]
+    }))
+  });
+
   return (
     <div className="w-full h-full bg-transparent flex flex-col">
       {/* Header */}
@@ -383,6 +424,13 @@ socket.on("new_message", (msg) => {
               const unread = unreadCounts[item._id] || 0;
               const lastMessagePreview = getLastMessagePreview(item._id, isGroup);
               const messageTime = getMessageTime(item._id);
+
+              console.log(`👤 Rendering ${isGroup ? 'group' : 'friend'}:`, {
+                name: itemName,
+                id: item._id,
+                unread,
+                hasLastMessage: !!lastMessages[item._id]
+              });
 
               if (isGroup) {
                 const participant = item.participants.find(
